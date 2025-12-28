@@ -440,16 +440,11 @@ const CALCULATIONS = {
       if (atBOY === 0) {
         simple = 'AT was already depleted';
       } else if (atWithdrawal === 0) {
-        simple = `${fK(atBOY)} + ${returnPct}% growth = ${fK(atEOY)}`;
+        simple = `${fK(atBOY)} start + ${returnPct}% growth = ${fK(atEOY)}`;
       } else if (atEOY === 0) {
-        simple = `${fK(atBOY)} fully withdrawn, now depleted`;
+        simple = `${fK(atBOY)} start fully withdrawn, now depleted`;
       } else {
-        const netChange = atEOY - atBOY;
-        if (netChange >= 0) {
-          simple = `${fK(atBOY)} − ${fK(atWithdrawal)} + ${fK(atReturn)} growth = ${fK(atEOY)}`;
-        } else {
-          simple = `${fK(atBOY)} → withdrew ${fK(atWithdrawal)}, grew ${fK(atReturn)} → ${fK(atEOY)}`;
-        }
+        simple = `${fK(atBOY)} start − ${fK(atWithdrawal)} withdrawn + ${fK(atReturn)} growth = ${fK(atEOY)}`;
       }
 
       return {
@@ -477,23 +472,17 @@ const CALCULATIONS = {
 
       // Dynamic simple explanation - show only significant terms
       let simple = '';
-      const parts = [];
-      parts.push(fK(iraBOY));
-      if (iraWithdrawal > 0) parts.push(`− ${fK(iraWithdrawal)} withdrawn`);
-      if (rothConversion > 0) parts.push(`− ${fK(rothConversion)} → Roth`);
-      parts.push(`+ ${returnPct}% growth`);
-
       if (totalOut > iraBOY * 0.5) {
         // Large reduction
-        simple = `${fK(iraBOY)} reduced by ${fK(totalOut)} (${rothConversion > 0 ? `${fK(rothConversion)} to Roth` : 'withdrawals'}) → ${fK(iraEOY)}`;
+        simple = `${fK(iraBOY)} start − ${fK(totalOut)} out (${rothConversion > 0 ? `${fK(rothConversion)} to Roth` : 'withdrawals'}) + growth = ${fK(iraEOY)}`;
       } else if (rothConversion > 0 && iraWithdrawal === 0) {
-        simple = `${fK(iraBOY)} − ${fK(rothConversion)} Roth conv + growth → ${fK(iraEOY)}`;
+        simple = `${fK(iraBOY)} start − ${fK(rothConversion)} to Roth + ${fK(iraReturn)} growth = ${fK(iraEOY)}`;
       } else if (rothConversion > 0) {
-        simple = `${fK(iraBOY)} − ${fK(iraWithdrawal)} − ${fK(rothConversion)} conv → ${fK(iraEOY)}`;
+        simple = `${fK(iraBOY)} start − ${fK(iraWithdrawal)} withdrawn − ${fK(rothConversion)} to Roth + growth = ${fK(iraEOY)}`;
       } else if (iraWithdrawal > 0) {
-        simple = `${fK(iraBOY)} − ${fK(iraWithdrawal)} + growth → ${fK(iraEOY)}`;
+        simple = `${fK(iraBOY)} start − ${fK(iraWithdrawal)} withdrawn + ${fK(iraReturn)} growth = ${fK(iraEOY)}`;
       } else {
-        simple = `${fK(iraBOY)} + ${returnPct}% = ${fK(iraEOY)}`;
+        simple = `${fK(iraBOY)} start + ${returnPct}% growth = ${fK(iraEOY)}`;
       }
 
       return {
@@ -522,11 +511,11 @@ const CALCULATIONS = {
       let simple = '';
       if (rothConversion > 0 && rothWithdrawal === 0) {
         const growth = rothEOY - rothBOY - rothConversion;
-        simple = `${fK(rothBOY)} + ${fK(rothConversion)} converted + ${fK(growth)} growth = ${fK(rothEOY)}`;
+        simple = `${fK(rothBOY)} start + ${fK(rothConversion)} converted + ${fK(growth)} growth = ${fK(rothEOY)}`;
       } else if (rothWithdrawal > 0) {
-        simple = `${fK(rothBOY)} − ${fK(rothWithdrawal)} withdrawal + growth = ${fK(rothEOY)}`;
+        simple = `${fK(rothBOY)} start − ${fK(rothWithdrawal)} withdrawal + growth = ${fK(rothEOY)}`;
       } else {
-        simple = `${fK(rothBOY)} + ${returnPct}% growth = ${fK(rothEOY)}`;
+        simple = `${fK(rothBOY)} start + ${returnPct}% growth = ${fK(rothEOY)}`;
       }
 
       return {
