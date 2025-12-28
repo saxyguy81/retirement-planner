@@ -160,16 +160,30 @@ const CALCULATIONS = {
     name: 'Required Minimum Distribution',
     concept: 'Annual required withdrawal from Traditional IRA starting at age 73 (SECURE 2.0). Amount = IRA Balance ÷ Life Expectancy Factor from IRS Uniform Lifetime Table.',
     formula: 'RMD = IRA Balance ÷ Distribution Factor\n\nAge 73: Factor = 26.5\nAge 75: Factor = 24.6\nAge 80: Factor = 20.2\nAge 85: Factor = 16.0\nAge 90: Factor = 12.2',
-    backOfEnvelope: '≈ IRA Balance ÷ 25 (around age 73-75)',
+    backOfEnvelope: 'RMD % increases with age (starts ~3.8% at 73)',
     compute: (data) => {
-      const { iraBOY, rmdFactor, rmdRequired, age } = data;
+      const { iraBOY, rmdFactor, rmdRequired, age, year } = data;
+      const rmdPct = iraBOY > 0 ? ((rmdRequired / iraBOY) * 100).toFixed(1) : 0;
+
+      // Dynamic simple based on whether RMD applies
+      let simple = '';
+      if (age < 73) {
+        simple = `Age ${age}: No RMD required until age 73`;
+      } else {
+        simple = `${fK(rmdRequired)} = ${rmdPct}% of ${fK(iraBOY)} IRA (age ${age}, factor ${rmdFactor.toFixed(1)})`;
+      }
+
       return {
-        formula: `Age ${age}: Factor = ${rmdFactor.toFixed(1)}`,
-        values: `RMD = ${fM(iraBOY)} ÷ ${rmdFactor.toFixed(1)}`,
-        result: `Required = ${fK(rmdRequired)}`,
-        simple: age >= 73
-          ? `${fM(iraBOY)} ÷ 25 ≈ ${fK(iraBOY / 25)}`
-          : 'N/A (under 73)'
+        formula: age >= 73
+          ? `Age ${age}: Life expectancy factor = ${rmdFactor.toFixed(1)}`
+          : `Age ${age}: RMD not required (starts at 73)`,
+        values: age >= 73
+          ? `RMD = ${fK(iraBOY)} ÷ ${rmdFactor.toFixed(1)} = ${fK(rmdRequired)}`
+          : `$0 required`,
+        result: age >= 73
+          ? `RMD = ${fK(rmdRequired)} (${rmdPct}% of IRA)`
+          : `$0 - not yet required`,
+        simple
       };
     }
   },
@@ -357,14 +371,15 @@ const CALCULATIONS = {
 
       // Dynamic simple explanation based on what actually happened
       let simple = '';
+      const rmdPct = iraBOY > 0 ? ((rmdRequired / iraBOY) * 100).toFixed(1) : 0;
       if (iraWithdrawal === 0) {
         simple = `Age ${age} (no RMD), AT covered all needs`;
       } else if (isRMDAge && beyondRMD === 0) {
-        simple = `Age ${age}: RMD of ${fK(rmdRequired)} required`;
+        simple = `RMD = ${fK(rmdRequired)} (${rmdPct}% of ${fK(iraBOY)} IRA)`;
       } else if (isRMDAge && beyondRMD > 0) {
-        simple = `RMD ${fK(rmdRequired)} + ${fK(beyondRMD)} extra (AT exhausted)`;
+        simple = `RMD ${fK(rmdRequired)} (${rmdPct}% of IRA) + ${fK(beyondRMD)} extra needed`;
       } else if (beyondRMD > 0) {
-        simple = `${fK(iraWithdrawal)} needed (AT's ${fK(atBOY)} wasn't enough)`;
+        simple = `${fK(iraWithdrawal)} from IRA (AT's ${fK(atBOY)} wasn't enough)`;
       } else {
         simple = `${fK(iraWithdrawal)} from IRA`;
       }
