@@ -135,10 +135,18 @@ const DEFAULT_COLLAPSED = {
 
 // Fields that have calculation inspections available
 const INSPECTABLE_FIELDS = [
+  // Taxes
   'federalTax', 'totalTax', 'ltcgTax', 'niit', 'stateTax', 'taxableSS',
-  'irmaaTotal', 'rmdRequired', 'totalWithdrawal', 'rothConversion',
-  'heirValue', 'pvHeirValue', 'totalEOY', 'pvTotalEOY', 'rothPercent',
-  'cumulativeTax'
+  'irmaaTotal', 'cumulativeTax',
+  // Withdrawals
+  'atWithdrawal', 'iraWithdrawal', 'rothWithdrawal', 'totalWithdrawal',
+  // Conversions & RMD
+  'rothConversion', 'rmdRequired',
+  // EOY Balances
+  'atEOY', 'iraEOY', 'rothEOY', 'totalEOY',
+  'pvTotalEOY',
+  // Heir & Roth %
+  'heirValue', 'pvHeirValue', 'rothPercent',
 ];
 
 export function ProjectionsTable({ projections, options, params }) {
@@ -329,7 +337,10 @@ export function ProjectionsTable({ projections, options, params }) {
                           <span className="flex items-center gap-1">
                             {row.label}
                             {isInspectable && (
-                              <Info className="w-3 h-3 text-blue-400/50" />
+                              <Info
+                                className="w-3 h-3 text-blue-400/50 cursor-help"
+                                title="Click any value in this row to see calculation details"
+                              />
                             )}
                           </span>
                         </td>

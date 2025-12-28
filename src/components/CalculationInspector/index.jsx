@@ -196,11 +196,11 @@ const CALCULATIONS = {
   // Roth Conversion
   rothConversion: {
     name: 'Roth Conversion',
-    concept: 'Transfer from Traditional IRA to Roth. Taxed as ordinary income NOW, but grows tax-free forever. Strategic to "fill up" lower tax brackets before RMDs push you higher.',
-    formula: 'Tax Cost = Conversion × Marginal Rate\nHeir Savings = Conversion × (Heir Rate − 0%)\n\nBreak-even: If your marginal rate < heir\'s rate, converting saves taxes.',
-    backOfEnvelope: 'Converting $100K at 22% costs $22K now, saves heirs $42K (at 37%+5%)',
+    concept: 'Internal transfer from Traditional IRA → Roth IRA. The conversion amount moves directly between accounts (no cash withdrawn). However, you owe income tax on the converted amount, which is paid from your other accounts.\n\nFunding the TAX: Withdrawals come from After-Tax first, then IRA if needed. The conversion itself reduces your IRA balance.',
+    formula: 'IRA → Roth Transfer (internal, no cash)\nTax Cost = Conversion × Marginal Rate\n\nMoney Flow:\n1. IRA decreases by conversion amount\n2. Roth increases by conversion amount\n3. Tax paid from AT (or IRA if AT insufficient)',
+    backOfEnvelope: 'Converting $100K at 22% costs $22K tax (paid from AT/IRA)',
     compute: (data, params) => {
-      const { rothConversion, taxableOrdinary } = data;
+      const { rothConversion, taxableOrdinary, iraBOY, atWithdrawal, totalTax } = data;
       const heirRate = params.heirFedRate + params.heirStateRate;
       // Estimate marginal rate based on taxable income
       let marginalRate = 0.22;
@@ -210,18 +210,20 @@ const CALCULATIONS = {
       else if (taxableOrdinary > 23200) marginalRate = 0.12;
       else marginalRate = 0.10;
 
+      const taxOnConversion = rothConversion * marginalRate;
+
       return {
         formula: rothConversion > 0
-          ? `Converting ${fK(rothConversion)} at ~${(marginalRate * 100).toFixed(0)}% bracket`
+          ? `IRA (${fK(iraBOY)}) → moves ${fK(rothConversion)} to Roth`
           : `No conversion this year`,
         values: rothConversion > 0
-          ? `Tax now ≈ ${fK(rothConversion * marginalRate)}`
+          ? `Tax on conversion ≈ ${fK(taxOnConversion)} (at ${(marginalRate * 100).toFixed(0)}%)\nTotal tax bill: ${fK(totalTax)} (paid from withdrawals)`
           : `—`,
         result: rothConversion > 0
-          ? `Heir savings = ${fK(rothConversion * heirRate)} (at ${(heirRate * 100).toFixed(0)}%)`
+          ? `Heir savings = ${fK(rothConversion * heirRate)} (heirs pay 0% on Roth)`
           : `—`,
         simple: rothConversion > 0
-          ? `${fK(rothConversion)} → ${fK(rothConversion * marginalRate)} tax now, ${fK(rothConversion * heirRate)} saved for heirs`
+          ? `${fK(rothConversion)} IRA→Roth, ~${fK(taxOnConversion)} tax`
           : 'No conversion'
       };
     }
@@ -297,6 +299,245 @@ const CALCULATIONS = {
         values: `Through ${year}: ${fK(cumulativeTax)}`,
         result: `Total Taxes = ${fM(cumulativeTax)}`,
         simple: `~${fK(totalTax)}/year × ${yearsOfTax.toFixed(0)} years`
+      };
+    }
+  },
+
+  // =============================================================================
+  // WITHDRAWAL BREAKDOWNS
+  // =============================================================================
+
+  // After-Tax Withdrawal
+  atWithdrawal: {
+    name: 'After-Tax Withdrawal',
+    concept: 'Cash withdrawn from taxable brokerage account. Used SECOND in withdrawal order (after any required RMD). Partially taxable - only the gains portion triggers capital gains tax.',
+    formula: 'Withdrawal Order:\n1. IRA (RMD only, if age 73+)\n2. After-Tax ← YOU ARE HERE\n3. More IRA (if AT insufficient)\n4. Roth (last resort)\n\nTax: Only gains are taxed (at LTCG rates)',
+    backOfEnvelope: 'AT covers need after SS and RMD',
+    compute: (data) => {
+      const { atWithdrawal, atBOY, totalWithdrawal, expenses, totalTax, ssAnnual, iraWithdrawal, rmdRequired, irmaaTotal } = data;
+      const grossNeed = expenses + totalTax + irmaaTotal;
+      const netNeed = Math.max(0, grossNeed - ssAnnual);
+      const afterRMD = Math.max(0, netNeed - rmdRequired);
+      const atPct = totalWithdrawal > 0 ? ((atWithdrawal / totalWithdrawal) * 100).toFixed(0) : 0;
+
+      // Dynamic simple explanation
+      let simple = '';
+      if (atWithdrawal === 0) {
+        if (atBOY === 0) simple = 'AT depleted - nothing to withdraw';
+        else if (netNeed <= rmdRequired) simple = `RMD (${fK(rmdRequired)}) covered all needs`;
+        else simple = 'AT not needed this year';
+      } else if (atWithdrawal >= afterRMD) {
+        simple = `Need ${fK(netNeed)} − SS covered, AT provided ${fK(atWithdrawal)}`;
+      } else {
+        simple = `AT had ${fK(atBOY)}, used all ${fK(atWithdrawal)}`;
+      }
+
+      return {
+        formula: `Need: ${fK(expenses)} exp + ${fK(totalTax)} tax − ${fK(ssAnnual)} SS = ${fK(netNeed)}`,
+        values: `AT available: ${fK(atBOY)}\nWithdrew: ${fK(atWithdrawal)}`,
+        result: atWithdrawal > 0
+          ? `${fK(atWithdrawal)} from After-Tax (${atPct}% of total)`
+          : `$0 from After-Tax`,
+        simple
+      };
+    }
+  },
+
+  // IRA Withdrawal
+  iraWithdrawal: {
+    name: 'IRA Withdrawal',
+    concept: 'Cash withdrawn from Traditional IRA. Used FIRST (for RMD if 73+) and THIRD (if After-Tax insufficient). 100% taxable as ordinary income. Separate from Roth conversions.',
+    formula: 'Withdrawal Order:\n1. IRA (RMD required) ← FIRST\n2. After-Tax\n3. More IRA (if needed) ← THIRD\n4. Roth (last resort)\n\nNote: Roth conversion is separate from withdrawal',
+    backOfEnvelope: 'IRA withdrawal = max(RMD, need − AT)',
+    compute: (data) => {
+      const { iraWithdrawal, iraBOY, rmdRequired, rothConversion, totalWithdrawal, atBOY, atWithdrawal, age } = data;
+      const isRMDAge = age >= 73;
+      const beyondRMD = Math.max(0, iraWithdrawal - rmdRequired);
+      const iraPct = totalWithdrawal > 0 ? ((iraWithdrawal / totalWithdrawal) * 100).toFixed(0) : 0;
+
+      // Dynamic simple explanation based on what actually happened
+      let simple = '';
+      if (iraWithdrawal === 0) {
+        simple = `Age ${age} (no RMD), AT covered all needs`;
+      } else if (isRMDAge && beyondRMD === 0) {
+        simple = `Age ${age}: RMD of ${fK(rmdRequired)} required`;
+      } else if (isRMDAge && beyondRMD > 0) {
+        simple = `RMD ${fK(rmdRequired)} + ${fK(beyondRMD)} extra (AT exhausted)`;
+      } else if (beyondRMD > 0) {
+        simple = `${fK(iraWithdrawal)} needed (AT's ${fK(atBOY)} wasn't enough)`;
+      } else {
+        simple = `${fK(iraWithdrawal)} from IRA`;
+      }
+
+      return {
+        formula: isRMDAge
+          ? `Age ${age}: RMD = ${fK(rmdRequired)}`
+          : `Age ${age}: No RMD required`,
+        values: rothConversion > 0
+          ? `IRA: ${fK(iraBOY)} (${fK(rothConversion)} reserved for Roth conv)\nWithdrew: ${fK(iraWithdrawal)}${beyondRMD > 0 ? ` (${fK(rmdRequired)} RMD + ${fK(beyondRMD)} extra)` : ''}`
+          : `IRA: ${fK(iraBOY)}\nWithdrew: ${fK(iraWithdrawal)}`,
+        result: iraWithdrawal > 0
+          ? `${fK(iraWithdrawal)} from IRA (${iraPct}% of withdrawals)`
+          : `$0 from IRA`,
+        simple
+      };
+    }
+  },
+
+  // Roth Withdrawal
+  rothWithdrawal: {
+    name: 'Roth Withdrawal',
+    concept: 'Cash withdrawn from Roth IRA. Used LAST in withdrawal order - only when all other accounts are depleted. 100% tax-free. Preserving Roth maximizes tax-free growth and heir value.',
+    formula: 'Withdrawal Order:\n1. IRA (RMD)\n2. After-Tax\n3. More IRA\n4. Roth ← LAST RESORT\n\nTax: $0 (completely tax-free)',
+    backOfEnvelope: 'Roth withdrawal only if IRA + AT exhausted',
+    compute: (data) => {
+      const { rothWithdrawal, rothBOY, totalWithdrawal, atBOY, iraBOY, rothConversion } = data;
+
+      // Dynamic simple explanation
+      let simple = '';
+      if (rothWithdrawal === 0) {
+        if (rothConversion > 0) {
+          simple = `Roth grew by ${fK(rothConversion)} conversion (no withdrawal needed)`;
+        } else {
+          simple = `Roth preserved at ${fK(rothBOY)} (IRA+AT sufficient)`;
+        }
+      } else {
+        simple = `IRA+AT depleted, had to use ${fK(rothWithdrawal)} Roth`;
+      }
+
+      return {
+        formula: `Roth available: ${fK(rothBOY)}`,
+        values: rothWithdrawal > 0
+          ? `IRA (${fK(iraBOY)}) + AT (${fK(atBOY)}) exhausted\nHad to tap Roth: ${fK(rothWithdrawal)}`
+          : rothConversion > 0
+            ? `Roth preserved + ${fK(rothConversion)} added from conversion`
+            : `Roth preserved at ${fK(rothBOY)}`,
+        result: rothWithdrawal > 0
+          ? `${fK(rothWithdrawal)} from Roth (tax-free but reduces future growth)`
+          : `$0 - Roth preserved`,
+        simple
+      };
+    }
+  },
+
+  // =============================================================================
+  // INDIVIDUAL ACCOUNT EOY BALANCES
+  // =============================================================================
+
+  // After-Tax EOY
+  atEOY: {
+    name: 'After-Tax End of Year',
+    concept: 'Taxable brokerage account balance after withdrawals and investment growth. This account has the most flexible access but gains are taxable.',
+    formula: 'AT_EOY = (AT_BOY − Withdrawal) × (1 + Return)\n\nNo conversions affect this account.\nWithdrawals trigger capital gains tax on the gains portion.',
+    backOfEnvelope: 'AT grows by return, reduced by withdrawals',
+    compute: (data) => {
+      const { atBOY, atWithdrawal, atEOY, effectiveAtReturn, atReturn } = data;
+      const afterWithdrawal = atBOY - atWithdrawal;
+      const returnPct = (effectiveAtReturn * 100).toFixed(1);
+
+      // Dynamic simple explanation
+      let simple = '';
+      if (atBOY === 0) {
+        simple = 'AT was already depleted';
+      } else if (atWithdrawal === 0) {
+        simple = `${fK(atBOY)} + ${returnPct}% growth = ${fK(atEOY)}`;
+      } else if (atEOY === 0) {
+        simple = `${fK(atBOY)} fully withdrawn, now depleted`;
+      } else {
+        const netChange = atEOY - atBOY;
+        if (netChange >= 0) {
+          simple = `${fK(atBOY)} − ${fK(atWithdrawal)} + ${fK(atReturn)} growth = ${fK(atEOY)}`;
+        } else {
+          simple = `${fK(atBOY)} → withdrew ${fK(atWithdrawal)}, grew ${fK(atReturn)} → ${fK(atEOY)}`;
+        }
+      }
+
+      return {
+        formula: atWithdrawal > 0
+          ? `${fK(atBOY)} − ${fK(atWithdrawal)} withdrawal`
+          : `${fK(atBOY)} (no withdrawal)`,
+        values: `(${fK(afterWithdrawal)}) × ${(1 + effectiveAtReturn).toFixed(3)}\n+ ${fK(atReturn)} growth`,
+        result: `After-Tax EOY = ${fK(atEOY)}`,
+        simple
+      };
+    }
+  },
+
+  // IRA EOY
+  iraEOY: {
+    name: 'Traditional IRA End of Year',
+    concept: 'Tax-deferred IRA balance after withdrawals, Roth conversions, and growth. Reduced by both withdrawals AND Roth conversions. All future withdrawals are taxable.',
+    formula: 'IRA_EOY = (IRA_BOY − Withdrawal − Roth_Conversion) × (1 + Return)\n\nRoth conversion moves money OUT of IRA.\nRMD forces minimum withdrawal at age 73+.',
+    backOfEnvelope: 'IRA reduced by withdrawals + conversions, then grows',
+    compute: (data) => {
+      const { iraBOY, iraWithdrawal, rothConversion, iraEOY, effectiveIraReturn, iraReturn } = data;
+      const totalOut = iraWithdrawal + rothConversion;
+      const afterWithdrawal = iraBOY - totalOut;
+      const returnPct = (effectiveIraReturn * 100).toFixed(1);
+
+      // Dynamic simple explanation - show only significant terms
+      let simple = '';
+      const parts = [];
+      parts.push(fK(iraBOY));
+      if (iraWithdrawal > 0) parts.push(`− ${fK(iraWithdrawal)} withdrawn`);
+      if (rothConversion > 0) parts.push(`− ${fK(rothConversion)} → Roth`);
+      parts.push(`+ ${returnPct}% growth`);
+
+      if (totalOut > iraBOY * 0.5) {
+        // Large reduction
+        simple = `${fK(iraBOY)} reduced by ${fK(totalOut)} (${rothConversion > 0 ? `${fK(rothConversion)} to Roth` : 'withdrawals'}) → ${fK(iraEOY)}`;
+      } else if (rothConversion > 0 && iraWithdrawal === 0) {
+        simple = `${fK(iraBOY)} − ${fK(rothConversion)} Roth conv + growth → ${fK(iraEOY)}`;
+      } else if (rothConversion > 0) {
+        simple = `${fK(iraBOY)} − ${fK(iraWithdrawal)} − ${fK(rothConversion)} conv → ${fK(iraEOY)}`;
+      } else if (iraWithdrawal > 0) {
+        simple = `${fK(iraBOY)} − ${fK(iraWithdrawal)} + growth → ${fK(iraEOY)}`;
+      } else {
+        simple = `${fK(iraBOY)} + ${returnPct}% = ${fK(iraEOY)}`;
+      }
+
+      return {
+        formula: rothConversion > 0
+          ? `${fK(iraBOY)} − ${fK(iraWithdrawal)} withdrawal − ${fK(rothConversion)} → Roth`
+          : `${fK(iraBOY)} − ${fK(iraWithdrawal)} withdrawal`,
+        values: `(${fK(afterWithdrawal)}) × ${(1 + effectiveIraReturn).toFixed(3)}\n+ ${fK(iraReturn)} growth`,
+        result: `IRA EOY = ${fK(iraEOY)}`,
+        simple
+      };
+    }
+  },
+
+  // Roth EOY
+  rothEOY: {
+    name: 'Roth IRA End of Year',
+    concept: 'Tax-free Roth balance after any withdrawals, plus conversions, plus growth. Roth conversions ADD to this account. Growth and withdrawals are completely tax-free.',
+    formula: 'Roth_EOY = (Roth_BOY − Withdrawal + Roth_Conversion) × (1 + Return)\n\nRoth conversion moves money INTO Roth.\nWithdrawals are tax-free (last resort).',
+    backOfEnvelope: 'Roth grows tax-free, boosted by conversions',
+    compute: (data) => {
+      const { rothBOY, rothWithdrawal, rothConversion, rothEOY, effectiveRothReturn, rothReturn } = data;
+      const afterAdjustments = rothBOY - rothWithdrawal + rothConversion;
+      const returnPct = (effectiveRothReturn * 100).toFixed(1);
+
+      // Dynamic simple explanation
+      let simple = '';
+      if (rothConversion > 0 && rothWithdrawal === 0) {
+        const growth = rothEOY - rothBOY - rothConversion;
+        simple = `${fK(rothBOY)} + ${fK(rothConversion)} converted + ${fK(growth)} growth = ${fK(rothEOY)}`;
+      } else if (rothWithdrawal > 0) {
+        simple = `${fK(rothBOY)} − ${fK(rothWithdrawal)} withdrawal + growth = ${fK(rothEOY)}`;
+      } else {
+        simple = `${fK(rothBOY)} + ${returnPct}% growth = ${fK(rothEOY)}`;
+      }
+
+      return {
+        formula: rothConversion > 0
+          ? `${fK(rothBOY)} + ${fK(rothConversion)} from IRA conversion`
+          : rothWithdrawal > 0
+            ? `${fK(rothBOY)} − ${fK(rothWithdrawal)} withdrawal`
+            : `${fK(rothBOY)} (no changes)`,
+        values: `(${fK(afterAdjustments)}) × ${(1 + effectiveRothReturn).toFixed(3)}\n+ ${fK(rothReturn)} growth`,
+        result: `Roth EOY = ${fK(rothEOY)}`,
+        simple
       };
     }
   },
