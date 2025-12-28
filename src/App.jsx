@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Calculator, Table, LineChart, Shield, Users, RefreshCw, GitCompare, Zap, Download, Upload, ChevronDown, Columns, Square } from 'lucide-react';
+import { Calculator, Table, LineChart, Shield, Users, RefreshCw, GitCompare, Zap, Download, Upload, ChevronDown, Columns, Square, Save, FolderOpen, RotateCcw, Trash2 } from 'lucide-react';
 
 import { useProjections } from './hooks/useProjections';
 import { InputPanel } from './components/InputPanel';
@@ -38,14 +38,21 @@ export default function App() {
   const [riskYear, setRiskYear] = useState(2028);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [splitView, setSplitView] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showLoadMenu, setShowLoadMenu] = useState(false);
+  const [saveName, setSaveName] = useState('');
   const fileInputRef = useRef(null);
   const exportMenuRef = useRef(null);
+  const loadMenuRef = useRef(null);
 
-  // Close export menu when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
         setShowExportMenu(false);
+      }
+      if (loadMenuRef.current && !loadMenuRef.current.contains(e.target)) {
+        setShowLoadMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -62,7 +69,19 @@ export default function App() {
     updateRothConversion,
     toggleIterative,
     setMaxIterations,
+    savedStates,
+    saveState,
+    loadState,
+    deleteState,
+    resetToDefaults,
   } = useProjections();
+
+  // Save handler
+  const handleSave = useCallback(() => {
+    saveState(saveName);
+    setSaveName('');
+    setShowSaveDialog(false);
+  }, [saveState, saveName]);
 
   // Import handler
   const handleImport = useCallback(async (e) => {
@@ -222,6 +241,68 @@ export default function App() {
             <Upload className="w-3 h-3" />
             Import
           </button>
+
+          {/* State Management Buttons */}
+          <button
+            onClick={() => setShowSaveDialog(true)}
+            className="px-2 py-1 bg-slate-700 text-white rounded text-xs flex items-center gap-1 hover:bg-slate-600"
+            title="Save current state"
+          >
+            <Save className="w-3 h-3" />
+            Save
+          </button>
+
+          <div className="relative" ref={loadMenuRef}>
+            <button
+              onClick={() => setShowLoadMenu(!showLoadMenu)}
+              className="px-2 py-1 bg-slate-700 text-white rounded text-xs flex items-center gap-1 hover:bg-slate-600"
+              title="Load saved state"
+            >
+              <FolderOpen className="w-3 h-3" />
+              Load
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {showLoadMenu && (
+              <div className="absolute right-0 mt-1 w-64 bg-slate-800 border border-slate-700 rounded shadow-lg z-50 max-h-64 overflow-y-auto">
+                {savedStates.length === 0 ? (
+                  <div className="px-3 py-2 text-slate-400 text-xs">No saved states</div>
+                ) : (
+                  savedStates.map(state => (
+                    <div
+                      key={state.id}
+                      className="px-3 py-2 hover:bg-slate-700 flex items-center justify-between group"
+                    >
+                      <button
+                        onClick={() => { loadState(state.id); setShowLoadMenu(false); }}
+                        className="flex-1 text-left"
+                      >
+                        <div className="text-slate-200 text-xs">{state.name}</div>
+                        <div className="text-slate-500 text-xs">
+                          {new Date(state.createdAt).toLocaleDateString()}
+                        </div>
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteState(state.id); }}
+                        className="p-1 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={resetToDefaults}
+            className="px-2 py-1 bg-amber-600 text-white rounded text-xs flex items-center gap-1 hover:bg-amber-500"
+            title="Start fresh with defaults"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Fresh
+          </button>
+
           <div className="relative" ref={exportMenuRef}>
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
@@ -376,6 +457,38 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      {/* Save Dialog Modal */}
+      {showSaveDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 w-80">
+            <div className="text-slate-200 font-medium mb-3">Save Current State</div>
+            <input
+              type="text"
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              placeholder="Optional name (or leave blank)"
+              className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm mb-3 focus:border-blue-500 focus:outline-none"
+              autoFocus
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setShowSaveDialog(false); setSaveName(''); }}
+                className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded text-xs hover:bg-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-500"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
