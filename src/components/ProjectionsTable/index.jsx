@@ -13,12 +13,15 @@
  * TODO: Implement full table with all sections from spec
  */
 
-import React, { useState } from 'react';
-import { Calendar, RefreshCw } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { RefreshCw, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import { fmt$, fmtPct } from '../../lib/formatters';
+import { YearSelector } from '../YearSelector';
+import { CalculationInspector } from '../CalculationInspector';
 
 // Define row sections matching the spreadsheet
-const SECTIONS = [
+// PV keys are used when showPV is true
+const getSections = (showPV) => [
   {
     title: 'ACCOUNT BALANCES (BOY)',
     rows: [
@@ -33,7 +36,7 @@ const SECTIONS = [
     title: 'INCOME & EXPENSES',
     rows: [
       { key: 'ssAnnual', label: 'Social Security', format: '$' },
-      { key: 'expenses', label: 'Annual Expenses', format: '$' },
+      { key: showPV ? 'pvExpenses' : 'expenses', label: 'Annual Expenses', format: '$' },
       { key: 'rothConversion', label: 'Roth Conversion', format: '$', highlight: true },
     ]
   },
@@ -79,10 +82,10 @@ const SECTIONS = [
   {
     title: 'END OF YEAR BALANCES',
     rows: [
-      { key: 'atEOY', label: 'After-Tax', format: '$' },
-      { key: 'iraEOY', label: 'Traditional IRA', format: '$' },
-      { key: 'rothEOY', label: 'Roth IRA', format: '$' },
-      { key: 'totalEOY', label: 'Total', format: '$', highlight: true },
+      { key: showPV ? 'pvAtEOY' : 'atEOY', label: 'After-Tax', format: '$' },
+      { key: showPV ? 'pvIraEOY' : 'iraEOY', label: 'Traditional IRA', format: '$' },
+      { key: showPV ? 'pvRothEOY' : 'rothEOY', label: 'Roth IRA', format: '$' },
+      { key: showPV ? 'pvTotalEOY' : 'totalEOY', label: 'Total', format: '$', highlight: true },
       { key: 'costBasisEOY', label: 'Cost Basis', format: '$', dim: true },
       { key: 'rothPercent', label: 'Roth %', format: '%', dim: true },
     ]
@@ -90,7 +93,7 @@ const SECTIONS = [
   {
     title: 'HEIR VALUE',
     rows: [
-      { key: 'heirValue', label: 'After-Tax to Heirs', format: '$', highlight: true },
+      { key: showPV ? 'pvHeirValue' : 'heirValue', label: 'After-Tax to Heirs', format: '$', highlight: true },
     ]
   },
   {
@@ -121,57 +124,146 @@ function formatValue(value, format) {
   }
 }
 
-export function ProjectionsTable({ projections, options }) {
+// Default collapsed state for sections
+const DEFAULT_COLLAPSED = {
+  'TAX DETAIL': true,
+  'IRMAA (MEDICARE)': true,
+  'RMD': true,
+  'EFFECTIVE RETURNS': true,
+  'CUMULATIVE': true,
+};
+
+// Fields that have calculation inspections available
+const INSPECTABLE_FIELDS = [
+  'federalTax', 'totalTax', 'ltcgTax', 'niit', 'stateTax', 'taxableSS',
+  'irmaaTotal', 'rmdRequired', 'totalWithdrawal', 'rothConversion',
+  'heirValue', 'pvHeirValue', 'totalEOY', 'pvTotalEOY', 'rothPercent',
+  'cumulativeTax'
+];
+
+export function ProjectionsTable({ projections, options, params }) {
   const [yearMode, setYearMode] = useState('moderate');
-  
-  // Filter years based on display mode
-  const getDisplayYears = () => {
-    const allYears = projections.map(p => p.year);
-    
-    switch (yearMode) {
+  const [customYears, setCustomYears] = useState([]);
+  const [collapsedSections, setCollapsedSections] = useState(DEFAULT_COLLAPSED);
+  const [showPV, setShowPV] = useState(true); // Default to Present Value
+  const [inspecting, setInspecting] = useState(null); // { field, year, data }
+
+  const toggleSection = (title) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [title]: !prev[title]
+    }));
+  };
+
+  // Get sections based on current PV mode
+  const sections = useMemo(() => getSections(showPV), [showPV]);
+
+  const expandAll = () => setCollapsedSections({});
+  const collapseAll = () => {
+    const allCollapsed = {};
+    sections.forEach(s => { allCollapsed[s.title] = true; });
+    setCollapsedSections(allCollapsed);
+  };
+
+  // All available years
+  const allYears = useMemo(() => projections.map(p => p.year), [projections]);
+
+  // Get years based on mode (for non-custom modes)
+  const getYearsForMode = (mode) => {
+    switch (mode) {
       case 'brief':
-        return [allYears[0], allYears[1], allYears[allYears.length - 1]];
+        return [allYears[0], allYears[1], allYears[allYears.length - 1]].filter(Boolean);
       case 'moderate': {
         const result = [allYears[0], allYears[1], allYears[2]];
         const idx10 = allYears.findIndex(y => y >= allYears[0] + 10);
         const idx20 = allYears.findIndex(y => y >= allYears[0] + 20);
+        const idx30 = allYears.findIndex(y => y >= allYears[0] + 30);
         if (idx10 >= 0) result.push(allYears[idx10]);
         if (idx20 >= 0) result.push(allYears[idx20]);
-        result.push(allYears[allYears.length - 1]);
-        return [...new Set(result)];
+        if (idx30 >= 0) result.push(allYears[idx30]);
+        if (!result.includes(allYears[allYears.length - 1])) {
+          result.push(allYears[allYears.length - 1]);
+        }
+        return [...new Set(result)].filter(Boolean);
       }
       case 'detailed':
         return allYears.filter((_, i) => i < 5 || i % 5 === 0 || i === allYears.length - 1);
       case 'all':
+        return allYears;
+      case 'custom':
+        return customYears.length > 0 ? customYears : allYears.slice(0, 3);
       default:
         return allYears;
     }
   };
-  
-  const displayYears = getDisplayYears();
-  const displayData = projections.filter(p => displayYears.includes(p.year));
+
+  // Selected years based on mode
+  const selectedYears = useMemo(() => {
+    return yearMode === 'custom' ? customYears : getYearsForMode(yearMode);
+  }, [yearMode, customYears, allYears]);
+
+  // Handle year selection change
+  const handleYearsChange = (newYears) => {
+    setCustomYears(newYears);
+  };
+
+  // Handle mode change
+  const handleModeChange = (newMode) => {
+    setYearMode(newMode);
+    if (newMode !== 'custom') {
+      setCustomYears(getYearsForMode(newMode));
+    }
+  };
+
+  // Filter projections to selected years
+  const displayData = useMemo(() => {
+    return projections.filter(p => selectedYears.includes(p.year));
+  }, [projections, selectedYears]);
   
   return (
     <div className="flex-1 flex flex-col overflow-hidden text-xs">
       {/* Toolbar */}
-      <div className="h-8 bg-slate-900/50 border-b border-slate-800 flex items-center px-3 justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <Calendar className="w-3 h-3 text-slate-400" />
-          <select 
-            value={yearMode} 
-            onChange={(e) => setYearMode(e.target.value)}
-            className="bg-slate-800 rounded px-1.5 py-0.5 border border-slate-700 text-xs"
-          >
-            <option value="brief">Brief (3 years)</option>
-            <option value="moderate">Moderate (6 years)</option>
-            <option value="detailed">Detailed</option>
-            <option value="all">All Years</option>
-          </select>
+      <div className="h-10 bg-slate-900/50 border-b border-slate-800 flex items-center px-3 justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <YearSelector
+            years={allYears}
+            selectedYears={selectedYears}
+            onChange={handleYearsChange}
+            mode={yearMode}
+            onModeChange={handleModeChange}
+          />
+          <div className="flex items-center gap-1 border-l border-slate-700 pl-3">
+            <button
+              onClick={() => setShowPV(!showPV)}
+              className={`px-1.5 py-0.5 text-xs rounded ${
+                showPV
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
+              title={showPV ? 'Showing Present Value (today\'s dollars)' : 'Showing Future Value (nominal dollars)'}
+            >
+              {showPV ? 'PV' : 'FV'}
+            </button>
+          </div>
+          <div className="flex items-center gap-1 border-l border-slate-700 pl-3">
+            <button
+              onClick={expandAll}
+              className="px-1.5 py-0.5 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded"
+            >
+              Expand All
+            </button>
+            <button
+              onClick={collapseAll}
+              className="px-1.5 py-0.5 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded"
+            >
+              Collapse All
+            </button>
+          </div>
         </div>
-        
+
         {options?.iterativeTax && displayData[0]?.iterations > 1 && (
           <span className="text-emerald-400 flex items-center gap-1 text-xs">
-            <RefreshCw className="w-3 h-3" /> 
+            <RefreshCw className="w-3 h-3" />
             Iterative ({displayData[0].iterations} iter)
           </span>
         )}
@@ -197,48 +289,84 @@ export function ProjectionsTable({ projections, options }) {
             </tr>
           </thead>
           <tbody>
-            {SECTIONS.map((section, sectionIdx) => (
-              <React.Fragment key={sectionIdx}>
-                {/* Section header */}
-                <tr className="border-t border-slate-800">
-                  <td 
-                    colSpan={displayYears.length + 1} 
-                    className="py-1.5 px-2 text-slate-500 font-medium bg-slate-900/30"
-                  >
-                    {section.title}
-                  </td>
-                </tr>
-                
-                {/* Section rows */}
-                {section.rows.map(row => (
-                  <tr 
-                    key={row.key} 
-                    className={`hover:bg-slate-900/50 ${row.highlight ? 'bg-slate-800/20' : ''}`}
-                  >
-                    <td className={`py-1 px-2 sticky left-0 bg-slate-950 ${row.dim ? 'text-slate-500' : 'text-slate-300'}`}>
-                      {row.label}
+            {sections.map((section, sectionIdx) => {
+              const isCollapsed = collapsedSections[section.title];
+              return (
+                <React.Fragment key={sectionIdx}>
+                  {/* Section header */}
+                  <tr className="border-t border-slate-800">
+                    <td
+                      colSpan={displayData.length + 1}
+                      className="py-1.5 px-2 text-slate-500 font-medium bg-slate-900/30 cursor-pointer hover:bg-slate-800/50 select-none"
+                      onClick={() => toggleSection(section.title)}
+                    >
+                      <span className="flex items-center gap-1">
+                        {isCollapsed ? (
+                          <ChevronRight className="w-3 h-3" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3" />
+                        )}
+                        {section.title}
+                        {isCollapsed && (
+                          <span className="text-slate-600 text-xs ml-2">({section.rows.length} rows)</span>
+                        )}
+                      </span>
                     </td>
-                    {displayData.map(d => (
-                      <td 
-                        key={d.year} 
-                        className={`text-right py-1 px-2 tabular-nums ${
-                          row.highlight 
-                            ? 'text-emerald-400 font-medium' 
-                            : row.dim 
-                              ? 'text-slate-500' 
-                              : 'text-slate-300'
-                        }`}
-                      >
-                        {formatValue(d[row.key], row.format)}
-                      </td>
-                    ))}
                   </tr>
-                ))}
-              </React.Fragment>
-            ))}
+
+                  {/* Section rows - only render if not collapsed */}
+                  {!isCollapsed && section.rows.map(row => {
+                    // Check if this field is inspectable (strip pv prefix for matching)
+                    const baseKey = row.key.startsWith('pv') ? row.key.charAt(2).toLowerCase() + row.key.slice(3) : row.key;
+                    const isInspectable = INSPECTABLE_FIELDS.includes(row.key) || INSPECTABLE_FIELDS.includes(baseKey);
+
+                    return (
+                      <tr
+                        key={row.key}
+                        className={`hover:bg-slate-900/50 ${row.highlight ? 'bg-slate-800/20' : ''}`}
+                      >
+                        <td className={`py-1 px-2 sticky left-0 bg-slate-950 ${row.dim ? 'text-slate-500' : 'text-slate-300'}`}>
+                          <span className="flex items-center gap-1">
+                            {row.label}
+                            {isInspectable && (
+                              <Info className="w-3 h-3 text-blue-400/50" />
+                            )}
+                          </span>
+                        </td>
+                        {displayData.map(d => (
+                          <td
+                            key={d.year}
+                            onClick={() => isInspectable && setInspecting({ field: row.key, year: d.year, data: d })}
+                            className={`text-right py-1 px-2 tabular-nums ${
+                              row.highlight
+                                ? 'text-emerald-400 font-medium'
+                                : row.dim
+                                  ? 'text-slate-500'
+                                  : 'text-slate-300'
+                            } ${isInspectable ? 'cursor-pointer hover:bg-blue-900/30' : ''}`}
+                          >
+                            {formatValue(d[row.key], row.format)}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
+
+      {/* Calculation Inspector Modal */}
+      {inspecting && (
+        <CalculationInspector
+          field={inspecting.field}
+          data={inspecting.data}
+          params={params}
+          onClose={() => setInspecting(null)}
+        />
+      )}
     </div>
   );
 }
