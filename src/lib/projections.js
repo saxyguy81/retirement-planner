@@ -31,6 +31,19 @@ import {
 } from './taxTables.js';
 
 // =============================================================================
+// HELPER: Convert custom brackets from TaxBracketEditor format to calculation format
+// TaxBracketEditor format: { rate, singleThreshold, mfjThreshold }
+// Calculation format: { rate, threshold }
+// =============================================================================
+function getCustomBrackets(customBrackets, type, isSingle) {
+  if (!customBrackets || !customBrackets[type]) return null;
+  return customBrackets[type].map(b => ({
+    rate: b.rate,
+    threshold: isSingle ? b.singleThreshold : b.mfjThreshold,
+  }));
+}
+
+// =============================================================================
 // WITHDRAWAL CALCULATION (with optional iteration)
 // =============================================================================
 function calculateWithdrawals(inputs, taxParams, options) {
@@ -231,15 +244,14 @@ export function generateProjections(params = {}) {
     // RMD calculation
     const rmd = calculateRMD(iraBOY, age);
     
-    // Inflate tax brackets
-    const fedBrackets = inflateBrackets(
-      isSingle ? FEDERAL_BRACKETS_SINGLE_2024 : FEDERAL_BRACKETS_MFJ_2024,
-      p.bracketInflation, yearsFromBase
-    );
-    const ltcgBrackets = inflateBrackets(
-      isSingle ? LTCG_BRACKETS_SINGLE_2024 : LTCG_BRACKETS_MFJ_2024,
-      p.bracketInflation, yearsFromBase
-    );
+    // Inflate tax brackets (use custom if available, otherwise defaults)
+    const baseFedBrackets = getCustomBrackets(p.customBrackets, 'federal', isSingle)
+      || (isSingle ? FEDERAL_BRACKETS_SINGLE_2024 : FEDERAL_BRACKETS_MFJ_2024);
+    const baseLtcgBrackets = getCustomBrackets(p.customBrackets, 'capitalGains', isSingle)
+      || (isSingle ? LTCG_BRACKETS_SINGLE_2024 : LTCG_BRACKETS_MFJ_2024);
+
+    const fedBrackets = inflateBrackets(baseFedBrackets, p.bracketInflation, yearsFromBase);
+    const ltcgBrackets = inflateBrackets(baseLtcgBrackets, p.bracketInflation, yearsFromBase);
     
     // Standard deduction with inflation and senior bonus
     const baseDed = isSingle ? STANDARD_DEDUCTION_SINGLE_2024 : STANDARD_DEDUCTION_MFJ_2024;

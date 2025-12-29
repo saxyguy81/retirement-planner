@@ -38,13 +38,13 @@ const DEFAULT_SETTINGS = {
   heirs: [
     {
       name: 'Scott',
-      state: 'IL',
+      state: 'CA',        // Lives in CA - pays CA state tax on inherited IRA
       agi: 700000,        // Approximate AGI to determine marginal rates
       splitPercent: 50,   // % of inheritance
     },
     {
       name: 'Julie',
-      state: 'CA',
+      state: 'IL',        // Lives in IL - pays IL state tax on inherited IRA
       agi: 1200000,       // Approximate AGI to determine marginal rates
       splitPercent: 50,   // % of inheritance
     },
@@ -166,6 +166,7 @@ export function useProjections(initialParams = {}) {
       discountRate: settings.discountRate || 0.03,
       birthYear: settings.primaryBirthYear || params.birthYear,
       heirs: settings.heirs || [],  // Multi-heir configuration
+      customBrackets: settings.customBrackets || null,  // Custom tax brackets
     };
     return generateProjections(projectionParams);
   }, [params, options, settings]);
