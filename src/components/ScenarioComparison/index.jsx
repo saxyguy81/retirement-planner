@@ -102,6 +102,7 @@ export function ScenarioComparison({ params, projections, summary }) {
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [selectedMetric, setSelectedMetric] = useState('totalEOY');
+  const [showPV, setShowPV] = useState(true); // Present Value toggle
 
   // Calculate all scenario projections
   const scenarioResults = useMemo(() => {
@@ -114,27 +115,53 @@ export function ScenarioComparison({ params, projections, summary }) {
     return results;
   }, [params, scenarios]);
 
+  // Get the appropriate metric key based on PV toggle
+  const getMetricKey = useCallback((baseKey) => {
+    if (!showPV) return baseKey;
+    // Map to PV equivalents where they exist
+    const pvMap = {
+      totalEOY: 'pvTotalEOY',
+      heirValue: 'pvHeirValue',
+      rothEOY: 'pvRothEOY',
+      iraEOY: 'pvIraEOY',
+      atEOY: 'pvAtEOY',
+    };
+    return pvMap[baseKey] || baseKey;
+  }, [showPV]);
+
   // Comparison chart data
   const comparisonData = useMemo(() => {
-    if (scenarioResults.length === 0) return projections.map(p => ({ year: p.year, Base: p[selectedMetric] / 1e6 }));
+    const metricKey = getMetricKey(selectedMetric);
+    if (scenarioResults.length === 0) return projections.map(p => ({ year: p.year, Base: p[metricKey] / 1e6 }));
 
     return projections.map((p, idx) => {
-      const row = { year: p.year, Base: p[selectedMetric] / 1e6 };
+      const row = { year: p.year, Base: p[metricKey] / 1e6 };
       scenarioResults.forEach((s, i) => {
-        row[s.name] = s.projections[idx]?.[selectedMetric] / 1e6 || 0;
+        row[s.name] = s.projections[idx]?.[metricKey] / 1e6 || 0;
       });
       return row;
     });
-  }, [projections, scenarioResults, selectedMetric]);
+  }, [projections, scenarioResults, selectedMetric, getMetricKey]);
 
-  // Summary metrics for comparison
-  const comparisonMetrics = [
-    { key: 'endingPortfolio', label: 'Final Portfolio', format: '$' },
-    { key: 'endingHeirValue', label: 'Heir Value', format: '$' },
-    { key: 'totalTaxPaid', label: 'Total Tax Paid', format: '$' },
-    { key: 'totalIRMAAPaid', label: 'Total IRMAA', format: '$' },
-    { key: 'finalRothPercent', label: 'Final Roth %', format: '%' },
-  ];
+  // Summary metrics for comparison - some have PV equivalents
+  const comparisonMetrics = useMemo(() => [
+    { key: showPV ? 'pvEndingPortfolio' : 'endingPortfolio', label: 'Final Portfolio', format: '$', projKey: showPV ? 'pvTotalEOY' : 'totalEOY' },
+    { key: showPV ? 'pvEndingHeirValue' : 'endingHeirValue', label: 'Heir Value', format: '$', projKey: showPV ? 'pvHeirValue' : 'heirValue' },
+    { key: 'totalTaxPaid', label: 'Total Tax Paid', format: '$', projKey: 'cumulativeTax' },
+    { key: 'totalIRMAAPaid', label: 'Total IRMAA', format: '$', projKey: 'cumulativeIRMAA' },
+    { key: 'finalRothPercent', label: 'Final Roth %', format: '%', projKey: 'rothPercent' },
+  ], [showPV]);
+
+  // Helper to get metric value from summary or projections
+  const getMetricValue = useCallback((proj, sum, metric) => {
+    // For PV portfolio and heir value, get from last projection
+    if (metric.projKey && proj?.length > 0) {
+      const last = proj[proj.length - 1];
+      return last[metric.projKey];
+    }
+    // Otherwise use summary
+    return sum[metric.key.replace('pv', '').replace('Ending', 'ending')];
+  }, []);
 
   const addScenario = (preset) => {
     const newScenario = {
@@ -285,6 +312,20 @@ export function ScenarioComparison({ params, projections, summary }) {
           <span className="text-slate-500">({scenarios.length} scenarios)</span>
         </div>
         <div className="flex items-center gap-2">
+          {/* PV Toggle */}
+          <button
+            onClick={() => setShowPV(!showPV)}
+            className={`px-1.5 py-0.5 text-xs rounded ${
+              showPV
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+            title={showPV ? 'Showing Present Value (today\'s dollars)' : 'Showing Future Value (nominal dollars)'}
+          >
+            {showPV ? 'PV' : 'FV'}
+          </button>
+          <div className="w-px h-4 bg-slate-700" />
+
           {/* Save/Load buttons */}
           {scenarios.length > 0 && (
             <>
@@ -469,11 +510,15 @@ export function ScenarioComparison({ params, projections, summary }) {
                 <div className="space-y-1">
                   <div className="flex justify-between">
                     <span className="text-slate-400">Final Portfolio</span>
-                    <span className="text-emerald-400 font-medium">{fmt$(summary.endingPortfolio)}</span>
+                    <span className="text-emerald-400 font-medium">
+                      {fmt$(showPV ? projections[projections.length - 1]?.pvTotalEOY : summary.endingPortfolio)}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Heir Value</span>
-                    <span className="text-blue-400">{fmt$(summary.endingHeirValue)}</span>
+                    <span className="text-blue-400">
+                      {fmt$(showPV ? projections[projections.length - 1]?.pvHeirValue : summary.endingHeirValue)}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Total Tax</span>
@@ -484,8 +529,12 @@ export function ScenarioComparison({ params, projections, summary }) {
 
               {/* Scenario Cards */}
               {scenarioResults.map((scenario, idx) => {
-                const diff = scenario.summary.endingPortfolio - summary.endingPortfolio;
-                const diffPercent = diff / summary.endingPortfolio;
+                const lastProj = scenario.projections[scenario.projections.length - 1];
+                const baseLastProj = projections[projections.length - 1];
+                const scenarioPortfolio = showPV ? lastProj?.pvTotalEOY : scenario.summary.endingPortfolio;
+                const basePortfolio = showPV ? baseLastProj?.pvTotalEOY : summary.endingPortfolio;
+                const diff = scenarioPortfolio - basePortfolio;
+                const diffPercent = diff / basePortfolio;
                 const isPositive = diff >= 0;
                 const isEditing = editingId === scenario.id;
 
@@ -556,7 +605,7 @@ export function ScenarioComparison({ params, projections, summary }) {
                       <div className="flex justify-between">
                         <span className="text-slate-400">Final Portfolio</span>
                         <div className="text-right">
-                          <span className="text-slate-200 font-medium">{fmt$(scenario.summary.endingPortfolio)}</span>
+                          <span className="text-slate-200 font-medium">{fmt$(scenarioPortfolio)}</span>
                           <span className={`ml-2 text-xs ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {isPositive ? '+' : ''}{fmtPct(diffPercent)}
                           </span>
@@ -564,7 +613,9 @@ export function ScenarioComparison({ params, projections, summary }) {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-400">Heir Value</span>
-                        <span className="text-blue-400">{fmt$(scenario.summary.endingHeirValue)}</span>
+                        <span className="text-blue-400">
+                          {fmt$(showPV ? lastProj?.pvHeirValue : scenario.summary.endingHeirValue)}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-400">Total Tax</span>
@@ -606,17 +657,29 @@ export function ScenarioComparison({ params, projections, summary }) {
                   <YAxis stroke="#64748b" fontSize={10} tickFormatter={(v) => `$${v.toFixed(1)}M`} />
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    formatter={(value) => [`$${value.toFixed(2)}M`, '']}
+                    formatter={(value, name) => [`$${value.toFixed(2)}M`, name]}
+                    labelFormatter={(year) => `Year ${year}`}
                   />
-                  <Legend />
-                  <Line type="monotone" dataKey="Base" stroke="#10b981" strokeWidth={2} dot={false} />
+                  <Legend
+                    wrapperStyle={{ paddingTop: '10px' }}
+                    iconType="line"
+                    iconSize={12}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="Base"
+                    stroke="#10b981"
+                    strokeWidth={3}
+                    dot={false}
+                    name="Base Case"
+                  />
                   {scenarioResults.map((s, idx) => (
                     <Line
                       key={s.id}
                       type="monotone"
                       dataKey={s.name}
                       stroke={SCENARIO_COLORS[idx % SCENARIO_COLORS.length]}
-                      strokeWidth={2}
+                      strokeWidth={2.5}
                       dot={false}
                     />
                   ))}
@@ -647,34 +710,36 @@ export function ScenarioComparison({ params, projections, summary }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {comparisonMetrics.map(metric => (
-                      <tr key={metric.key} className="border-b border-slate-800 hover:bg-slate-800/50">
-                        <td className="py-2 px-3 text-slate-300">{metric.label}</td>
-                        <td className="py-2 px-3 text-right text-slate-200 font-mono">
-                          {metric.format === '$' ? fmt$(summary[metric.key]) : fmtPct(summary[metric.key])}
-                        </td>
-                        {scenarioResults.map((s) => {
-                          const value = s.summary[metric.key];
-                          const baseValue = summary[metric.key];
-                          const diff = metric.format === '$' ? value - baseValue : (value - baseValue);
-                          const isBetter = metric.key === 'totalTaxPaid' || metric.key === 'totalIRMAAPaid'
-                            ? diff < 0 : diff > 0;
+                    {comparisonMetrics.map(metric => {
+                      const baseValue = getMetricValue(projections, summary, metric);
+                      return (
+                        <tr key={metric.key} className="border-b border-slate-800 hover:bg-slate-800/50">
+                          <td className="py-2 px-3 text-slate-300">{metric.label}</td>
+                          <td className="py-2 px-3 text-right text-slate-200 font-mono">
+                            {metric.format === '$' ? fmt$(baseValue) : fmtPct(baseValue)}
+                          </td>
+                          {scenarioResults.map((s) => {
+                            const value = getMetricValue(s.projections, s.summary, metric);
+                            const diff = metric.format === '$' ? value - baseValue : (value - baseValue);
+                            const isBetter = metric.key === 'totalTaxPaid' || metric.key === 'totalIRMAAPaid'
+                              ? diff < 0 : diff > 0;
 
-                          return (
-                            <td key={s.id} className="py-2 px-3 text-right font-mono">
-                              <div className="text-slate-200">
-                                {metric.format === '$' ? fmt$(value) : fmtPct(value)}
-                              </div>
-                              {diff !== 0 && (
-                                <div className={`text-xs ${isBetter ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                  {diff > 0 ? '+' : ''}{metric.format === '$' ? fmt$(diff) : fmtPct(diff)}
+                            return (
+                              <td key={s.id} className="py-2 px-3 text-right font-mono">
+                                <div className="text-slate-200">
+                                  {metric.format === '$' ? fmt$(value) : fmtPct(value)}
                                 </div>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                                {diff !== 0 && (
+                                  <div className={`text-xs ${isBetter ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {diff > 0 ? '+' : ''}{metric.format === '$' ? fmt$(diff) : fmtPct(diff)}
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

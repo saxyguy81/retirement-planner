@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Calculator, Table, LineChart, Shield, Users, RefreshCw, GitCompare, Zap, Download, Upload, ChevronDown, Columns, Square, Save, FolderOpen, RotateCcw, Trash2 } from 'lucide-react';
+import { Calculator, Table, LineChart, Shield, Users, RefreshCw, GitCompare, Zap, Download, Upload, ChevronDown, Columns, Square, Save, FolderOpen, RotateCcw, Trash2, Settings } from 'lucide-react';
 
 import { useProjections } from './hooks/useProjections';
 import { InputPanel } from './components/InputPanel';
@@ -22,6 +22,7 @@ import { HeirAnalysis } from './components/HeirAnalysis';
 import { ScenarioComparison } from './components/ScenarioComparison';
 import { Optimization } from './components/Optimization';
 import { SplitPanel } from './components/SplitPanel';
+import { SettingsPanel } from './components/SettingsPanel';
 import { exportToExcel, exportToJSON, exportToPDF, importFromJSON, importFromExcel } from './lib/excelExport';
 
 const TABS = [
@@ -31,6 +32,7 @@ const TABS = [
   { id: 'heir', icon: Users, label: 'Heir Analysis' },
   { id: 'scenarios', icon: GitCompare, label: 'Scenarios' },
   { id: 'optimize', icon: Zap, label: 'Optimize' },
+  { id: 'settings', icon: Settings, label: 'Settings' },
 ];
 
 export default function App() {
@@ -67,6 +69,8 @@ export default function App() {
     updateParam,
     updateParams,
     updateRothConversion,
+    updateExpenseOverride,
+    updateATHarvest,
     toggleIterative,
     setMaxIterations,
     savedStates,
@@ -74,6 +78,9 @@ export default function App() {
     loadState,
     deleteState,
     resetToDefaults,
+    settings,
+    updateSettings,
+    resetSettings,
   } = useProjections();
 
   // Save handler
@@ -343,10 +350,12 @@ export default function App() {
       
       <div className="flex-1 flex overflow-hidden">
         {/* Left sidebar - Inputs */}
-        <InputPanel 
-          params={params} 
+        <InputPanel
+          params={params}
           updateParam={updateParam}
           updateRothConversion={updateRothConversion}
+          updateExpenseOverride={updateExpenseOverride}
+          updateATHarvest={updateATHarvest}
         />
         
         {/* Main content area */}
@@ -359,7 +368,7 @@ export default function App() {
                   key={tab.id}
                   onClick={() => {
                     setActiveTab(tab.id);
-                    if (splitView && (tab.id === 'scenarios' || tab.id === 'optimize')) {
+                    if (splitView && (tab.id === 'scenarios' || tab.id === 'optimize' || tab.id === 'settings')) {
                       setSplitView(false);
                     }
                   }}
@@ -450,6 +459,14 @@ export default function App() {
                     projections={projections}
                     summary={summary}
                     updateParams={updateParams}
+                  />
+                )}
+
+                {activeTab === 'settings' && (
+                  <SettingsPanel
+                    settings={settings}
+                    updateSettings={updateSettings}
+                    resetSettings={resetSettings}
                   />
                 )}
               </>

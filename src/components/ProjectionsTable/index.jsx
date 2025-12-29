@@ -111,6 +111,14 @@ const getSections = (showPV) => [
       { key: 'cumulativeIRMAA', label: 'Total IRMAA Paid', format: '$' },
     ]
   },
+  {
+    title: 'CAPITAL GAINS ANALYSIS',
+    rows: [
+      { key: 'capitalGains', label: 'Year Cap Gains', format: '$' },
+      { key: 'cumulativeCapitalGains', label: 'Cumulative Cap Gains', format: '$' },
+      { key: 'atLiquidationPercent', label: 'AT Liquidation %', format: '%', highlight: true },
+    ]
+  },
 ];
 
 function formatValue(value, format) {
@@ -131,6 +139,7 @@ const DEFAULT_COLLAPSED = {
   'RMD': true,
   'EFFECTIVE RETURNS': true,
   'CUMULATIVE': true,
+  'CAPITAL GAINS ANALYSIS': true,
 };
 
 // Fields that have calculation inspections available
@@ -147,6 +156,8 @@ const INSPECTABLE_FIELDS = [
   'pvTotalEOY',
   // Heir & Roth %
   'heirValue', 'pvHeirValue', 'rothPercent',
+  // Capital Gains Analysis
+  'capitalGains', 'cumulativeCapitalGains', 'atLiquidationPercent',
 ];
 
 export function ProjectionsTable({ projections, options, params }) {

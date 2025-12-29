@@ -19,9 +19,9 @@
  */
 
 import React, { useState } from 'react';
-import { 
-  ChevronDown, ChevronRight, DollarSign, TrendingUp, 
-  Zap, BarChart3, Percent, Heart, Users 
+import {
+  ChevronDown, ChevronRight, DollarSign, TrendingUp,
+  Zap, BarChart3, Percent, Heart, Users, Plus, X, Calendar
 } from 'lucide-react';
 import { fmt$, fmtPct } from '../../lib/formatters';
 
@@ -84,7 +84,13 @@ function ParamInput({ label, value, onChange, format = '$', min, max }) {
       onChange(parsed);
     }
   };
-  
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.target.blur();
+    }
+  };
+
   return (
     <div className="flex items-center justify-between py-0.5">
       <span className="text-slate-400 text-xs">{label}</span>
@@ -94,14 +100,17 @@ function ParamInput({ label, value, onChange, format = '$', min, max }) {
         onChange={(e) => setLocalValue(e.target.value)}
         onFocus={handleFocus}
         onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
         className="w-24 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
       />
     </div>
   );
 }
 
-export function InputPanel({ params, updateParam, updateRothConversion }) {
+export function InputPanel({ params, updateParam, updateRothConversion, updateExpenseOverride, updateATHarvest }) {
   const [expanded, setExpanded] = useState(['accounts', 'conversions']);
+  const [newExpenseYear, setNewExpenseYear] = useState('');
+  const [newHarvestYear, setNewHarvestYear] = useState('');
   
   const toggle = (section) => {
     setExpanded(prev => 
@@ -223,17 +232,171 @@ export function InputPanel({ params, updateParam, updateRothConversion }) {
         </InputSection>
         
         {/* Expenses */}
-        <InputSection 
-          title="Expenses" 
-          icon={BarChart3} 
-          expanded={expanded.includes('expenses')} 
-          onToggle={() => toggle('expenses')} 
+        <InputSection
+          title="Expenses"
+          icon={BarChart3}
+          expanded={expanded.includes('expenses')}
+          onToggle={() => toggle('expenses')}
           color="rose"
         >
           <ParamInput label="Annual" value={params.annualExpenses} onChange={(v) => updateParam('annualExpenses', v)} />
           <ParamInput label="Inflation" value={params.expenseInflation} onChange={(v) => updateParam('expenseInflation', v)} format="%" />
         </InputSection>
-        
+
+        {/* Expense Overrides */}
+        <InputSection
+          title="Expense Overrides"
+          icon={Calendar}
+          expanded={expanded.includes('expenseOverrides')}
+          onToggle={() => toggle('expenseOverrides')}
+          color="rose"
+        >
+          {Object.keys(params.expenseOverrides || {}).length === 0 ? (
+            <div className="text-slate-500 text-xs mb-2">No year-specific overrides</div>
+          ) : (
+            Object.entries(params.expenseOverrides || {})
+              .sort(([a], [b]) => Number(a) - Number(b))
+              .map(([year, amount]) => (
+                <div key={year} className="flex items-center gap-1 py-0.5">
+                  <span className="text-slate-400 text-xs w-10">{year}</span>
+                  <input
+                    type="text"
+                    value={`$${amount.toLocaleString()}`}
+                    onFocus={(e) => e.target.value = amount.toString()}
+                    onBlur={(e) => {
+                      const parsed = parseFloat(e.target.value.replace(/[,$]/g, ''));
+                      if (!isNaN(parsed) && parsed > 0) {
+                        updateExpenseOverride(Number(year), parsed);
+                      }
+                      e.target.value = `$${(parsed || amount).toLocaleString()}`;
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+                    className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={() => updateExpenseOverride(Number(year), null)}
+                    className="p-0.5 text-slate-500 hover:text-red-400"
+                    title="Remove override"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))
+          )}
+          {/* Add new year */}
+          <div className="flex items-center gap-1 mt-2 pt-2 border-t border-slate-700">
+            <input
+              type="text"
+              value={newExpenseYear}
+              onChange={(e) => setNewExpenseYear(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const year = parseInt(newExpenseYear);
+                  if (year >= 2026 && year <= 2060 && !params.expenseOverrides?.[year]) {
+                    updateExpenseOverride(year, params.annualExpenses);
+                    setNewExpenseYear('');
+                  }
+                }
+              }}
+              placeholder="Year"
+              className="w-14 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+            <button
+              onClick={() => {
+                const year = parseInt(newExpenseYear);
+                if (year >= 2026 && year <= 2060 && !params.expenseOverrides?.[year]) {
+                  updateExpenseOverride(year, params.annualExpenses);
+                  setNewExpenseYear('');
+                }
+              }}
+              className="px-2 py-0.5 bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 hover:bg-slate-600"
+            >
+              <Plus className="w-3 h-3" />
+              Add Year
+            </button>
+          </div>
+          <div className="text-slate-600 text-xs mt-1">
+            Override annual expense (in today's dollars)
+          </div>
+        </InputSection>
+
+        {/* AT Harvest Overrides */}
+        <InputSection
+          title="AT Harvest (Cap Gains)"
+          icon={TrendingUp}
+          expanded={expanded.includes('atHarvest')}
+          onToggle={() => toggle('atHarvest')}
+          color="purple"
+        >
+          {Object.keys(params.atHarvestOverrides || {}).length === 0 ? (
+            <div className="text-slate-500 text-xs mb-2">No year-specific harvests</div>
+          ) : (
+            Object.entries(params.atHarvestOverrides || {})
+              .sort(([a], [b]) => Number(a) - Number(b))
+              .map(([year, amount]) => (
+                <div key={year} className="flex items-center gap-1 py-0.5">
+                  <span className="text-slate-400 text-xs w-10">{year}</span>
+                  <input
+                    type="text"
+                    value={`$${amount.toLocaleString()}`}
+                    onFocus={(e) => e.target.value = amount.toString()}
+                    onBlur={(e) => {
+                      const parsed = parseFloat(e.target.value.replace(/[,$]/g, ''));
+                      if (!isNaN(parsed) && parsed > 0) {
+                        updateATHarvest(Number(year), parsed);
+                      }
+                      e.target.value = `$${(parsed || amount).toLocaleString()}`;
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+                    className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={() => updateATHarvest(Number(year), null)}
+                    className="p-0.5 text-slate-500 hover:text-red-400"
+                    title="Remove harvest"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))
+          )}
+          {/* Add new year */}
+          <div className="flex items-center gap-1 mt-2 pt-2 border-t border-slate-700">
+            <input
+              type="text"
+              value={newHarvestYear}
+              onChange={(e) => setNewHarvestYear(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const year = parseInt(newHarvestYear);
+                  if (year >= 2026 && year <= 2060 && !params.atHarvestOverrides?.[year]) {
+                    updateATHarvest(year, 50000); // Default $50K harvest
+                    setNewHarvestYear('');
+                  }
+                }
+              }}
+              placeholder="Year"
+              className="w-14 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+            <button
+              onClick={() => {
+                const year = parseInt(newHarvestYear);
+                if (year >= 2026 && year <= 2060 && !params.atHarvestOverrides?.[year]) {
+                  updateATHarvest(year, 50000);
+                  setNewHarvestYear('');
+                }
+              }}
+              className="px-2 py-0.5 bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 hover:bg-slate-600"
+            >
+              <Plus className="w-3 h-3" />
+              Add Year
+            </button>
+          </div>
+          <div className="text-slate-600 text-xs mt-1">
+            Extra AT liquidation for capital gains harvesting
+          </div>
+        </InputSection>
+
         {/* Tax Parameters */}
         <InputSection 
           title="Tax Parameters" 
@@ -265,6 +428,7 @@ export function InputPanel({ params, updateParam, updateRothConversion }) {
               type="text"
               value={params.survivorDeathYear || ''}
               onChange={(e) => updateParam('survivorDeathYear', e.target.value ? parseInt(e.target.value) : null)}
+              onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
               placeholder="none"
               className="w-20 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs"
             />

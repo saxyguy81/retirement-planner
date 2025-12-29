@@ -10,9 +10,30 @@ import { generateProjections, calculateSummary, DEFAULT_PARAMS } from '../lib';
 // localStorage keys
 const STORAGE_KEY = 'retirement-planner-state';
 const SAVED_STATES_KEY = 'retirement-planner-saved-states';
+const SETTINGS_KEY = 'retirement-planner-settings';
 
 // Default options
 const DEFAULT_OPTIONS = { iterativeTax: true, maxIterations: 5 };
+
+// Default settings (global configuration)
+const DEFAULT_SETTINGS = {
+  // User Profile
+  primaryName: 'Ira',
+  primaryBirthYear: 1955,
+  spouseName: 'Carol',
+  spouseBirthYear: 1957,
+
+  // Tax Settings
+  taxYear: 2024,
+  bonusDeduction: 0,  // Extra deduction on top of standard (e.g., Trump's senior proposal)
+  discountRate: 0.03, // For PV calculations
+
+  // Display Preferences
+  defaultPV: true,
+
+  // Custom Tax Brackets (null means use defaults)
+  customBrackets: null,
+};
 
 // Helper: Load last state from localStorage
 const loadLastState = () => {
@@ -62,6 +83,28 @@ const saveSavedStates = (states) => {
   }
 };
 
+// Helper: Load settings from localStorage
+const loadSettings = () => {
+  try {
+    const saved = localStorage.getItem(SETTINGS_KEY);
+    if (saved) {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+    }
+  } catch (e) {
+    console.error('Failed to load settings:', e);
+  }
+  return null;
+};
+
+// Helper: Save settings to localStorage
+const saveSettings = (settings) => {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch (e) {
+    console.error('Failed to save settings:', e);
+  }
+};
+
 export function useProjections(initialParams = {}) {
   // Auto-restore last state or use defaults
   const [params, setParams] = useState(() => {
@@ -82,15 +125,33 @@ export function useProjections(initialParams = {}) {
 
   const [savedStates, setSavedStates] = useState(() => loadSavedStates());
 
+  const [settings, setSettings] = useState(() => {
+    const restored = loadSettings();
+    return restored || { ...DEFAULT_SETTINGS };
+  });
+
   // Auto-save whenever params or options change
   useEffect(() => {
     saveCurrentState(params, options);
   }, [params, options]);
+
+  // Auto-save settings whenever they change
+  useEffect(() => {
+    saveSettings(settings);
+  }, [settings]);
   
-  // Memoized projections - recalculates only when params/options change
+  // Memoized projections - recalculates only when params/options/settings change
+  // Merges relevant settings (bonusDeduction, discountRate, birthYear) into projection params
   const projections = useMemo(() => {
-    return generateProjections({ ...params, ...options });
-  }, [params, options]);
+    const projectionParams = {
+      ...params,
+      ...options,
+      bonusDeduction: settings.bonusDeduction || 0,
+      discountRate: settings.discountRate || 0.03,
+      birthYear: settings.primaryBirthYear || params.birthYear,
+    };
+    return generateProjections(projectionParams);
+  }, [params, options, settings]);
   
   // Summary statistics
   const summary = useMemo(() => {
@@ -113,6 +174,32 @@ export function useProjections(initialParams = {}) {
       ...prev,
       rothConversions: { ...prev.rothConversions, [year]: amount }
     }));
+  }, []);
+
+  // Update expense override for a specific year
+  const updateExpenseOverride = useCallback((year, amount) => {
+    setParams(prev => {
+      const newOverrides = { ...prev.expenseOverrides };
+      if (amount === null || amount === 0) {
+        delete newOverrides[year]; // Remove override if cleared
+      } else {
+        newOverrides[year] = amount;
+      }
+      return { ...prev, expenseOverrides: newOverrides };
+    });
+  }, []);
+
+  // Update AT harvest override for a specific year
+  const updateATHarvest = useCallback((year, amount) => {
+    setParams(prev => {
+      const newOverrides = { ...prev.atHarvestOverrides || {} };
+      if (amount === null || amount === 0) {
+        delete newOverrides[year]; // Remove override if cleared
+      } else {
+        newOverrides[year] = amount;
+      }
+      return { ...prev, atHarvestOverrides: newOverrides };
+    });
   }, []);
   
   // Reset to defaults
@@ -167,6 +254,16 @@ export function useProjections(initialParams = {}) {
     setOptions({ ...DEFAULT_OPTIONS });
   }, []);
 
+  // Update settings
+  const updateSettings = useCallback((updates) => {
+    setSettings(prev => ({ ...prev, ...updates }));
+  }, []);
+
+  // Reset settings to defaults
+  const resetSettings = useCallback(() => {
+    setSettings({ ...DEFAULT_SETTINGS });
+  }, []);
+
   return {
     params,
     options,
@@ -175,6 +272,8 @@ export function useProjections(initialParams = {}) {
     updateParam,
     updateParams,
     updateRothConversion,
+    updateExpenseOverride,
+    updateATHarvest,
     resetParams,
     toggleIterative,
     setMaxIterations,
@@ -185,6 +284,10 @@ export function useProjections(initialParams = {}) {
     loadState,
     deleteState,
     resetToDefaults,
+    // Settings
+    settings,
+    updateSettings,
+    resetSettings,
   };
 }
 

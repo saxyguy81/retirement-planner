@@ -173,17 +173,22 @@ export const DEFAULT_PARAMS = {
   // Expenses
   annualExpenses: 180000,   // Starting annual expenses
   expenseInflation: 0.03,   // Annual expense growth
+  expenseOverrides: {},     // Year-specific expense overrides (year -> amount)
   
   // Tax Parameters
   stateTaxRate: 0.0495,     // Illinois flat rate
   capitalGainsPercent: 0.75, // % of AT withdrawal that's gains vs basis
   bracketInflation: 0.03,    // Annual bracket inflation assumption
+  bonusDeduction: 0,         // Extra deduction on top of standard (e.g., Trump's senior bonus)
   
   // Roth Conversions (year -> amount)
   rothConversions: {
     2026: 700000,
     2027: 700000,
   },
+
+  // AT Harvest Overrides (year -> amount) - extra AT liquidation for capital gains harvesting
+  atHarvestOverrides: {},
   
   // MAGI History (for IRMAA 2-year lookback)
   magi2024: 600000,

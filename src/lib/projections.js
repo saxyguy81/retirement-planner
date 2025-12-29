@@ -36,7 +36,8 @@ function calculateWithdrawals(inputs, taxParams, options) {
   const {
     atBOY, iraBOY, rothBOY, costBasisBOY,
     ssAnnual, expenses, irmaaTotal,
-    rmdRequired, rothConversion
+    rmdRequired, rothConversion,
+    atHarvestOverride = 0,
   } = inputs;
   
   const {
@@ -67,6 +68,12 @@ function calculateWithdrawals(inputs, taxParams, options) {
     if (need > 0 && atBOY > 0) {
       atW = Math.min(atBOY, need);
       need -= atW;
+    }
+
+    // Add AT harvest override (extra AT liquidation for capital gains harvesting)
+    if (atHarvestOverride > 0 && atBOY > atW) {
+      const additionalHarvest = Math.min(atHarvestOverride, atBOY - atW);
+      atW += additionalHarvest;
     }
     
     // More IRA if needed
@@ -158,6 +165,10 @@ export function generateProjections(params = {}) {
   let cumulativeTax = 0;
   let cumulativeIRMAA = 0;
   let cumulativeExpenses = 0;
+  let cumulativeCapitalGains = 0;
+
+  // Track original AT balance for liquidation percentage
+  const originalATBalance = p.afterTaxStart;
   
   for (let year = p.startYear; year <= p.endYear; year++) {
     const yearsFromBase = year - 2024; // Years from tax table base year
@@ -195,7 +206,11 @@ export function generateProjections(params = {}) {
     
     // Income calculations
     let ssAnnual = p.socialSecurityMonthly * 12 * Math.pow(1 + p.ssCOLA, yearsFromStart);
-    let expenses = p.annualExpenses * Math.pow(1 + p.expenseInflation, yearsFromStart);
+
+    // Expense calculation: use override if set, otherwise calculate with inflation
+    let expenses = p.expenseOverrides && p.expenseOverrides[year]
+      ? p.expenseOverrides[year]
+      : p.annualExpenses * Math.pow(1 + p.expenseInflation, yearsFromStart);
     
     // Adjust for survivor scenario
     if (isSurvivor) {
@@ -205,6 +220,9 @@ export function generateProjections(params = {}) {
     
     // Roth conversion for this year
     const rothConversion = p.rothConversions[year] || 0;
+
+    // AT harvest override (extra AT liquidation for capital gains harvesting)
+    const atHarvestOverride = p.atHarvestOverrides?.[year] || 0;
     
     // RMD calculation
     const rmd = calculateRMD(iraBOY, age);
@@ -219,10 +237,12 @@ export function generateProjections(params = {}) {
       p.bracketInflation, yearsFromBase
     );
     
-    // Standard deduction with inflation and senior bonus
+    // Standard deduction with inflation, senior bonus, and any bonus deduction
     const baseDed = isSingle ? STANDARD_DEDUCTION_SINGLE_2024 : STANDARD_DEDUCTION_MFJ_2024;
     const seniorBonus = isSingle ? SENIOR_BONUS_SINGLE_2024 : SENIOR_BONUS_MFJ_2024;
-    const standardDeduction = Math.round((baseDed + seniorBonus) * Math.pow(1 + p.bracketInflation, yearsFromBase));
+    const baseWithSenior = (baseDed + seniorBonus) * Math.pow(1 + p.bracketInflation, yearsFromBase);
+    // Add bonus deduction (e.g., Trump's senior proposal) - not inflated as it would be set in current year dollars
+    const standardDeduction = Math.round(baseWithSenior + (p.bonusDeduction || 0));
     
     // IRMAA (2-year lookback)
     const irmaaMAGI = magiHistory[year - 2] || 0;
@@ -237,7 +257,8 @@ export function generateProjections(params = {}) {
       {
         atBOY, iraBOY, rothBOY, costBasisBOY,
         ssAnnual, expenses, irmaaTotal: irmaa.total,
-        rmdRequired: rmd.required, rothConversion
+        rmdRequired: rmd.required, rothConversion,
+        atHarvestOverride,
       },
       {
         fedBrackets, ltcgBrackets, standardDeduction,
@@ -253,6 +274,12 @@ export function generateProjections(params = {}) {
     
     cumulativeTax += withdrawal.totalTax;
     cumulativeExpenses += expenses;
+    cumulativeCapitalGains += withdrawal.capitalGains;
+
+    // Calculate AT liquidation percentage (how much of original AT has been used)
+    const atLiquidationPercent = originalATBalance > 0
+      ? 1 - (atBOY / originalATBalance)
+      : 0;
     
     // Apply withdrawals
     const atAfterWithdrawal = atBOY - withdrawal.atWithdrawal;
@@ -343,6 +370,8 @@ export function generateProjections(params = {}) {
       cumulativeTax: Math.round(cumulativeTax),
       cumulativeIRMAA: Math.round(cumulativeIRMAA),
       cumulativeExpenses: Math.round(cumulativeExpenses),
+      cumulativeCapitalGains: Math.round(cumulativeCapitalGains),
+      atLiquidationPercent,
       
       // Present values
       pvAtEOY: Math.round(atEOY / pvFactor),
