@@ -9,9 +9,8 @@ import { render } from '@testing-library/react';
 import { page } from '@vitest/browser/context';
 import { describe, it, expect } from 'vitest';
 
-import { MOCK_PROJECTIONS, MOCK_PARAMS, disableAnimations } from '../../../tests/visual/utils';
-
 import { ProjectionsTable } from './index';
+import { MOCK_PROJECTIONS, MOCK_PARAMS, disableAnimations } from '../../../tests/visual/utils';
 
 // Import styles for proper rendering
 import '../../index.css';

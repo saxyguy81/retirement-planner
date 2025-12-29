@@ -123,7 +123,7 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
               Social Security Tax Exemption
             </div>
             <div className="text-slate-500 text-xs mb-3">
-              Trump's proposal: Exempt Social Security from federal taxation
+              Trump&apos;s proposal: Exempt Social Security from federal taxation
             </div>
             <div className="flex gap-1">
               {[
@@ -173,7 +173,7 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
               <div>
                 <div className="text-slate-300 text-sm">Default to Present Value</div>
                 <div className="text-slate-500 text-xs">
-                  Show values in today's dollars by default
+                  Show values in today&apos;s dollars by default
                 </div>
               </div>
               <button

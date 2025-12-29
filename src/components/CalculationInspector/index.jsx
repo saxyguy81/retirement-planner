@@ -290,7 +290,7 @@ const CALCULATIONS = {
       "This is the after-tax (taxable brokerage) account balance at the start of the year. For the first projection year, this equals your starting after-tax balance from inputs. For subsequent years, it equals the prior year's end-of-year after-tax balance. This account is withdrawn from second (after RMD), and gains are taxed at capital gains rates.",
     formula: 'atBOY = Prior Year atEOY\n\nFirst Year: atBOY = Starting AT Balance (from inputs)',
     backOfEnvelope: 'Start of year = end of prior year',
-    compute: (data, params) => {
+    compute: data => {
       const isFirstYear = data.yearsFromStart === 0;
       return {
         formula: isFirstYear
@@ -312,7 +312,7 @@ const CALCULATIONS = {
     formula:
       'iraBOY = Prior Year iraEOY\n\nFirst Year: iraBOY = Starting IRA Balance (from inputs)',
     backOfEnvelope: 'Start of year = end of prior year',
-    compute: (data, params) => {
+    compute: data => {
       const isFirstYear = data.yearsFromStart === 0;
       return {
         formula: isFirstYear
@@ -334,7 +334,7 @@ const CALCULATIONS = {
     formula:
       'rothBOY = Prior Year rothEOY\n\nFirst Year: rothBOY = Starting Roth Balance (from inputs)',
     backOfEnvelope: 'Start of year = end of prior year',
-    compute: (data, params) => {
+    compute: data => {
       const isFirstYear = data.yearsFromStart === 0;
       return {
         formula: isFirstYear
@@ -356,8 +356,7 @@ const CALCULATIONS = {
     formula:
       'totalBOY = atBOY + iraBOY + rothBOY\n\nOr equivalently: totalBOY = Prior Year totalEOY',
     backOfEnvelope: 'AT + IRA + Roth at start of year',
-    compute: (data, params) => {
-      const isFirstYear = data.yearsFromStart === 0;
+    compute: data => {
       return {
         formula: 'totalBOY = atBOY + iraBOY + rothBOY',
         values: `${fK(data.atBOY)} + ${fK(data.iraBOY)} + ${fK(data.rothBOY)}`,
@@ -378,7 +377,7 @@ const CALCULATIONS = {
     formula:
       'federalTax = Sum(Income_in_bracket x Bracket_rate)\n\ntaxableOrdinary = ordinaryIncome - standardDeduction\nordinaryIncome = taxableSS + iraWithdrawal + rothConversion',
     backOfEnvelope: 'For most retirees: taxableOrdinary x 22%',
-    compute: (data, params) => {
+    compute: data => {
       const { taxableOrdinary, ordinaryIncome, standardDeduction, federalTax } = data;
       const effectiveRate =
         ordinaryIncome > 0 ? ((federalTax / ordinaryIncome) * 100).toFixed(1) : 0;
@@ -594,7 +593,7 @@ const CALCULATIONS = {
     backOfEnvelope: 'expenses x 1.2 (assumes ~20% for taxes)',
     compute: data => {
       const { expenses, totalTax, irmaaTotal, ssAnnual, totalWithdrawal } = data;
-      const need = expenses + totalTax + irmaaTotal - ssAnnual;
+      const _need = expenses + totalTax + irmaaTotal - ssAnnual;
       const taxPct = expenses > 0 ? ((totalWithdrawal / expenses - 1) * 100).toFixed(0) : 0;
       return {
         formula: `Need = expenses + totalTax + irmaaTotal - ssAnnual`,
@@ -1136,8 +1135,8 @@ const CALCULATIONS = {
     formula:
       'ssAnnual = Monthly SS x 12 x (1 + COLA)^years\n\nMonthly SS: Your stated monthly benefit at claiming\nCOLA: Annual cost-of-living adjustment (default 2.5%)\nYears: Years since projection start',
     backOfEnvelope: 'Monthly x 12 x 1.025 each year',
-    compute: (data, params) => {
-      const { ssAnnual, year } = data;
+    compute: data => {
+      const { ssAnnual } = data;
       const monthlyApprox = ssAnnual / 12;
       return {
         formula: `Monthly SS x 12`,
@@ -1156,10 +1155,9 @@ const CALCULATIONS = {
       'expenses = baseExpenses x (1 + inflation)^years + overrides\n\nBase: Starting annual expenses\nInflation: Annual expense inflation rate\nOverrides: Year-specific adjustments (e.g., one-time purchases)',
     backOfEnvelope: 'Base x 1.03 each year (3% inflation)',
     compute: (data, params) => {
-      const { expenses, year } = data;
+      const { expenses } = data;
       const baseExpenses = params?.annualExpenses || 150000;
       const yearsFromStart = data.yearsFromStart || 0;
-      const inflatedBase = baseExpenses * Math.pow(1.03, yearsFromStart);
       return {
         formula: `Base expenses + inflation adjustments`,
         values: `${fK(baseExpenses)} base x (1.03)^${yearsFromStart}`,
@@ -1176,7 +1174,7 @@ const CALCULATIONS = {
     formula:
       'From IRS Uniform Lifetime Table:\n\nAge 73: 26.5\nAge 75: 24.6\nAge 80: 20.2\nAge 85: 16.0\nAge 90: 12.2\nAge 95: 8.6\nAge 100: 6.4',
     backOfEnvelope: 'Roughly 100 - age (simplified)',
-    compute: (data, params) => {
+    compute: data => {
       const { rmdFactor, age } = data;
       const rmdPct = rmdFactor > 0 ? (100 / rmdFactor).toFixed(1) : 0;
       return {
@@ -1195,7 +1193,7 @@ const CALCULATIONS = {
     formula:
       'ordinaryIncome = taxableSS + iraWithdrawal + rothConversion\n\nNote: AT withdrawals are NOT ordinary income (taxed as cap gains)\nNote: Roth withdrawals are NOT income (tax-free)',
     backOfEnvelope: 'SS (85%) + IRA withdrawals + conversions',
-    compute: (data, params) => {
+    compute: data => {
       const { ordinaryIncome, taxableSS, iraWithdrawal, rothConversion } = data;
       return {
         formula: `ordinaryIncome = taxableSS + iraWithdrawal + rothConversion`,
@@ -1213,7 +1211,7 @@ const CALCULATIONS = {
     formula:
       'taxableOrdinary = ordinaryIncome - standardDeduction\n\nStandard Deduction (2025 MFJ over 65): ~$32,300\nThis is what flows through tax brackets.',
     backOfEnvelope: 'ordinaryIncome - $32K deduction',
-    compute: (data, params) => {
+    compute: data => {
       const { taxableOrdinary, ordinaryIncome, standardDeduction } = data;
       return {
         formula: `taxableOrdinary = ordinaryIncome - standardDeduction`,
@@ -1231,7 +1229,7 @@ const CALCULATIONS = {
     formula:
       'Standard Deduction (2025 MFJ):\nBase: $30,000\nAge 65+ bonus: +$1,600 each\nBoth 65+: $30,000 + $3,200 = $33,200',
     backOfEnvelope: '~$32K-$33K for retired couples',
-    compute: (data, params) => {
+    compute: data => {
       const { standardDeduction, age } = data;
       return {
         formula: `MFJ base + age 65+ bonuses`,
@@ -1249,7 +1247,7 @@ const CALCULATIONS = {
     formula:
       'Cost Basis tracks: Total amount you put IN to AT account\n\nWhen you withdraw, gains = withdrawal x (1 - basis/value)\nBasis is consumed proportionally with withdrawals.',
     backOfEnvelope: 'Original investment amount (what you paid)',
-    compute: (data, params) => {
+    compute: data => {
       const { costBasisBOY, atBOY } = data;
       const basisPct = atBOY > 0 ? ((costBasisBOY / atBOY) * 100).toFixed(0) : 0;
       const gainsPct = 100 - basisPct;
@@ -1269,8 +1267,8 @@ const CALCULATIONS = {
     formula:
       'costBasisEOY = costBasisBOY x (1 - withdrawal_rate)\n\nwithdrawal_rate = atWithdrawal / atBOY\nBasis is consumed at same rate as withdrawals.',
     backOfEnvelope: 'Starting basis minus basis consumed by withdrawals',
-    compute: (data, params) => {
-      const { costBasisEOY, costBasisBOY, atBOY, atWithdrawal } = data;
+    compute: data => {
+      const { costBasisEOY, costBasisBOY, atWithdrawal } = data;
       const basisConsumed = costBasisBOY - costBasisEOY;
       return {
         formula: `Basis consumed proportionally with withdrawals`,
@@ -1291,8 +1289,8 @@ const CALCULATIONS = {
     formula:
       'atEOY = (atBOY - atWithdrawal) x (1 + effectiveAtReturn)\n\nBase return adjusted for:\n- Risk allocation mode\n- Account-specific factors',
     backOfEnvelope: 'Base return (e.g., 6-7%)',
-    compute: (data, params) => {
-      const { effectiveAtReturn, atReturn, atBOY } = data;
+    compute: data => {
+      const { effectiveAtReturn, atReturn } = data;
       const returnPct = ((effectiveAtReturn || 0) * 100).toFixed(1);
       return {
         formula: `After-tax account growth rate`,
@@ -1310,8 +1308,8 @@ const CALCULATIONS = {
     formula:
       'iraEOY = (iraBOY - iraWithdrawal - rothConversion) x (1 + effectiveIraReturn)\n\nTax-deferred growth.',
     backOfEnvelope: 'Base return (e.g., 6-7%)',
-    compute: (data, params) => {
-      const { effectiveIraReturn, iraReturn, iraBOY } = data;
+    compute: data => {
+      const { effectiveIraReturn, iraReturn } = data;
       const returnPct = ((effectiveIraReturn || 0) * 100).toFixed(1);
       return {
         formula: `IRA account growth rate`,
@@ -1329,8 +1327,8 @@ const CALCULATIONS = {
     formula:
       'rothEOY = (rothBOY - rothWithdrawal + rothConversion) x (1 + effectiveRothReturn)\n\nTax-free growth forever!',
     backOfEnvelope: 'Base return (e.g., 6-7%)',
-    compute: (data, params) => {
-      const { effectiveRothReturn, rothReturn, rothBOY } = data;
+    compute: data => {
+      const { effectiveRothReturn, rothReturn } = data;
       const returnPct = ((effectiveRothReturn || 0) * 100).toFixed(1);
       return {
         formula: `Roth account growth rate (tax-free!)`,
@@ -1348,7 +1346,7 @@ const CALCULATIONS = {
     formula:
       'cumulativeIRMAA = Sum(Annual IRMAA)\n\nIRMAA is an extra Medicare premium, not a tax.\nBased on MAGI from 2 years prior.',
     backOfEnvelope: 'Sum of annual IRMAA surcharges',
-    compute: (data, params) => {
+    compute: data => {
       const { cumulativeIRMAA, irmaaTotal, year } = data;
       return {
         formula: `Running sum of annual IRMAA`,
@@ -1366,7 +1364,7 @@ const CALCULATIONS = {
     formula:
       'irmaaMAGI = MAGI from (current year - 2)\n\nThresholds (MFJ 2025):\n< $206K: $0 surcharge\n$206K-$258K: Tier 1\n$258K-$322K: Tier 2\netc.',
     backOfEnvelope: "Your income from 2 years ago determines this year's IRMAA",
-    compute: (data, params) => {
+    compute: data => {
       const { irmaaMAGI, year, irmaaTotal } = data;
       const tier =
         irmaaTotal === 0
@@ -1392,7 +1390,7 @@ const CALCULATIONS = {
     formula:
       'Part B Surcharge (per person annually):\nTier 1 ($206K-$258K): ~$1,000\nTier 2 ($258K-$322K): ~$2,500\nTier 3 ($322K-$386K): ~$4,000\netc.',
     backOfEnvelope: 'Doubles your Part B premium at higher tiers',
-    compute: (data, params) => {
+    compute: data => {
       const { irmaaPartB } = data;
       const perPerson = irmaaPartB / 2;
       const monthly = perPerson / 12;
@@ -1412,7 +1410,7 @@ const CALCULATIONS = {
     formula:
       'Part D Surcharge (per person annually):\nTier 1: ~$150\nTier 2: ~$400\nTier 3: ~$650\netc.',
     backOfEnvelope: 'Smaller than Part B, ~10-20% of Part B surcharge',
-    compute: (data, params) => {
+    compute: data => {
       const { irmaaPartD, irmaaPartB } = data;
       const perPerson = irmaaPartD / 2;
       const pctOfB = irmaaPartB > 0 ? ((irmaaPartD / irmaaPartB) * 100).toFixed(0) : 0;
@@ -1584,7 +1582,7 @@ export function CalculationInspector({
           {/* Calculation Breakdown */}
           <div>
             <div className="text-slate-400 text-xs uppercase tracking-wide mb-2">
-              This Year's Values
+              This Year&apos;s Values
             </div>
             <div className="bg-slate-950 rounded p-3 font-mono text-sm space-y-1">
               <div className="text-slate-400 whitespace-pre-wrap">{computed.formula}</div>

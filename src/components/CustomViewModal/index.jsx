@@ -386,7 +386,7 @@ export function CustomViewModal({ viewType, selectedRows, projections, sections,
         <div className="p-4 text-center bg-slate-800/50 rounded border border-slate-700 mb-3">
           <div className="text-slate-400 text-sm mb-1">No rows match your filter</div>
           <div className="text-slate-500 text-xs">
-            Try adjusting the threshold or selecting "Show All"
+            Try adjusting the threshold or selecting &quot;Show All&quot;
           </div>
           <button
             onClick={() => setFilterMode('all')}

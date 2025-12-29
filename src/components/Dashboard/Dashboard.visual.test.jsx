@@ -9,6 +9,7 @@ import { render } from '@testing-library/react';
 import { page } from '@vitest/browser/context';
 import { describe, it, expect } from 'vitest';
 
+import { Dashboard } from './index';
 import {
   MOCK_PROJECTIONS,
   MOCK_PARAMS,
@@ -16,8 +17,6 @@ import {
   disableAnimations,
   waitForCharts,
 } from '../../../tests/visual/utils';
-
-import { Dashboard } from './index';
 
 // Import styles for proper rendering
 import '../../index.css';

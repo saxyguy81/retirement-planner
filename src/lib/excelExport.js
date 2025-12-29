@@ -93,7 +93,7 @@ function formatCellValue(value, format) {
 }
 
 // Create projections worksheet
-function createProjectionsSheet(projections, scenarioName = '') {
+function createProjectionsSheet(projections, _scenarioName = '') {
   const headers = PROJECTION_COLUMNS.map(col => col.header);
   const data = [headers];
 

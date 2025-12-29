@@ -9,8 +9,6 @@
  * - Year selector to see allocation changes over time
  */
 
-import React from 'react';
-
 import { calculateRiskAllocation } from '../../lib/calculations';
 import { fmt$, fmtPct } from '../../lib/formatters';
 

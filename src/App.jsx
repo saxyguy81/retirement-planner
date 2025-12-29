@@ -12,33 +12,30 @@
 
 import {
   Calculator,
-  Table,
-  LineChart,
-  Shield,
-  Users,
-  RefreshCw,
-  GitCompare,
-  Zap,
-  Download,
-  Upload,
   ChevronDown,
   Columns,
-  Square,
-  Save,
-  FolderOpen,
-  RotateCcw,
-  Trash2,
-  Settings,
   DollarSign,
+  Download,
+  FolderOpen,
+  GitCompare,
+  LineChart,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Settings,
+  Shield,
+  Square,
+  Table,
+  Trash2,
+  Upload,
+  Users,
+  Zap,
 } from 'lucide-react';
-import { useState, useCallback, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-// Static imports - always needed
 import { InputPanel } from './components/InputPanel';
 import { LazyErrorBoundary } from './components/LazyErrorBoundary';
 import { LazyLoadingFallback } from './components/LazyLoadingFallback';
-
-// ProjectionsTable stays static since it's the default tab
 import { ProjectionsTable } from './components/ProjectionsTable';
 import { SplitPanel } from './components/SplitPanel';
 

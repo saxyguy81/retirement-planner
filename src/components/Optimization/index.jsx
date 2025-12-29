@@ -21,18 +21,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 import { generateProjections, calculateSummary } from '../../lib';
 import { fmt$, fmtPct } from '../../lib/formatters';
@@ -122,7 +111,7 @@ function generateConversionScenarios(baseParams, years, amounts) {
   return scenarios;
 }
 
-export function Optimization({ params, projections, summary, updateParams }) {
+export function Optimization({ params, summary, updateParams }) {
   const [selectedObjective, setSelectedObjective] = useState('maxHeir');
   const [isRunning, setIsRunning] = useState(false);
   const [results, setResults] = useState(null);
@@ -131,10 +120,9 @@ export function Optimization({ params, projections, summary, updateParams }) {
 
   const objective = OBJECTIVES.find(o => o.id === selectedObjective);
 
-  // Test amounts
-  const testAmounts = [0, 200000, 400000, 600000, 800000, 1000000, 1200000];
-
   const runOptimization = useCallback(() => {
+    // Test amounts
+    const testAmounts = [0, 200000, 400000, 600000, 800000, 1000000, 1200000];
     setIsRunning(true);
     setResults(null);
 
@@ -189,7 +177,7 @@ export function Optimization({ params, projections, summary, updateParams }) {
       });
       setIsRunning(false);
     }, 100);
-  }, [params, summary, objective, conversionYears, targetRoth, testAmounts]);
+  }, [params, summary, objective, conversionYears, targetRoth]);
 
   const applyOptimal = useCallback(() => {
     if (results?.best) {

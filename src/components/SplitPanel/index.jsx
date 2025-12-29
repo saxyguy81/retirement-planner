@@ -9,13 +9,13 @@
  * - Remembers panel sizes
  */
 
-import { GripVertical, Maximize2, Minimize2, X } from 'lucide-react';
+import { GripVertical, Maximize2, Minimize2 } from 'lucide-react';
 import { useState, useRef, useCallback, useEffect } from 'react';
 
 const MIN_PANEL_WIDTH = 200; // Minimum width in pixels
 
 export function SplitPanel({
-  children,
+  _children,
   views,
   defaultLeftView = 'projections',
   defaultRightView = 'charts',

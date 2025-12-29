@@ -124,12 +124,9 @@ export default [
           groups: [
             'builtin',
             'external',
-            'internal',
-            'parent',
-            'sibling',
-            'index',
+            ['internal', 'sibling', 'parent', 'index'],
           ],
-          'newlines-between': 'always',
+          'newlines-between': 'ignore',
           alphabetize: {
             order: 'asc',
             caseInsensitive: true,

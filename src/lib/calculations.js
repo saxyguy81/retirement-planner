@@ -384,7 +384,7 @@ export function getFederalMarginalRate(agi) {
 // STATE MARGINAL TAX RATE LOOKUP
 // Given state code and AGI, returns approximate marginal state rate
 // =============================================================================
-export function getStateMarginalRate(stateCode, agi) {
+export function getStateMarginalRate(stateCode, _agi) {
   const rate = STATE_TAX_RATES[stateCode.toUpperCase()];
   if (rate !== undefined) return rate;
   return STATE_TAX_RATES['DEFAULT'];

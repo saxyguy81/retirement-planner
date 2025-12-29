@@ -14,17 +14,15 @@
 import { Info, Users, ArrowRight, TrendingUp } from 'lucide-react';
 import { useMemo } from 'react';
 import {
-  LineChart,
-  Line,
-  AreaChart,
   Area,
+  CartesianGrid,
   ComposedChart,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
 } from 'recharts';
 
 import { fmt$, fmtPct } from '../../lib/formatters';
@@ -70,8 +68,8 @@ export function HeirAnalysis({ projections, params, showPV = true }) {
     fontSize: '11px',
   };
 
-  // Calculate total tax impact on IRA across all heirs
-  const totalIraTax =
+  // Calculate total tax impact on IRA across all heirs (reserved for future use)
+  const _totalIraTax =
     hasMultiHeir && last.heirDetails[0]?.iraDetails
       ? last.heirDetails.reduce(
           (sum, h) =>
@@ -85,7 +83,7 @@ export function HeirAnalysis({ projections, params, showPV = true }) {
   // Get strategy comparison values (with PV applied)
   const currentStrategy = last.heirStrategyDetails?.strategy || 'even';
   const currentStrategyValue = pv(last.heirNormalized || last.heirValue);
-  const alternateStrategy = last.heirStrategyDetails?.alternateStrategy || 'year10';
+  const _alternateStrategy = last.heirStrategyDetails?.alternateStrategy || 'year10';
   const alternateStrategyValue = pv(
     last.heirStrategyDetails?.alternateStrategyValue || last.heirValue
   );
@@ -469,7 +467,7 @@ export function HeirAnalysis({ projections, params, showPV = true }) {
                   <p className="text-amber-200">
                     Heir Comparison: {last.heirDetails[0].name} receives{' '}
                     {fmt$(last.heirDetails[0].netNormalized || last.heirDetails[0].netValue)}{' '}
-                    normalized vs {last.heirDetails[1].name}'s{' '}
+                    normalized vs {last.heirDetails[1].name}&apos;s{' '}
                     {fmt$(last.heirDetails[1].netNormalized || last.heirDetails[1].netValue)}
                     {last.heirDetails[0].taxableRoR !== last.heirDetails[1].taxableRoR && (
                       <span> (different taxable RoR assumptions)</span>
@@ -479,9 +477,9 @@ export function HeirAnalysis({ projections, params, showPV = true }) {
                 )}
 
                 <p className="text-slate-400 text-xs mt-2">
-                  Note: Normalized values account for taxes, distribution timing, and each heir's
-                  taxable reinvestment rate over a {normalizationYears}-year horizon, discounted to
-                  present value for fair comparison.
+                  Note: Normalized values account for taxes, distribution timing, and each
+                  heir&apos;s taxable reinvestment rate over a {normalizationYears}-year horizon,
+                  discounted to present value for fair comparison.
                 </p>
               </div>
             </div>

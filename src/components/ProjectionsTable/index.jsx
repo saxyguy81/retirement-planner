@@ -240,7 +240,7 @@ function getCellColorClass(rowKey, row) {
   return colors?.text || 'text-slate-300';
 }
 
-export function ProjectionsTable({ projections, options, params, showPV = true }) {
+export function ProjectionsTable({ projections, params, showPV = true }) {
   const [yearMode, setYearMode] = useState('moderate');
   const [customYears, setCustomYears] = useState([]);
   const [collapsedSections, setCollapsedSections] = useState(DEFAULT_COLLAPSED);
@@ -442,6 +442,7 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
   // Selected years based on mode
   const selectedYears = useMemo(() => {
     return yearMode === 'custom' ? customYears : getYearsForMode(yearMode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yearMode, customYears, allYears]);
 
   // Handle year selection change

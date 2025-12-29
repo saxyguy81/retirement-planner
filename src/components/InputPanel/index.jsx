@@ -37,10 +37,9 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
-import { getFederalMarginalRate, getStateMarginalRate } from '../../lib/calculations';
-import { fmt$, fmtPct } from '../../lib/formatters';
-
 import { SmartYearInput } from './SmartYearInput';
+import { getFederalMarginalRate, getStateMarginalRate } from '../../lib/calculations';
+import { fmt$ } from '../../lib/formatters';
 
 // Common US states for heir dropdown
 const US_STATES = [
@@ -207,7 +206,7 @@ export function InputPanel({
   params,
   settings,
   updateParam,
-  updateParams,
+  _updateParams,
   updateRothConversion,
   updateExpenseOverride,
   updateATHarvest,
@@ -947,8 +946,8 @@ export function InputPanel({
 
             {/* Taxable RoR note */}
             <div className="text-slate-500 text-[10px] mt-2 p-2 bg-slate-800/50 rounded">
-              <strong>Taxable RoR:</strong> Each heir's expected return after inheritance, used to
-              normalize values for fair comparison.
+              <strong>Taxable RoR:</strong> Each heir&apos;s expected return after inheritance, used
+              to normalize values for fair comparison.
             </div>
           </div>
         </InputSection>

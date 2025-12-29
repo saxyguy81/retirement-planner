@@ -41,10 +41,9 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
+import { ScenarioNameModal } from './ScenarioNameModal';
 import { generateProjections, calculateSummary } from '../../lib';
 import { fmt$, fmtPct } from '../../lib/formatters';
-
-import { ScenarioNameModal } from './ScenarioNameModal';
 
 // LocalStorage key for saved scenarios
 const STORAGE_KEY = 'retirement-planner-scenarios';
@@ -480,10 +479,10 @@ export function ScenarioComparison({ params, projections, summary, showPV = true
     if (scenarioResults.length === 0)
       return projections.map(p => ({ year: p.year, Base: p[metricKey] / 1e6 }));
 
-    return projections.map((p, idx) => {
+    return projections.map((p, pIdx) => {
       const row = { year: p.year, Base: p[metricKey] / 1e6 };
-      scenarioResults.forEach((s, i) => {
-        row[s.name] = s.projections[idx]?.[metricKey] / 1e6 || 0;
+      scenarioResults.forEach(s => {
+        row[s.name] = s.projections[pIdx]?.[metricKey] / 1e6 || 0;
       });
       return row;
     });
@@ -660,9 +659,9 @@ export function ScenarioComparison({ params, projections, summary, showPV = true
 
   // Load a saved scenario set
   const loadScenarioSet = set => {
-    const loadedScenarios = set.scenarios.map((s, idx) => ({
+    const loadedScenarios = set.scenarios.map((s, sIdx) => ({
       ...s,
-      id: Date.now() + idx,
+      id: Date.now() + sIdx,
     }));
     setScenarios(loadedScenarios);
     setShowLoadDialog(false);
@@ -708,9 +707,9 @@ export function ScenarioComparison({ params, projections, summary, showPV = true
         try {
           const data = JSON.parse(event.target.result);
           if (data.scenarios && Array.isArray(data.scenarios)) {
-            const imported = data.scenarios.map((s, idx) => ({
+            const imported = data.scenarios.map((s, sIdx) => ({
               ...s,
-              id: Date.now() + idx,
+              id: Date.now() + sIdx,
             }));
             setScenarios([...scenarios, ...imported]);
           }
@@ -737,9 +736,9 @@ export function ScenarioComparison({ params, projections, summary, showPV = true
         }}
       >
         <p style={{ color: '#94a3b8', marginBottom: '4px' }}>Year {label}</p>
-        {payload.map((entry, idx) => (
+        {payload.map((entry, entryIdx) => (
           <div
-            key={idx}
+            key={entryIdx}
             style={{ display: 'flex', alignItems: 'center', gap: '6px', color: entry.color }}
           >
             <span
@@ -802,7 +801,7 @@ export function ScenarioComparison({ params, projections, summary, showPV = true
                 onChange={e => setSelectedScenarioId(Number(e.target.value))}
                 className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs"
               >
-                {scenarioResults.map((s, idx) => (
+                {scenarioResults.map((s, _idx) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
@@ -871,9 +870,9 @@ export function ScenarioComparison({ params, projections, summary, showPV = true
                   </button>
                 </div>
                 <div className="max-h-64 overflow-y-auto">
-                  {SCENARIO_PRESETS.map((preset, i) => (
+                  {SCENARIO_PRESETS.map((preset, presetIdx) => (
                     <button
-                      key={i}
+                      key={presetIdx}
                       onClick={() => addScenario(preset)}
                       className="w-full text-left px-2 py-1.5 hover:bg-slate-700 border-b border-slate-700/50"
                     >
@@ -1039,7 +1038,7 @@ export function ScenarioComparison({ params, projections, summary, showPV = true
                   </div>
 
                   {/* Scenario Cards */}
-                  {scenarioResults.map((scenario, idx) => {
+                  {scenarioResults.map((scenario, scenarioIdx) => {
                     const lastProj = scenario.projections[scenario.projections.length - 1];
                     const baseLastProj = projections[projections.length - 1];
                     const scenarioPortfolio = showPV
@@ -1063,7 +1062,8 @@ export function ScenarioComparison({ params, projections, summary, showPV = true
                             <div
                               className="w-3 h-3 rounded-full shrink-0"
                               style={{
-                                backgroundColor: SCENARIO_COLORS[idx % SCENARIO_COLORS.length],
+                                backgroundColor:
+                                  SCENARIO_COLORS[scenarioIdx % SCENARIO_COLORS.length],
                               }}
                             ></div>
                             {isEditing ? (
@@ -1204,12 +1204,12 @@ export function ScenarioComparison({ params, projections, summary, showPV = true
                         dot={false}
                         name="Base Case"
                       />
-                      {scenarioResults.map((s, idx) => (
+                      {scenarioResults.map((s, sIdx) => (
                         <Line
                           key={s.id}
                           type="monotone"
                           dataKey={s.name}
-                          stroke={SCENARIO_COLORS[idx % SCENARIO_COLORS.length]}
+                          stroke={SCENARIO_COLORS[sIdx % SCENARIO_COLORS.length]}
                           strokeWidth={2.5}
                           dot={false}
                         />
@@ -1231,11 +1231,11 @@ export function ScenarioComparison({ params, projections, summary, showPV = true
                           <th className="text-right py-2 px-3 text-emerald-400 font-normal">
                             Base
                           </th>
-                          {scenarioResults.map((s, idx) => (
+                          {scenarioResults.map((s, sIdx) => (
                             <th
                               key={s.id}
                               className="text-right py-2 px-3 font-normal"
-                              style={{ color: SCENARIO_COLORS[idx % SCENARIO_COLORS.length] }}
+                              style={{ color: SCENARIO_COLORS[sIdx % SCENARIO_COLORS.length] }}
                             >
                               {s.name}
                             </th>
@@ -1488,7 +1488,7 @@ export function ScenarioComparison({ params, projections, summary, showPV = true
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart
                       data={projections
-                        .filter((_, i) => i % 3 === 0 || i === projections.length - 1)
+                        .filter((_, pIdx) => pIdx % 3 === 0 || pIdx === projections.length - 1)
                         .map(p => {
                           const baseVal = showPV ? p.pvTotalEOY : p.totalEOY;
                           const scenarioRow = selectedScenario.projections.find(
