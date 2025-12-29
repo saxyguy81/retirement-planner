@@ -12,7 +12,7 @@
  */
 
 import { Info, Users, ArrowRight, TrendingUp } from 'lucide-react';
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   LineChart,
   Line,

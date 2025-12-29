@@ -20,7 +20,7 @@ import {
   AlertCircle,
   RefreshCw,
 } from 'lucide-react';
-import React, { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   LineChart,
   Line,
@@ -419,8 +419,8 @@ export function Optimization({ params, projections, summary, updateParams }) {
                       <div>
                         <span className="font-medium">Strategy capped by IRA balance: </span>
                         Requested {fmt$(results.best.totalRequested)}, actual{' '}
-                        {fmt$(results.best.totalActual)} (
-                        {fmtPct(results.best.feasibilityPercent)} feasible)
+                        {fmt$(results.best.totalActual)} ({fmtPct(results.best.feasibilityPercent)}{' '}
+                        feasible)
                         {results.best.firstCappedYear &&
                           ` - IRA depleted starting ${results.best.firstCappedYear}`}
                       </div>

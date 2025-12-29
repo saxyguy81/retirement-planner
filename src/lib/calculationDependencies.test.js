@@ -4,7 +4,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { CELL_DEPENDENCIES, getReverseDependencies, DEPENDENCY_SIGNS } from './calculationDependencies';
+
+import {
+  CELL_DEPENDENCIES,
+  getReverseDependencies,
+  DEPENDENCY_SIGNS,
+} from './calculationDependencies';
 
 // Mock projection data for testing
 const createMockProjections = () => [

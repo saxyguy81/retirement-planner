@@ -23,8 +23,6 @@ import {
   Shield,
   Users,
   Wallet,
-  Grid,
-  Rows,
   Table2,
   GitCompare,
   ArrowLeftRight,
@@ -32,7 +30,7 @@ import {
   CreditCard,
   GripVertical,
 } from 'lucide-react';
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   LineChart,
   Line,
@@ -181,7 +179,7 @@ const DEFAULT_WIDGETS = [
   { id: 3, type: 'chart-taxes', x: 0, y: 1, w: 2, h: 2 },
 ];
 
-export function Dashboard({ projections, params, scenarios = [], summary = {}, showPV = true }) {
+export function Dashboard({ projections, params, scenarios = [], showPV = true }) {
   const [widgets, setWidgets] = useState(DEFAULT_WIDGETS);
   const [showAddWidget, setShowAddWidget] = useState(false);
   const [selectedYear, setSelectedYear] = useState(null);
@@ -314,13 +312,14 @@ export function Dashboard({ projections, params, scenarios = [], summary = {}, s
       .filter(b => b.bracketSize > 0 || b.filled > 0);
   }, [projections, selectedYear]);
 
-  // Roth analysis data
+  // Roth analysis data (with PV applied)
   const rothAnalysisData = useMemo(
     () =>
       projections.map(p => {
         const yearsFromBase = p.yearsFromStart || 0;
         const brackets = inflateBrackets(FEDERAL_BRACKETS_MFJ_2024, 0.03, yearsFromBase);
         const taxableIncome = p.taxableOrdinary || 0;
+        const pv = val => applyPV(val, yearsFromBase, discountRate, showPV);
 
         const bracket24 = brackets.find(b => b.rate === 0.24);
         const bracket32 = brackets.find(b => b.rate === 0.32);
@@ -330,13 +329,13 @@ export function Dashboard({ projections, params, scenarios = [], summary = {}, s
 
         return {
           year: p.year,
-          taxableIncome: taxableIncome / 1e3,
-          rothConversion: (p.rothConversion || 0) / 1e3,
-          spaceTo24: spaceTo24 / 1e3,
-          spaceTo32: spaceTo32 / 1e3,
+          taxableIncome: pv(taxableIncome) / 1e3,
+          rothConversion: pv(p.rothConversion || 0) / 1e3,
+          spaceTo24: pv(spaceTo24) / 1e3,
+          spaceTo32: pv(spaceTo32) / 1e3,
         };
       }),
-    [projections]
+    [projections, showPV, discountRate]
   );
 
   // Add a new widget
@@ -547,12 +546,18 @@ export function Dashboard({ projections, params, scenarios = [], summary = {}, s
                 {displayYears.map(idx => {
                   const p = projections[idx];
                   if (!p) return null;
+                  const yfs = p.yearsFromStart || 0;
+                  const pv = val => applyPV(val, yfs, discountRate, showPV);
                   return (
                     <tr key={p.year} className="border-b border-slate-800 hover:bg-slate-800/50">
                       <td className="py-1 px-2 text-slate-300">{p.year}</td>
-                      <td className="py-1 px-2 text-right text-emerald-400">{fmt$(p.totalEOY)}</td>
-                      <td className="py-1 px-2 text-right text-teal-400">{fmt$(p.heirValue)}</td>
-                      <td className="py-1 px-2 text-right text-rose-400">{fmt$(p.totalTax)}</td>
+                      <td className="py-1 px-2 text-right text-emerald-400">
+                        {fmt$(pv(p.totalEOY))}
+                      </td>
+                      <td className="py-1 px-2 text-right text-teal-400">
+                        {fmt$(pv(p.heirValue))}
+                      </td>
+                      <td className="py-1 px-2 text-right text-rose-400">{fmt$(pv(p.totalTax))}</td>
                       <td className="py-1 px-2 text-right text-blue-400">
                         {fmtPct(p.rothPercent)}
                       </td>
@@ -594,24 +599,25 @@ export function Dashboard({ projections, params, scenarios = [], summary = {}, s
         );
 
       case 'roth-analysis': {
-        const currentYear = projections[0];
-        const spaceTo24 = rothAnalysisData[0]?.spaceTo24 || 0;
+        const rothData = rothAnalysisData[0] || {};
         return (
           <div className="grid grid-cols-3 gap-2 h-full">
             <div className="bg-slate-800 rounded p-2 flex flex-col justify-center">
               <div className="text-slate-400 text-xs">Taxable Income</div>
               <div className="text-amber-400 font-medium text-sm">
-                {fmt$(currentYear?.taxableOrdinary)}
+                ${(rothData.taxableIncome || 0).toFixed(0)}K
               </div>
             </div>
             <div className="bg-slate-800 rounded p-2 flex flex-col justify-center">
               <div className="text-slate-400 text-xs">Space to 24%</div>
-              <div className="text-emerald-400 font-medium text-sm">${spaceTo24.toFixed(0)}K</div>
+              <div className="text-emerald-400 font-medium text-sm">
+                ${(rothData.spaceTo24 || 0).toFixed(0)}K
+              </div>
             </div>
             <div className="bg-slate-800 rounded p-2 flex flex-col justify-center">
               <div className="text-slate-400 text-xs">Conversion</div>
               <div className="text-blue-400 font-medium text-sm">
-                {fmt$(currentYear?.rothConversion)}
+                ${(rothData.rothConversion || 0).toFixed(0)}K
               </div>
             </div>
           </div>

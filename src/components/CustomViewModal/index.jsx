@@ -8,7 +8,7 @@
  */
 
 import { X, Download, Copy, Check, ArrowUp, ArrowDown, Filter } from 'lucide-react';
-import React, { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   LineChart,
   Line,
@@ -23,6 +23,7 @@ import {
 } from 'recharts';
 
 import { fmt$, fmtPct } from '../../lib/formatters';
+import { YearSelector } from '../YearSelector';
 
 // Accessible chart colors (Okabe-Ito palette)
 const CHART_COLORS = [
@@ -54,6 +55,51 @@ function formatValue(value, format) {
 export function CustomViewModal({ viewType, selectedRows, projections, sections, onClose }) {
   const [chartType, setChartType] = useState('line'); // 'line' | 'area' | 'stacked'
   const [copied, setCopied] = useState(false);
+
+  // Year selector state
+  const [yearMode, setYearMode] = useState('all');
+  const [customYears, setCustomYears] = useState([]);
+
+  // All available years from projections
+  const allYears = useMemo(() => projections.map(p => p.year), [projections]);
+
+  // Generate years based on mode
+  const getYearsForMode = useCallback(
+    mode => {
+      if (!allYears || allYears.length === 0) return [];
+      if (mode === 'all') return allYears;
+      if (mode === 'brief') {
+        return [allYears[0], allYears[1], allYears[allYears.length - 1]].filter(Boolean);
+      }
+      if (mode === 'moderate') {
+        const result = [allYears[0], allYears[1], allYears[2]];
+        const idx10 = allYears.findIndex(y => y >= allYears[0] + 10);
+        const idx20 = allYears.findIndex(y => y >= allYears[0] + 20);
+        const idx30 = allYears.findIndex(y => y >= allYears[0] + 30);
+        if (idx10 >= 0) result.push(allYears[idx10]);
+        if (idx20 >= 0) result.push(allYears[idx20]);
+        if (idx30 >= 0) result.push(allYears[idx30]);
+        if (!result.includes(allYears[allYears.length - 1])) {
+          result.push(allYears[allYears.length - 1]);
+        }
+        return [...new Set(result)].filter(Boolean);
+      }
+      if (mode === 'detailed') {
+        return allYears.filter((_, i) => i < 5 || i % 5 === 0 || i === allYears.length - 1);
+      }
+      return customYears.length > 0 ? customYears : allYears;
+    },
+    [allYears, customYears]
+  );
+
+  // Selected years based on mode
+  const selectedYears = useMemo(() => getYearsForMode(yearMode), [yearMode, getYearsForMode]);
+
+  // Filter projections by selected years
+  const yearFilteredProjections = useMemo(
+    () => projections.filter(p => selectedYears.includes(p.year)),
+    [projections, selectedYears]
+  );
 
   // Multi-sort state
   const [sortConfigs, setSortConfigs] = useState([]);
@@ -120,11 +166,11 @@ export function CustomViewModal({ viewType, selectedRows, projections, sections,
     [sortConfigs]
   );
 
-  // Filter data
+  // Filter data (applies value filter on top of year filter)
   const filteredData = useMemo(() => {
-    if (filterMode === 'all' || !filterField) return projections;
+    if (filterMode === 'all' || !filterField) return yearFilteredProjections;
 
-    return projections.filter(p => {
+    return yearFilteredProjections.filter(p => {
       const val = p[filterField];
       if (val == null) return false;
       if (filterMode === 'above') return val >= filterThreshold;
@@ -132,7 +178,7 @@ export function CustomViewModal({ viewType, selectedRows, projections, sections,
       if (filterMode === 'between') return val >= filterThreshold && val <= filterThresholdMax;
       return true;
     });
-  }, [projections, filterMode, filterField, filterThreshold, filterThresholdMax]);
+  }, [yearFilteredProjections, filterMode, filterField, filterThreshold, filterThresholdMax]);
 
   // Sort filtered data
   const sortedData = useMemo(() => {
@@ -319,7 +365,7 @@ export function CustomViewModal({ viewType, selectedRows, projections, sections,
 
             {filterMode !== 'all' && (
               <span className="text-xs text-slate-500">
-                ({filteredData.length} of {projections.length} rows)
+                ({filteredData.length} of {yearFilteredProjections.length} rows)
               </span>
             )}
           </>
@@ -393,7 +439,9 @@ export function CustomViewModal({ viewType, selectedRows, projections, sections,
                         ) : (
                           <ArrowDown className="w-3 h-3" />
                         )}
-                        {sortInfo.priority && <sup className="text-[10px]">{sortInfo.priority}</sup>}
+                        {sortInfo.priority && (
+                          <sup className="text-[10px]">{sortInfo.priority}</sup>
+                        )}
                       </span>
                     )}
                   </span>
@@ -548,60 +596,73 @@ export function CustomViewModal({ viewType, selectedRows, projections, sections,
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-4 py-3 border-b border-slate-700 flex justify-between items-center shrink-0">
-          <div>
-            <h3 className="text-lg font-medium text-slate-200">
-              {viewType === 'table' && 'Custom Table'}
-              {viewType === 'chart' && 'Custom Chart'}
-              {viewType === 'dashboard' && 'Custom Dashboard'}
-            </h3>
-            <div className="text-slate-500 text-xs">
-              {selectedRowsArray.length} metric{selectedRowsArray.length > 1 ? 's' : ''} selected
+        <div className="px-4 py-3 border-b border-slate-700 shrink-0">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">
+                {viewType === 'table' && 'Custom Table'}
+                {viewType === 'chart' && 'Custom Chart'}
+                {viewType === 'dashboard' && 'Custom Dashboard'}
+              </h3>
+              <div className="text-slate-500 text-xs">
+                {selectedRowsArray.length} metric{selectedRowsArray.length > 1 ? 's' : ''} selected
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Chart type selector (only for chart view) */}
+              {viewType === 'chart' && (
+                <div className="flex gap-1 mr-2">
+                  {['line', 'area', 'stacked'].map(type => (
+                    <button
+                      key={type}
+                      onClick={() => setChartType(type)}
+                      className={`px-2 py-1 text-xs rounded ${
+                        chartType === type
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                    >
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={copyToClipboard}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded"
+                title="Copy to clipboard"
+              >
+                {copied ? (
+                  <Check className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </button>
+              <button
+                onClick={exportCSV}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded"
+                title="Export as CSV"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+              <button
+                onClick={onClose}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Chart type selector (only for chart view) */}
-            {viewType === 'chart' && (
-              <div className="flex gap-1 mr-2">
-                {['line', 'area', 'stacked'].map(type => (
-                  <button
-                    key={type}
-                    onClick={() => setChartType(type)}
-                    className={`px-2 py-1 text-xs rounded ${
-                      chartType === type
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                    }`}
-                  >
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
-                  </button>
-                ))}
-              </div>
-            )}
-            <button
-              onClick={copyToClipboard}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded"
-              title="Copy to clipboard"
-            >
-              {copied ? (
-                <Check className="w-4 h-4 text-emerald-400" />
-              ) : (
-                <Copy className="w-4 h-4" />
-              )}
-            </button>
-            <button
-              onClick={exportCSV}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded"
-              title="Export as CSV"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded"
-            >
-              <X className="w-5 h-5" />
-            </button>
+
+          {/* Year Selector */}
+          <div className="mt-3 pt-3 border-t border-slate-800">
+            <YearSelector
+              years={allYears}
+              selectedYears={selectedYears}
+              onChange={setCustomYears}
+              mode={yearMode}
+              onModeChange={setYearMode}
+            />
           </div>
         </div>
 

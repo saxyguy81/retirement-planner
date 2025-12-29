@@ -414,7 +414,7 @@ export function getReverseDependencies(field, year, allData) {
         if (deps.some(d => d.field === field && d.year === year)) {
           usedBy.push({ year, field: parentField });
         }
-      } catch (e) {
+      } catch (_e) {
         // Skip if dependency calculation fails
       }
     }
@@ -427,7 +427,7 @@ export function getReverseDependencies(field, year, allData) {
         if (deps.some(d => d.field === field && d.year === year)) {
           usedBy.push({ year: year + 1, field: parentField });
         }
-      } catch (e) {
+      } catch (_e) {
         // Skip if dependency calculation fails
       }
     }
@@ -440,7 +440,7 @@ export function getReverseDependencies(field, year, allData) {
         if (deps.some(d => d.field === field && d.year === year)) {
           usedBy.push({ year: year + 2, field: parentField });
         }
-      } catch (e) {
+      } catch (_e) {
         // Skip if dependency calculation fails
       }
     }

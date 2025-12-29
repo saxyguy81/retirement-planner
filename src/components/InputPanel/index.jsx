@@ -35,7 +35,7 @@ import {
   Calculator,
   Trash2,
 } from 'lucide-react';
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 import { getFederalMarginalRate, getStateMarginalRate } from '../../lib/calculations';
 import { fmt$, fmtPct } from '../../lib/formatters';
@@ -287,7 +287,9 @@ export function InputPanel({
                 <input
                   type="number"
                   value={settings?.primaryBirthYear || ''}
-                  onChange={e => updateSettings?.({ primaryBirthYear: parseInt(e.target.value) || 1960 })}
+                  onChange={e =>
+                    updateSettings?.({ primaryBirthYear: parseInt(e.target.value) || 1960 })
+                  }
                   className="w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
                   placeholder="e.g., 1960"
                 />
@@ -309,7 +311,9 @@ export function InputPanel({
                 <input
                   type="number"
                   value={settings?.spouseBirthYear || ''}
-                  onChange={e => updateSettings?.({ spouseBirthYear: parseInt(e.target.value) || 1962 })}
+                  onChange={e =>
+                    updateSettings?.({ spouseBirthYear: parseInt(e.target.value) || 1962 })
+                  }
                   className="w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
                   placeholder="e.g., 1962"
                 />

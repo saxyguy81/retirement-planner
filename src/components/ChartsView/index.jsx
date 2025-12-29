@@ -18,7 +18,7 @@ import {
   ArrowLeftRight,
   Wallet,
 } from 'lucide-react';
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   LineChart as RLineChart,
   Line,

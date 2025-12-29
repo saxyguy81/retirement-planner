@@ -10,7 +10,7 @@
  */
 
 import { GripVertical, Maximize2, Minimize2, X } from 'lucide-react';
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 const MIN_PANEL_WIDTH = 200; // Minimum width in pixels
 

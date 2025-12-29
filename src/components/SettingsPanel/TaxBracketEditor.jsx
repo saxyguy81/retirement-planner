@@ -6,7 +6,7 @@
  */
 
 import { Plus, Trash2, RotateCcw, AlertCircle } from 'lucide-react';
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 
 import {
   FEDERAL_BRACKETS_MFJ_2024,

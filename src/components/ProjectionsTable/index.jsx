@@ -14,7 +14,6 @@
  */
 
 import {
-  RefreshCw,
   ChevronDown,
   ChevronRight,
   Info,
@@ -22,10 +21,12 @@ import {
   LineChart,
   LayoutDashboard,
   X,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
-import React, { useState, useMemo, useCallback } from 'react';
-import { ArrowUp, ArrowDown } from 'lucide-react';
+import { useState, useMemo, useCallback, Fragment } from 'react';
 
+import { useInspectorNavigation } from '../../hooks/useInspectorNavigation';
 import { CELL_DEPENDENCIES, getDependencySign } from '../../lib/calculationDependencies';
 import { VALUE_COLORS, ROW_SEMANTICS } from '../../lib/colors';
 import { fmt$, fmtPct } from '../../lib/formatters';
@@ -243,7 +244,9 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
   const [yearMode, setYearMode] = useState('moderate');
   const [customYears, setCustomYears] = useState([]);
   const [collapsedSections, setCollapsedSections] = useState(DEFAULT_COLLAPSED);
-  const [inspecting, setInspecting] = useState(null); // { field, year, data }
+
+  // Navigation hook for CalculationInspector
+  const navigation = useInspectorNavigation();
 
   // Cell highlighting state for dependency visualization
   const [highlightedCells, setHighlightedCells] = useState([]); // Array of { year, field, sign }
@@ -512,13 +515,6 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
             </button>
           </div>
         </div>
-
-        {options?.iterativeTax && sortedDisplayData[0]?.iterations > 1 && (
-          <span className="text-emerald-400 flex items-center gap-1 text-xs">
-            <RefreshCw className="w-3 h-3" />
-            Iterative ({sortedDisplayData[0].iterations} iter)
-          </span>
-        )}
       </div>
 
       {/* Selection Action Toolbar - shown when rows are selected */}
@@ -568,7 +564,7 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
         <table className="w-full border-collapse">
           <thead className="sticky top-0 bg-slate-950 z-10">
             <tr className="text-slate-400">
-              <th className="text-left py-1.5 px-2 sticky left-0 bg-slate-950 min-w-40">
+              <th className="text-left py-1.5 px-2 sticky left-0 bg-slate-950 min-w-40 z-20 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-slate-700 after:shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
                 <div className="flex items-center gap-2">
                   Metric
                   {sortConfigs.length > 0 && (
@@ -619,12 +615,12 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
             {sections.map((section, sectionIdx) => {
               const isCollapsed = collapsedSections[section.title];
               return (
-                <React.Fragment key={sectionIdx}>
+                <Fragment key={sectionIdx}>
                   {/* Section header */}
                   <tr className="border-t border-slate-800">
                     <td
                       colSpan={sortedDisplayData.length + 1}
-                      className="py-1.5 px-2 text-slate-500 font-medium bg-slate-900/30 select-none"
+                      className="py-1.5 px-2 text-slate-500 font-medium bg-slate-900/30 select-none z-20"
                     >
                       <span className="flex items-center gap-2">
                         {/* Section select-all checkbox */}
@@ -671,7 +667,7 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
                           className={`hover:bg-slate-900/50 ${row.highlight ? 'bg-slate-800/20' : ''} ${selectedRows.has(row.key) ? 'bg-blue-900/20' : ''}`}
                         >
                           <td
-                            className={`py-1 px-2 sticky left-0 bg-slate-950 ${row.dim ? 'text-slate-500' : 'text-slate-300'}`}
+                            className={`py-1 px-2 sticky left-0 bg-slate-950 z-20 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-slate-700 ${row.dim ? 'text-slate-500' : 'text-slate-300'}`}
                           >
                             <div className="flex items-center gap-2">
                               {/* Row selection checkbox */}
@@ -718,8 +714,7 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
                               <td
                                 key={d.year}
                                 onClick={() =>
-                                  isInspectable &&
-                                  setInspecting({ field: row.key, year: d.year, data: d })
+                                  isInspectable && navigation.navigateTo(row.key, d.year, d)
                                 }
                                 onMouseEnter={() => handleCellHover(row.key, d.year, d)}
                                 onMouseLeave={handleCellLeave}
@@ -732,20 +727,25 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
                         </tr>
                       );
                     })}
-                </React.Fragment>
+                </Fragment>
               );
             })}
           </tbody>
         </table>
       </div>
 
-      {/* Calculation Inspector Modal */}
-      {inspecting && (
+      {/* Calculation Inspector Modal with Navigation */}
+      {navigation.current && (
         <CalculationInspector
-          field={inspecting.field}
-          data={inspecting.data}
+          current={navigation.current}
           params={params}
-          onClose={() => setInspecting(null)}
+          projections={projections}
+          onNavigate={navigation.navigateTo}
+          onBack={navigation.goBack}
+          onForward={navigation.goForward}
+          onClose={navigation.close}
+          canGoBack={navigation.canGoBack}
+          canGoForward={navigation.canGoForward}
         />
       )}
 

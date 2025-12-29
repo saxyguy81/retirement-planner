@@ -9,7 +9,7 @@
  */
 
 import { Calendar, Type } from 'lucide-react';
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 // Preset configurations
 const PRESETS = {

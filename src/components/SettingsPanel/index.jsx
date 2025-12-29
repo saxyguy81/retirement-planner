@@ -17,7 +17,7 @@ import {
   RotateCcw,
   Heart,
 } from 'lucide-react';
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 import { IRMAAEditor } from './IRMAAEditor';
 import { TaxBracketEditor } from './TaxBracketEditor';
@@ -192,28 +192,32 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
               <div className="text-slate-500 text-xs mb-3">
                 How currency values are displayed in tables and charts
               </div>
-              <div className="flex gap-1">
+              <div className="flex flex-wrap gap-1">
                 {[
-                  { value: 'abbreviated', label: '$100K' },
-                  { value: 'dollars', label: '$100,000' },
-                  { value: 'cents', label: '$100,000.00' },
+                  { value: 'sig2', label: '$1.2M', desc: '2 significant figures' },
+                  { value: 'sig3', label: '$1.23M', desc: '3 significant figures' },
+                  { value: 'sig4', label: '$1.234M', desc: '4 significant figures' },
+                  { value: 'dollars', label: '$1,234,567', desc: 'Full dollars' },
+                  { value: 'cents', label: '$1,234,567.89', desc: 'Dollars and cents' },
                 ].map(option => (
                   <button
                     key={option.value}
                     onClick={() => updateSettings({ displayPrecision: option.value })}
-                    className={`flex-1 px-2 py-1.5 rounded text-xs ${
-                      (settings.displayPrecision || 'abbreviated') === option.value
+                    className={`px-2 py-1.5 rounded text-xs ${
+                      (settings.displayPrecision || 'sig3') === option.value
                         ? 'bg-blue-600 text-white'
                         : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
                     }`}
+                    title={option.desc}
                   >
                     {option.label}
                   </button>
                 ))}
               </div>
               <div className="text-slate-500 text-xs mt-2">
-                {(settings.displayPrecision || 'abbreviated') === 'abbreviated' &&
-                  'Abbreviated format (K, M, B)'}
+                {(settings.displayPrecision || 'sig3') === 'sig2' && '2 significant figures'}
+                {(settings.displayPrecision || 'sig3') === 'sig3' && '3 significant figures'}
+                {settings.displayPrecision === 'sig4' && '4 significant figures'}
                 {settings.displayPrecision === 'dollars' && 'Full dollar amounts with commas'}
                 {settings.displayPrecision === 'cents' && 'Full precision with cents'}
               </div>

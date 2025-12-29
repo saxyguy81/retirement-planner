@@ -32,7 +32,7 @@ const DEFAULT_SETTINGS = {
 
   // Display Preferences
   defaultPV: true,
-  displayPrecision: 'abbreviated', // 'abbreviated' | 'dollars' | 'cents'
+  displayPrecision: 'sig3', // 'sig2' | 'sig3' | 'sig4' | 'dollars' | 'cents'
 
   // Custom Tax Brackets (null means use defaults)
   customBrackets: null,

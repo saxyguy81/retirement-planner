@@ -1,17 +1,19 @@
 /**
- * CalculationInspector - Shows calculation breakdown
+ * CalculationInspector - Shows calculation breakdown with navigation
  *
  * Unified single-page layout showing all sections at once:
  * 1. Quick Answer - Large, centered back-of-envelope result
  * 2. What is this? - Concept explanation
- * 3. Formula - Color-coded with variable colors
+ * 3. Formula - Color-coded with clickable variable names
  * 4. This Year's Values - Formula -> values -> result
  * 5. Rule of Thumb - Quick mental math
+ * 6. Used By - Shows which calculations depend on this value
  */
 
-import { X } from 'lucide-react';
-import React from 'react';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useMemo } from 'react';
 
+import { CELL_DEPENDENCIES, getReverseDependencies } from '../../lib/calculationDependencies';
 import { FORMULA_COLORS } from '../../lib/colors';
 import { fmt$, fmtPct } from '../../lib/formatters';
 
@@ -21,7 +23,152 @@ const fK = v => '$' + (v / 1000).toFixed(0) + 'K';
 const fM = v => '$' + (v / 1000000).toFixed(2) + 'M';
 
 /**
- * ColorCodedFormula - Renders formula text with color-coded variable names
+ * ClickableFormula - Renders formula text with clickable, color-coded variable names
+ * Variables are highlighted and clicking them navigates to the source calculation
+ */
+function ClickableFormula({ formula, data, projections, onNavigate, currentField }) {
+  if (!formula) return null;
+
+  // Build a regex pattern that matches all known variable names
+  // Sort by length descending to match longer names first (e.g., "totalWithdrawal" before "total")
+  const variableNames = Object.keys(FORMULA_COLORS).sort((a, b) => b.length - a.length);
+  const pattern = new RegExp(`\\b(${variableNames.join('|')})\\b`, 'gi');
+
+  // Split the formula by variable names while keeping the matches
+  const parts = [];
+  let lastIndex = 0;
+
+  // Use matchAll to find all matches
+  const matches = [...formula.matchAll(new RegExp(pattern.source, 'gi'))];
+
+  matches.forEach(match => {
+    // Add text before this match
+    if (match.index > lastIndex) {
+      parts.push({
+        type: 'text',
+        content: formula.slice(lastIndex, match.index),
+      });
+    }
+
+    // Find the variable config (case-insensitive lookup)
+    const matchedText = match[0];
+    const varKey = Object.keys(FORMULA_COLORS).find(
+      k => k.toLowerCase() === matchedText.toLowerCase()
+    );
+    const varConfig = varKey ? FORMULA_COLORS[varKey] : null;
+    const value = varKey && data ? data[varKey] : undefined;
+
+    // Find the dependency for this variable
+    let dependency = null;
+    if (varKey && currentField && CELL_DEPENDENCIES[currentField]) {
+      const deps = CELL_DEPENDENCIES[currentField](data.year, data, projections);
+      dependency = deps.find(d => d.field === varKey);
+    }
+
+    parts.push({
+      type: 'variable',
+      content: matchedText,
+      config: varConfig,
+      value,
+      varKey,
+      dependency,
+    });
+
+    lastIndex = match.index + match[0].length;
+  });
+
+  // Add remaining text after last match
+  if (lastIndex < formula.length) {
+    parts.push({
+      type: 'text',
+      content: formula.slice(lastIndex),
+    });
+  }
+
+  // If no matches were found, just return the formula as-is
+  if (parts.length === 0) {
+    return <span className="whitespace-pre-wrap">{formula}</span>;
+  }
+
+  return (
+    <span className="whitespace-pre-wrap">
+      {parts.map((part, idx) => {
+        if (part.type === 'text') {
+          return <span key={idx}>{part.content}</span>;
+        }
+
+        // Variable with color
+        const { config, value, content, varKey, dependency } = part;
+        if (!config) {
+          return <span key={idx}>{content}</span>;
+        }
+
+        // Format the value for display
+        let formattedValue = '';
+        if (value !== undefined && value !== null) {
+          if (typeof value === 'number') {
+            if (config.key && (config.key.includes('Return') || config.key.includes('Percent'))) {
+              formattedValue = fmtPct(value);
+            } else if (Math.abs(value) >= 1000000) {
+              formattedValue = fM(value);
+            } else if (Math.abs(value) >= 1000) {
+              formattedValue = fK(value);
+            } else {
+              formattedValue = f$(value);
+            }
+          } else {
+            formattedValue = String(value);
+          }
+        }
+
+        // Check if this variable is clickable (has a dependency or is a known calc)
+        const isClickable = dependency || CALCULATIONS[varKey];
+        const targetYear = dependency?.year || data.year;
+        const targetData = projections?.find(p => p.year === targetYear);
+
+        const handleClick = () => {
+          if (isClickable && onNavigate && targetData) {
+            onNavigate(varKey, targetYear, targetData);
+          }
+        };
+
+        if (isClickable) {
+          return (
+            <button
+              key={idx}
+              onClick={handleClick}
+              style={{ color: config.color, borderBottom: `2px solid ${config.color}` }}
+              className="font-medium hover:bg-white/10 rounded px-0.5 cursor-pointer inline-flex items-baseline gap-1"
+              title={`Click to see ${config.label} calculation${dependency?.year !== data.year ? ` (${dependency?.year})` : ''}`}
+            >
+              <span className="text-xs opacity-70">{content}</span>
+              {formattedValue && <span>{formattedValue}</span>}
+            </button>
+          );
+        }
+
+        // Non-clickable variable (just display)
+        return (
+          <span
+            key={idx}
+            style={{
+              color: config.color,
+              borderBottom: `2px solid ${config.color}`,
+            }}
+            title={formattedValue ? `${config.label}: ${formattedValue}` : config.label}
+            className="font-medium"
+          >
+            {content}
+            {formattedValue && <span className="ml-1 opacity-80">{formattedValue}</span>}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+/**
+ * ColorCodedFormula - Legacy component for non-navigable contexts
  * Variables are highlighted with their semantic colors and show values on hover
  */
 function ColorCodedFormula({ formula, data }) {
@@ -35,7 +182,6 @@ function ColorCodedFormula({ formula, data }) {
   // Split the formula by variable names while keeping the matches
   const parts = [];
   let lastIndex = 0;
-  let match;
 
   // Use matchAll to find all matches
   const matches = [...formula.matchAll(new RegExp(pattern.source, 'gi'))];
@@ -1128,9 +1274,10 @@ const CALCULATIONS = {
       const basisConsumed = costBasisBOY - costBasisEOY;
       return {
         formula: `Basis consumed proportionally with withdrawals`,
-        values: atWithdrawal > 0
-          ? `${fK(costBasisBOY)} - ${fK(basisConsumed)} consumed`
-          : `${fK(costBasisBOY)} (no withdrawal)`,
+        values:
+          atWithdrawal > 0
+            ? `${fK(costBasisBOY)} - ${fK(basisConsumed)} consumed`
+            : `${fK(costBasisBOY)} (no withdrawal)`,
         result: `EOY Basis = ${fK(costBasisEOY)}`,
         simple: fK(costBasisEOY),
       };
@@ -1207,9 +1354,7 @@ const CALCULATIONS = {
         formula: `Running sum of annual IRMAA`,
         values: `Through ${year}: ${fK(cumulativeIRMAA)}`,
         result: `Total IRMAA = ${fK(cumulativeIRMAA)}`,
-        simple: irmaaTotal > 0
-          ? `~${fK(irmaaTotal)}/year`
-          : `${fK(cumulativeIRMAA)} total`,
+        simple: irmaaTotal > 0 ? `~${fK(irmaaTotal)}/year` : `${fK(cumulativeIRMAA)} total`,
       };
     },
   },
@@ -1223,9 +1368,14 @@ const CALCULATIONS = {
     backOfEnvelope: "Your income from 2 years ago determines this year's IRMAA",
     compute: (data, params) => {
       const { irmaaMAGI, year, irmaaTotal } = data;
-      const tier = irmaaTotal === 0 ? 'None' :
-                   irmaaMAGI < 258000 ? 'Tier 1' :
-                   irmaaMAGI < 322000 ? 'Tier 2' : 'Tier 3+';
+      const tier =
+        irmaaTotal === 0
+          ? 'None'
+          : irmaaMAGI < 258000
+            ? 'Tier 1'
+            : irmaaMAGI < 322000
+              ? 'Tier 2'
+              : 'Tier 3+';
       return {
         formula: `MAGI from ${year - 2}`,
         values: `${fK(irmaaMAGI)} (${tier})`,
@@ -1281,28 +1431,57 @@ export { CALCULATIONS };
 
 /**
  * CalculationInspector - Unified single-page view showing all calculation info
+ * Supports navigation between calculations with back/forward buttons
  */
-export function CalculationInspector({ field, data, params, onClose }) {
-  const calc = CALCULATIONS[field];
+export function CalculationInspector({
+  // Legacy props (for backwards compatibility)
+  field,
+  data,
+  // New navigation props
+  current, // {field, year, data} from navigation hook
+  params,
+  projections, // All projections for dependency lookup and navigation
+  onNavigate, // (field, year, data) => void
+  onBack,
+  onForward,
+  onClose,
+  canGoBack,
+  canGoForward,
+}) {
+  // Support both old and new API
+  const activeField = current?.field || field;
+  const activeData = current?.data || data;
+
+  const calc = CALCULATIONS[activeField];
+
+  // Compute "Used By" - fields that depend on this value
+  const usedBy = useMemo(() => {
+    if (!projections || !activeField || !activeData) return [];
+    return getReverseDependencies(activeField, activeData.year, projections);
+  }, [activeField, activeData, projections]);
+
+  // Check if we have navigation capabilities
+  const hasNavigation = Boolean(onNavigate && projections);
 
   // Fallback for fields without detailed calculations
   if (!calc) {
+    const handleClose = onClose || (() => {});
     return (
       <div
         className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
-        onClick={onClose}
+        onClick={handleClose}
       >
         <div
           className="bg-slate-900 rounded-lg border border-slate-700 p-4 max-w-md"
           onClick={e => e.stopPropagation()}
         >
           <div className="flex justify-between items-center mb-3">
-            <span className="font-medium text-slate-200">{field}</span>
-            <button onClick={onClose} className="text-slate-400 hover:text-white">
+            <span className="font-medium text-slate-200">{activeField}</span>
+            <button onClick={handleClose} className="text-slate-400 hover:text-white">
               <X className="w-4 h-4" />
             </button>
           </div>
-          <p className="text-slate-400 text-sm">Value: {fmt$(data[field])}</p>
+          <p className="text-slate-400 text-sm">Value: {fmt$(activeData[activeField])}</p>
           <p className="text-slate-500 text-xs mt-2">
             Detailed explanation not yet available for this field.
           </p>
@@ -1311,26 +1490,56 @@ export function CalculationInspector({ field, data, params, onClose }) {
     );
   }
 
-  const computed = calc.compute(data, params);
+  const computed = calc.compute(activeData, params);
+  const handleClose = onClose || (() => {});
 
   return (
     <div
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="bg-slate-900 rounded-lg border border-slate-700 w-[600px] max-h-[80vh] overflow-auto shadow-xl"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="px-4 py-3 border-b border-slate-700 flex justify-between items-center sticky top-0 bg-slate-900">
-          <div>
-            <h3 className="text-lg font-medium text-slate-200">{calc.name}</h3>
-            <div className="text-slate-500 text-xs">
-              Year {data.year} (Age {data.age})
+        {/* Header with Navigation */}
+        <div className="px-4 py-3 border-b border-slate-700 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
+          {hasNavigation ? (
+            <>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onBack}
+                  disabled={!canGoBack}
+                  className={`p-1 rounded ${canGoBack ? 'hover:bg-slate-700 text-slate-300' : 'text-slate-600 cursor-not-allowed'}`}
+                  title="Go back"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={onForward}
+                  disabled={!canGoForward}
+                  className={`p-1 rounded ${canGoForward ? 'hover:bg-slate-700 text-slate-300' : 'text-slate-600 cursor-not-allowed'}`}
+                  title="Go forward"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="text-center flex-1">
+                <h3 className="text-lg font-medium text-slate-200">{calc.name}</h3>
+                <div className="text-slate-500 text-xs">
+                  Year {activeData.year} (Age {activeData.age})
+                </div>
+              </div>
+            </>
+          ) : (
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">{calc.name}</h3>
+              <div className="text-slate-500 text-xs">
+                Year {activeData.year} (Age {activeData.age})
+              </div>
             </div>
-          </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white">
+          )}
+          <button onClick={handleClose} className="text-slate-400 hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -1351,11 +1560,24 @@ export function CalculationInspector({ field, data, params, onClose }) {
             </p>
           </div>
 
-          {/* Formula with Color-Coded Values */}
+          {/* Formula with Color-Coded/Clickable Values */}
           <div>
-            <div className="text-slate-400 text-xs uppercase tracking-wide mb-2">Formula</div>
+            <div className="text-slate-400 text-xs uppercase tracking-wide mb-2">
+              Formula{' '}
+              {hasNavigation && <span className="text-slate-600">(click values to navigate)</span>}
+            </div>
             <div className="bg-slate-950 rounded p-3 font-mono text-sm text-emerald-400">
-              <ColorCodedFormula formula={calc.formula} data={data} />
+              {hasNavigation ? (
+                <ClickableFormula
+                  formula={calc.formula}
+                  data={activeData}
+                  projections={projections}
+                  onNavigate={onNavigate}
+                  currentField={activeField}
+                />
+              ) : (
+                <ColorCodedFormula formula={calc.formula} data={activeData} />
+              )}
             </div>
           </div>
 
@@ -1372,6 +1594,62 @@ export function CalculationInspector({ field, data, params, onClose }) {
               </div>
             </div>
           </div>
+
+          {/* Used By Section */}
+          {hasNavigation && (
+            <div>
+              <div className="text-slate-400 text-xs uppercase tracking-wide mb-2 flex items-center gap-2">
+                Used By
+                {usedBy.length > 0 && <span className="text-slate-500">({usedBy.length})</span>}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {usedBy.length === 0 ? (
+                  <span className="text-slate-500 text-sm italic">
+                    Not used by other calculations
+                  </span>
+                ) : (
+                  usedBy.map((dep, idx) => {
+                    const depCalc = CALCULATIONS[dep.field];
+                    const depData = projections.find(p => p.year === dep.year);
+                    // Get the actual value from the dependent calculation
+                    const depValue = depData ? depData[dep.field] : null;
+                    let formattedDepValue = '';
+                    if (
+                      depValue !== null &&
+                      depValue !== undefined &&
+                      typeof depValue === 'number'
+                    ) {
+                      if (Math.abs(depValue) >= 1e6) {
+                        formattedDepValue = `$${(depValue / 1e6).toFixed(2)}M`;
+                      } else if (Math.abs(depValue) >= 1e3) {
+                        formattedDepValue = `$${(depValue / 1e3).toFixed(0)}K`;
+                      } else {
+                        formattedDepValue = `$${Math.round(depValue).toLocaleString()}`;
+                      }
+                    }
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => depData && onNavigate(dep.field, dep.year, depData)}
+                        className="px-2 py-1 bg-slate-800 rounded text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-1"
+                      >
+                        <span>{depCalc?.name || dep.field}</span>
+                        {formattedDepValue && (
+                          <span className="text-blue-400 font-mono text-xs">
+                            {formattedDepValue}
+                          </span>
+                        )}
+                        {dep.year !== activeData.year && (
+                          <span className="text-slate-500">({dep.year})</span>
+                        )}
+                        <ChevronRight className="w-3 h-3 text-slate-500" />
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Rule of Thumb */}
           {calc.backOfEnvelope && (

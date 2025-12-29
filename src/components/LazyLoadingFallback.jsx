@@ -1,5 +1,3 @@
-import React from 'react';
-
 export function LazyLoadingFallback({ message = 'Loading...' }) {
   return (
     <div className="flex-1 flex items-center justify-center bg-slate-950">

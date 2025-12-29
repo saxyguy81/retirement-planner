@@ -10,7 +10,7 @@
  */
 
 import { X } from 'lucide-react';
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export function ScenarioNameModal({ defaultName, onConfirm, onCancel }) {
   const [name, setName] = useState(defaultName);

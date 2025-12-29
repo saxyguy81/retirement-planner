@@ -14,7 +14,6 @@ import {
   calculateRiskAllocation,
   calculateBlendedReturn,
   calculateHeirValue,
-  calculateMultiHeirValue,
   calculateMultiHeirValueWithStrategy,
 } from './calculations.js';
 import {
@@ -547,9 +546,7 @@ export function calculateSummary(projections) {
     (sum, p) => sum + (p.rothConversionActual || 0),
     0
   );
-  const conversionCappedYears = projections
-    .filter(p => p.rothConversionCapped)
-    .map(p => p.year);
+  const conversionCappedYears = projections.filter(p => p.rothConversionCapped).map(p => p.year);
   const firstConversionCappedYear =
     conversionCappedYears.length > 0 ? conversionCappedYears[0] : null;
 

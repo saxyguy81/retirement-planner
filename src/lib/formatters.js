@@ -6,25 +6,38 @@
 // GLOBAL PRECISION STATE
 // =============================================================================
 
-// Global precision setting: 'abbreviated' | 'dollars' | 'cents'
-let globalPrecision = 'abbreviated';
+// Global precision setting: 'sig2' | 'sig3' | 'sig4' | 'dollars' | 'cents'
+let globalPrecision = 'sig3';
 
 /**
  * Set the global display precision
- * @param {'abbreviated' | 'dollars' | 'cents'} precision
+ * @param {'sig2' | 'sig3' | 'sig4' | 'dollars' | 'cents'} precision
  */
 export function setGlobalPrecision(precision) {
-  if (['abbreviated', 'dollars', 'cents'].includes(precision)) {
+  if (['sig2', 'sig3', 'sig4', 'dollars', 'cents'].includes(precision)) {
     globalPrecision = precision;
   }
 }
 
 /**
  * Get the current global precision
- * @returns {'abbreviated' | 'dollars' | 'cents'}
+ * @returns {'sig2' | 'sig3' | 'sig4' | 'dollars' | 'cents'}
  */
 export function getGlobalPrecision() {
   return globalPrecision;
+}
+
+/**
+ * Round a number to N significant figures
+ * @param {number} value - The value to round
+ * @param {number} sigFigs - Number of significant figures
+ * @returns {number} Rounded value
+ */
+function toSigFigs(value, sigFigs) {
+  if (value === 0) return 0;
+  const magnitude = Math.floor(Math.log10(Math.abs(value)));
+  const scale = Math.pow(10, magnitude - sigFigs + 1);
+  return Math.round(value / scale) * scale;
 }
 
 // =============================================================================
@@ -38,13 +51,7 @@ export function getGlobalPrecision() {
  * @returns {string} Formatted string
  */
 export function formatCurrency(value, options = {}) {
-  const {
-    abbreviate = true,
-    decimals = 0,
-    showSign = false,
-    prefix = '$',
-    useGlobalPrecision = true,
-  } = options;
+  const { abbreviate = true, showSign = false, prefix = '$', useGlobalPrecision = true } = options;
 
   if (value == null || isNaN(value)) return `${prefix}0`;
 
@@ -53,25 +60,36 @@ export function formatCurrency(value, options = {}) {
 
   // Apply global precision if enabled
   if (useGlobalPrecision) {
+    // Full precision modes
     if (globalPrecision === 'cents') {
       return `${sign}${prefix}${absValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
     if (globalPrecision === 'dollars') {
       return `${sign}${prefix}${Math.round(absValue).toLocaleString()}`;
     }
-    // 'abbreviated' falls through to default behavior
-  }
 
-  if (abbreviate) {
-    if (absValue >= 1e9) {
-      return `${sign}${prefix}${(absValue / 1e9).toFixed(1)}B`;
-    } else if (absValue >= 1e6) {
-      return `${sign}${prefix}${(absValue / 1e6).toFixed(1)}M`;
-    } else if (absValue >= 1e3) {
-      return `${sign}${prefix}${(absValue / 1e3).toFixed(decimals)}K`;
+    // Significant figure modes (sig2, sig3, sig4)
+    const sigFigs = globalPrecision === 'sig2' ? 2 : globalPrecision === 'sig4' ? 4 : 3;
+
+    if (abbreviate && absValue >= 1e3) {
+      const rounded = toSigFigs(absValue, sigFigs);
+      if (rounded >= 1e9) {
+        const num = rounded / 1e9;
+        const decimals = Math.max(0, sigFigs - Math.floor(Math.log10(num)) - 1);
+        return `${sign}${prefix}${num.toFixed(decimals)}B`;
+      } else if (rounded >= 1e6) {
+        const num = rounded / 1e6;
+        const decimals = Math.max(0, sigFigs - Math.floor(Math.log10(num)) - 1);
+        return `${sign}${prefix}${num.toFixed(decimals)}M`;
+      } else if (rounded >= 1e3) {
+        const num = rounded / 1e3;
+        const decimals = Math.max(0, sigFigs - Math.floor(Math.log10(num)) - 1);
+        return `${sign}${prefix}${num.toFixed(decimals)}K`;
+      }
     }
   }
 
+  // Fallback for small values or non-abbreviated
   return `${sign}${prefix}${Math.round(absValue).toLocaleString()}`;
 }
 

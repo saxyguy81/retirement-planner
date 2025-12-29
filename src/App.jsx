@@ -31,24 +31,36 @@ import {
   Settings,
   DollarSign,
 } from 'lucide-react';
-import React, { useState, useCallback, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
 
 // Static imports - always needed
 import { InputPanel } from './components/InputPanel';
-import { SplitPanel } from './components/SplitPanel';
-import { LazyLoadingFallback } from './components/LazyLoadingFallback';
 import { LazyErrorBoundary } from './components/LazyErrorBoundary';
+import { LazyLoadingFallback } from './components/LazyLoadingFallback';
 
 // ProjectionsTable stays static since it's the default tab
 import { ProjectionsTable } from './components/ProjectionsTable';
+import { SplitPanel } from './components/SplitPanel';
 
 // Lazy imports - loaded on demand
-const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
-const RiskAllocation = lazy(() => import('./components/RiskAllocation').then(m => ({ default: m.RiskAllocation })));
-const HeirAnalysis = lazy(() => import('./components/HeirAnalysis').then(m => ({ default: m.HeirAnalysis })));
-const ScenarioComparison = lazy(() => import('./components/ScenarioComparison').then(m => ({ default: m.ScenarioComparison })));
-const Optimization = lazy(() => import('./components/Optimization').then(m => ({ default: m.Optimization })));
-const SettingsPanel = lazy(() => import('./components/SettingsPanel').then(m => ({ default: m.SettingsPanel })));
+const Dashboard = lazy(() =>
+  import('./components/Dashboard').then(m => ({ default: m.Dashboard }))
+);
+const RiskAllocation = lazy(() =>
+  import('./components/RiskAllocation').then(m => ({ default: m.RiskAllocation }))
+);
+const HeirAnalysis = lazy(() =>
+  import('./components/HeirAnalysis').then(m => ({ default: m.HeirAnalysis }))
+);
+const ScenarioComparison = lazy(() =>
+  import('./components/ScenarioComparison').then(m => ({ default: m.ScenarioComparison }))
+);
+const Optimization = lazy(() =>
+  import('./components/Optimization').then(m => ({ default: m.Optimization }))
+);
+const SettingsPanel = lazy(() =>
+  import('./components/SettingsPanel').then(m => ({ default: m.SettingsPanel }))
+);
 
 // Preload functions - trigger chunk loading without rendering
 const preloadDashboard = () => import('./components/Dashboard');

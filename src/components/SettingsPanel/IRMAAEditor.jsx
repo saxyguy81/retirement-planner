@@ -7,7 +7,7 @@
  */
 
 import { Plus, Trash2, RotateCcw, AlertCircle } from 'lucide-react';
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 
 import { IRMAA_BRACKETS_MFJ_2024, IRMAA_BRACKETS_SINGLE_2024 } from '../../lib/taxTables';
 

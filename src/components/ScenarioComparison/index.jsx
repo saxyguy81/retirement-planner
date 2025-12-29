@@ -27,7 +27,7 @@ import {
   Columns,
   GitMerge,
 } from 'lucide-react';
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useCallback, Fragment } from 'react';
 import {
   BarChart,
   Bar,
@@ -312,7 +312,7 @@ function DiffTable({
         </thead>
         <tbody>
           {metrics.map(metric => (
-            <React.Fragment key={metric.key}>
+            <Fragment key={metric.key}>
               {/* Main row with absolute difference */}
               <tr className="border-t border-slate-800">
                 <td className="py-1.5 px-2 text-slate-300 font-medium">{metric.label}</td>
@@ -376,7 +376,7 @@ function DiffTable({
                   );
                 })}
               </tr>
-            </React.Fragment>
+            </Fragment>
           ))}
         </tbody>
       </table>

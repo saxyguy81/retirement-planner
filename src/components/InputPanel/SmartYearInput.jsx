@@ -13,7 +13,7 @@
  * - Seamless user experience with clear feedback
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 import { detectAgeOrYear, yearToAge, VALIDATION } from '../../lib/validation';
 
