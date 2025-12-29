@@ -146,11 +146,23 @@ export function Optimization({ params, projections, summary, updateParams }) {
         const proj = generateProjections(testParams);
         const sum = calculateSummary(proj);
 
+        // Calculate actual conversion label for infeasible strategies
+        const actualLabel = sum.isFullyFeasible
+          ? scenario.label
+          : `${scenario.label} → Actual: ${fmt$(sum.totalConversionActual)}`;
+
         return {
           ...scenario,
           projections: proj,
           summary: sum,
           score: sum[objective.metric],
+          // Feasibility tracking
+          actualLabel,
+          isFullyFeasible: sum.isFullyFeasible,
+          feasibilityPercent: sum.conversionFeasibilityPercent,
+          firstCappedYear: sum.firstConversionCappedYear,
+          totalRequested: sum.totalConversionRequested,
+          totalActual: sum.totalConversionActual,
         };
       });
 
@@ -399,6 +411,23 @@ export function Optimization({ params, projections, summary, updateParams }) {
                   </div>
                 </div>
 
+                {/* Feasibility warning for capped strategies */}
+                {!results.best.isFullyFeasible && (
+                  <div className="mt-3 px-3 py-2 bg-amber-900/30 border border-amber-700/50 rounded text-amber-300 text-xs">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <div>
+                        <span className="font-medium">Strategy capped by IRA balance: </span>
+                        Requested {fmt$(results.best.totalRequested)}, actual{' '}
+                        {fmt$(results.best.totalActual)} (
+                        {fmtPct(results.best.feasibilityPercent)} feasible)
+                        {results.best.firstCappedYear &&
+                          ` - IRA depleted starting ${results.best.firstCappedYear}`}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="pt-3 border-t border-emerald-700/30">
                   <div className="text-slate-400 text-xs mb-2">Recommended Conversions:</div>
                   <div className="flex flex-wrap gap-2">
@@ -458,6 +487,9 @@ export function Optimization({ params, projections, summary, updateParams }) {
                       <tr className="text-left">
                         <th className="py-2 px-3 text-slate-400 font-normal">Rank</th>
                         <th className="py-2 px-3 text-slate-400 font-normal">Strategy</th>
+                        <th className="py-2 px-3 text-slate-400 font-normal text-center">
+                          Feasible
+                        </th>
                         <th className="py-2 px-3 text-slate-400 font-normal text-right">
                           End Portfolio
                         </th>
@@ -483,7 +515,28 @@ export function Optimization({ params, projections, summary, updateParams }) {
                               <span className="text-slate-500">#{idx + 1}</span>
                             )}
                           </td>
-                          <td className="py-2 px-3 text-slate-300">{s.label}</td>
+                          <td className="py-2 px-3 text-slate-300">
+                            {s.isFullyFeasible ? (
+                              s.label
+                            ) : (
+                              <span className="flex items-center gap-1">
+                                <span className="text-amber-400">⚠</span>
+                                <span className="text-amber-200">{s.actualLabel}</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            {s.isFullyFeasible ? (
+                              <span className="text-emerald-400">✓</span>
+                            ) : (
+                              <span
+                                className="text-amber-400"
+                                title={`${fmtPct(s.feasibilityPercent)} feasible - IRA capped${s.firstCappedYear ? ` starting ${s.firstCappedYear}` : ''}`}
+                              >
+                                {fmtPct(s.feasibilityPercent)}
+                              </span>
+                            )}
+                          </td>
                           <td className="py-2 px-3 text-right font-mono text-slate-200">
                             {fmt$(s.summary.endingPortfolio)}
                           </td>

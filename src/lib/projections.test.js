@@ -1185,3 +1185,193 @@ describe('generateProjections - Roth percentage', () => {
     expect(projections[0].rothPercent).toBe(0);
   });
 });
+
+// =============================================================================
+// ROTH CONVERSION FEASIBILITY TESTS
+// =============================================================================
+
+describe('generateProjections - Roth conversion feasibility', () => {
+  it('should cap conversion to available IRA balance', () => {
+    const params = {
+      ...TEST_PARAMS,
+      iraStart: 100000,
+      rothConversions: { 2026: 200000 }, // Request more than available
+    };
+
+    const projections = generateProjections(params);
+    const year2026 = projections[0];
+
+    expect(year2026.rothConversionRequested).toBe(200000);
+    expect(year2026.rothConversionActual).toBeLessThanOrEqual(100000);
+    expect(year2026.rothConversionCapped).toBe(true);
+  });
+
+  it('should allow full conversion when IRA has sufficient balance', () => {
+    const params = {
+      ...TEST_PARAMS,
+      iraStart: 500000,
+      rothConversions: { 2026: 100000 },
+    };
+
+    const projections = generateProjections(params);
+    const year2026 = projections[0];
+
+    expect(year2026.rothConversionRequested).toBe(100000);
+    expect(year2026.rothConversionActual).toBe(100000);
+    expect(year2026.rothConversionCapped).toBe(false);
+  });
+
+  it('should reserve IRA balance for RMD before conversion', () => {
+    const params = {
+      ...TEST_PARAMS,
+      iraStart: 100000,
+      birthYear: 1953, // Age 73 in 2026 triggers RMD
+      rothConversions: { 2026: 100000 }, // Request full IRA amount
+    };
+
+    const projections = generateProjections(params);
+    const year2026 = projections[0];
+
+    // RMD is required and must be satisfied first
+    expect(year2026.rmdRequired).toBeGreaterThan(0);
+    // Conversion should be capped to IRA - RMD
+    expect(year2026.rothConversionActual).toBeLessThan(100000);
+    expect(year2026.rothConversionCapped).toBe(true);
+    // Max conversion should be IRA minus RMD
+    const maxAllowed = year2026.iraBOY - year2026.rmdRequired;
+    expect(year2026.rothConversionActual).toBeWithinDollars(maxAllowed, 1);
+  });
+
+  it('should track requested vs actual in each year', () => {
+    const params = {
+      ...TEST_PARAMS,
+      iraStart: 150000,
+      rothConversions: { 2026: 200000 },
+    };
+
+    const projections = generateProjections(params);
+    const year2026 = projections[0];
+
+    // All three fields should be present
+    expect(year2026.rothConversionRequested).toBeDefined();
+    expect(year2026.rothConversionActual).toBeDefined();
+    expect(year2026.rothConversionCapped).toBeDefined();
+
+    // Requested should be the original amount
+    expect(year2026.rothConversionRequested).toBe(200000);
+    // Actual should be capped
+    expect(year2026.rothConversionActual).toBeLessThan(200000);
+  });
+
+  it('should not cap conversion when no conversion requested', () => {
+    const projections = generateProjections(TEST_PARAMS);
+    const year2026 = projections[0];
+
+    expect(year2026.rothConversionRequested).toBe(0);
+    expect(year2026.rothConversionActual).toBe(0);
+    expect(year2026.rothConversionCapped).toBe(false);
+  });
+});
+
+// =============================================================================
+// SUMMARY CONVERSION FEASIBILITY TESTS
+// =============================================================================
+
+describe('calculateSummary - conversion feasibility', () => {
+  it('should track total requested vs actual conversions', () => {
+    const params = {
+      ...TEST_PARAMS,
+      iraStart: 150000,
+      rothConversions: { 2026: 100000, 2027: 100000 }, // Total 200K > 150K IRA
+    };
+
+    const projections = generateProjections(params);
+    const summary = calculateSummary(projections);
+
+    expect(summary.totalConversionRequested).toBe(200000);
+    expect(summary.totalConversionActual).toBeLessThan(200000);
+    expect(summary.conversionShortfall).toBeGreaterThan(0);
+  });
+
+  it('should identify fully feasible strategy', () => {
+    const params = {
+      ...TEST_PARAMS,
+      iraStart: 500000,
+      rothConversions: { 2026: 50000, 2027: 50000 },
+    };
+
+    const projections = generateProjections(params);
+    const summary = calculateSummary(projections);
+
+    expect(summary.isFullyFeasible).toBe(true);
+    expect(summary.conversionFeasibilityPercent).toBe(1);
+    expect(summary.conversionCappedYears).toHaveLength(0);
+    expect(summary.firstConversionCappedYear).toBeNull();
+  });
+
+  it('should calculate feasibility percentage correctly', () => {
+    const params = {
+      ...TEST_PARAMS,
+      iraStart: 100000,
+      rothConversions: { 2026: 200000 }, // Request 2x available
+    };
+
+    const projections = generateProjections(params);
+    const summary = calculateSummary(projections);
+
+    expect(summary.conversionFeasibilityPercent).toBeGreaterThan(0);
+    expect(summary.conversionFeasibilityPercent).toBeLessThan(1);
+    // Feasibility = actual / requested
+    expect(summary.conversionFeasibilityPercent).toBeCloseTo(
+      summary.totalConversionActual / summary.totalConversionRequested,
+      5
+    );
+  });
+
+  it('should identify capped years', () => {
+    const params = {
+      ...TEST_PARAMS,
+      iraStart: 100000,
+      rothConversions: { 2026: 200000 },
+    };
+
+    const projections = generateProjections(params);
+    const summary = calculateSummary(projections);
+
+    expect(summary.conversionCappedYears).toContain(2026);
+    expect(summary.firstConversionCappedYear).toBe(2026);
+  });
+
+  it('should identify first capped year for partial feasibility', () => {
+    const params = {
+      ...TEST_PARAMS,
+      iraStart: 300000,
+      rothConversions: {
+        2026: 100000,
+        2027: 100000,
+        2028: 100000,
+        2029: 100000,
+      },
+    };
+
+    const projections = generateProjections(params);
+    const summary = calculateSummary(projections);
+
+    // First few years should be feasible, later years capped when IRA depleted
+    if (!summary.isFullyFeasible) {
+      expect(summary.firstConversionCappedYear).toBeGreaterThan(2026);
+      expect(summary.conversionCappedYears.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('should handle no conversions gracefully', () => {
+    const projections = generateProjections(TEST_PARAMS);
+    const summary = calculateSummary(projections);
+
+    expect(summary.totalConversionRequested).toBe(0);
+    expect(summary.totalConversionActual).toBe(0);
+    expect(summary.conversionShortfall).toBe(0);
+    expect(summary.conversionFeasibilityPercent).toBe(1); // No conversions = fully feasible
+    expect(summary.isFullyFeasible).toBe(true);
+  });
+});

@@ -269,14 +269,17 @@ export function generateProjections(params = {}) {
       expenses *= p.survivorExpensePercent;
     }
 
-    // Roth conversion for this year
-    const rothConversion = p.rothConversions[year] || 0;
-
     // AT harvest override (extra AT liquidation for capital gains harvesting)
     const atHarvestOverride = p.atHarvestOverrides?.[year] || 0;
 
     // RMD calculation
     const rmd = calculateRMD(iraBOY, age);
+
+    // Roth conversion for this year - cap to available IRA after RMD
+    const requestedRothConversion = p.rothConversions[year] || 0;
+    const maxConversion = Math.max(0, iraBOY - rmd.required);
+    const actualRothConversion = Math.min(requestedRothConversion, maxConversion);
+    const conversionCapped = requestedRothConversion > actualRothConversion;
 
     // Inflate tax brackets (use custom if available, otherwise defaults)
     const baseFedBrackets =
@@ -319,7 +322,7 @@ export function generateProjections(params = {}) {
         expenses,
         irmaaTotal: irmaa.total,
         rmdRequired: rmd.required,
-        rothConversion,
+        rothConversion: actualRothConversion,
         atHarvestOverride,
       },
       {
@@ -347,8 +350,8 @@ export function generateProjections(params = {}) {
 
     // Apply withdrawals
     const atAfterWithdrawal = atBOY - withdrawal.atWithdrawal;
-    const iraAfterWithdrawal = iraBOY - withdrawal.iraWithdrawal - rothConversion;
-    const rothAfterWithdrawal = rothBOY - withdrawal.rothWithdrawal + rothConversion;
+    const iraAfterWithdrawal = iraBOY - withdrawal.iraWithdrawal - actualRothConversion;
+    const rothAfterWithdrawal = rothBOY - withdrawal.rothWithdrawal + actualRothConversion;
 
     // Apply growth (end of year)
     const atEOY = Math.max(0, atAfterWithdrawal * (1 + effectiveAtReturn));
@@ -361,7 +364,7 @@ export function generateProjections(params = {}) {
     const costBasisEOY = Math.max(0, costBasisBOY - costBasisUsed);
 
     // Update MAGI history for future IRMAA
-    magiHistory[year] = withdrawal.ordinaryIncome + withdrawal.capitalGains + rothConversion;
+    magiHistory[year] = withdrawal.ordinaryIncome + withdrawal.capitalGains + actualRothConversion;
 
     // Heir value calculation
     // Use strategy-based calculation if heirDistributionStrategy is specified
@@ -446,7 +449,12 @@ export function generateProjections(params = {}) {
       // Income & Expenses
       ssAnnual: Math.round(ssAnnual),
       expenses: Math.round(expenses),
-      rothConversion,
+      rothConversion: actualRothConversion,
+
+      // Roth conversion feasibility tracking
+      rothConversionRequested: requestedRothConversion,
+      rothConversionActual: actualRothConversion,
+      rothConversionCapped: conversionCapped,
 
       // RMD
       rmdFactor: rmd.factor,
@@ -530,6 +538,21 @@ export function calculateSummary(projections) {
   const first = projections[0];
   const last = projections[projections.length - 1];
 
+  // Calculate conversion feasibility
+  const totalConversionRequested = projections.reduce(
+    (sum, p) => sum + (p.rothConversionRequested || 0),
+    0
+  );
+  const totalConversionActual = projections.reduce(
+    (sum, p) => sum + (p.rothConversionActual || 0),
+    0
+  );
+  const conversionCappedYears = projections
+    .filter(p => p.rothConversionCapped)
+    .map(p => p.year);
+  const firstConversionCappedYear =
+    conversionCappedYears.length > 0 ? conversionCappedYears[0] : null;
+
   return {
     startYear: first.year,
     endYear: last.year,
@@ -555,5 +578,15 @@ export function calculateSummary(projections) {
 
     // Years with shortfall
     shortfallYears: projections.filter(p => p.shortfall > 0).map(p => p.year),
+
+    // Conversion feasibility
+    totalConversionRequested,
+    totalConversionActual,
+    conversionShortfall: totalConversionRequested - totalConversionActual,
+    conversionFeasibilityPercent:
+      totalConversionRequested > 0 ? totalConversionActual / totalConversionRequested : 1,
+    conversionCappedYears,
+    firstConversionCappedYear,
+    isFullyFeasible: conversionCappedYears.length === 0,
   };
 }
