@@ -291,19 +291,138 @@ export function calculateAllTaxes({
 }
 
 // =============================================================================
-// HEIR VALUE CALCULATION
+// STATE TAX RATES BY STATE (simplified - top marginal rates for high earners)
+// =============================================================================
+const STATE_TAX_RATES = {
+  // States with no income tax
+  'AK': 0, 'FL': 0, 'NV': 0, 'NH': 0, 'SD': 0, 'TN': 0, 'TX': 0, 'WA': 0, 'WY': 0,
+  // Flat tax states
+  'IL': 0.0495,
+  'CO': 0.044,
+  'IN': 0.0305,
+  'KY': 0.04,
+  'MA': 0.09,   // 9% on income over $1M (4% surtax)
+  'MI': 0.0425,
+  'NC': 0.0475,
+  'PA': 0.0307,
+  'UT': 0.0465,
+  // Progressive states (top marginal rates for high earners)
+  'CA': 0.133,  // 13.3% over ~$1.4M (includes 1% mental health surcharge)
+  'NY': 0.109,  // 10.9% top rate
+  'NJ': 0.1075, // 10.75% over $1M
+  'OR': 0.099,  // 9.9% top rate
+  'MN': 0.0985, // 9.85% top rate
+  'VT': 0.0875, // 8.75% top rate
+  'WI': 0.0765, // 7.65% top rate
+  'HI': 0.11,   // 11% top rate
+  'SC': 0.07,   // 7% flat on income over $16k
+  'MT': 0.0675, // 6.75% top rate
+  'AZ': 0.045,  // 4.5% (2.5% flat from 2024, but extra on high earners)
+  'GA': 0.055,  // 5.49% flat from 2024
+  'VA': 0.0575, // 5.75% top rate
+  'OH': 0.04,   // ~4% effective for high earners
+  'MD': 0.0575, // 5.75% top rate + local
+  'DC': 0.105,  // 10.5% over $1M
+  // Default for unlisted states
+  'DEFAULT': 0.05,
+};
+
+// =============================================================================
+// FEDERAL MARGINAL TAX RATE LOOKUP
+// Given AGI, returns the marginal federal rate (2024 MFJ brackets)
+// =============================================================================
+export function getFederalMarginalRate(agi) {
+  // 2024 MFJ brackets
+  if (agi > 731200) return 0.37;
+  if (agi > 487450) return 0.35;
+  if (agi > 383900) return 0.32;
+  if (agi > 201050) return 0.24;
+  if (agi > 94300) return 0.22;
+  if (agi > 23200) return 0.12;
+  return 0.10;
+}
+
+// =============================================================================
+// STATE MARGINAL TAX RATE LOOKUP
+// Given state code and AGI, returns approximate marginal state rate
+// =============================================================================
+export function getStateMarginalRate(stateCode, agi) {
+  const rate = STATE_TAX_RATES[stateCode.toUpperCase()];
+  if (rate !== undefined) return rate;
+  return STATE_TAX_RATES['DEFAULT'];
+}
+
+// =============================================================================
+// HEIR TAX RATES CALCULATION
+// Given heir's AGI and state, calculate their marginal rates
+// =============================================================================
+export function calculateHeirTaxRates(heir) {
+  const fedRate = getFederalMarginalRate(heir.agi);
+  const stateRate = getStateMarginalRate(heir.state, heir.agi);
+  return {
+    federal: fedRate,
+    state: stateRate,
+    combined: fedRate + stateRate,
+  };
+}
+
+// =============================================================================
+// HEIR VALUE CALCULATION (Multi-heir support)
 // After-tax value to heirs:
 // - After-Tax: Step-up in basis, no tax
 // - Roth: Tax-free
-// - IRA: Taxed at heir's marginal rate (10-year distribution rule)
+// - IRA: Taxed at each heir's marginal rate (10-year distribution rule)
 // =============================================================================
 export function calculateHeirValue(atBalance, iraBalance, rothBalance, heirFedRate, heirStateRate) {
+  // Legacy single-heir calculation (for backwards compatibility)
   const heirTaxRate = heirFedRate + heirStateRate;
-  
+
   // AT gets step-up in basis, passes tax-free
   // Roth is already tax-free
   // IRA is taxed at heir's rate
   const heirValue = atBalance + rothBalance + iraBalance * (1 - heirTaxRate);
-  
+
   return Math.round(heirValue);
+}
+
+// =============================================================================
+// MULTI-HEIR VALUE CALCULATION
+// Calculates after-tax inheritance value split among multiple heirs
+// =============================================================================
+export function calculateMultiHeirValue(atBalance, iraBalance, rothBalance, heirs) {
+  if (!heirs || heirs.length === 0) {
+    // Fallback to default rates if no heirs configured
+    return calculateHeirValue(atBalance, iraBalance, rothBalance, 0.37, 0.0495);
+  }
+
+  let totalHeirValue = 0;
+  const heirDetails = [];
+
+  for (const heir of heirs) {
+    const splitFraction = (heir.splitPercent || 0) / 100;
+    const rates = calculateHeirTaxRates(heir);
+
+    // Each heir's share
+    const heirAt = atBalance * splitFraction;
+    const heirIra = iraBalance * splitFraction;
+    const heirRoth = rothBalance * splitFraction;
+
+    // AT and Roth pass tax-free, IRA taxed at heir's rate
+    const heirValue = heirAt + heirRoth + heirIra * (1 - rates.combined);
+
+    totalHeirValue += heirValue;
+    heirDetails.push({
+      name: heir.name,
+      split: splitFraction,
+      rates,
+      grossInheritance: heirAt + heirIra + heirRoth,
+      taxOnIra: heirIra * rates.combined,
+      netValue: Math.round(heirValue),
+    });
+  }
+
+  return {
+    totalValue: Math.round(totalHeirValue),
+    details: heirDetails,
+  };
 }

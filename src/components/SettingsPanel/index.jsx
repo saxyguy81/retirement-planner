@@ -9,8 +9,18 @@
  */
 
 import React, { useState } from 'react';
-import { Settings, User, Calculator, Eye, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
+import { Settings, User, Calculator, Eye, ChevronDown, ChevronRight, RotateCcw, Users, Plus, Trash2 } from 'lucide-react';
 import { TaxBracketEditor } from './TaxBracketEditor';
+import { getFederalMarginalRate, getStateMarginalRate } from '../../lib/calculations';
+
+// Common US states for dropdown
+const US_STATES = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'
+];
 
 // Collapsible section wrapper
 function SettingsSection({ title, icon: Icon, expanded, onToggle, color, children }) {
@@ -176,13 +186,150 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
           </div>
         </SettingsSection>
 
+        {/* Heirs Configuration Section */}
+        <SettingsSection
+          title="Heirs"
+          icon={Users}
+          expanded={expanded.includes('heirs')}
+          onToggle={() => toggle('heirs')}
+          color="purple"
+        >
+          <div className="space-y-4">
+            <div className="text-slate-500 text-xs">
+              Configure heirs for inheritance value calculations. Tax rates are computed from AGI.
+            </div>
+
+            {(settings.heirs || []).map((heir, index) => {
+              const fedRate = getFederalMarginalRate(heir.agi || 0);
+              const stateRate = getStateMarginalRate(heir.state || 'IL', heir.agi || 0);
+              const combinedRate = fedRate + stateRate;
+
+              return (
+                <div key={index} className="p-3 bg-slate-800 rounded border border-slate-700">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-slate-300 text-sm font-medium">
+                      Heir {index + 1}: {heir.name || 'Unnamed'}
+                    </div>
+                    <button
+                      onClick={() => {
+                        const newHeirs = settings.heirs.filter((_, i) => i !== index);
+                        updateSettings({ heirs: newHeirs });
+                      }}
+                      className="p-1 text-slate-500 hover:text-red-400"
+                      title="Remove heir"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 text-xs mb-1">Name</label>
+                      <input
+                        type="text"
+                        value={heir.name || ''}
+                        onChange={(e) => {
+                          const newHeirs = [...settings.heirs];
+                          newHeirs[index] = { ...heir, name: e.target.value };
+                          updateSettings({ heirs: newHeirs });
+                        }}
+                        className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 text-xs mb-1">State</label>
+                      <select
+                        value={heir.state || 'IL'}
+                        onChange={(e) => {
+                          const newHeirs = [...settings.heirs];
+                          newHeirs[index] = { ...heir, state: e.target.value };
+                          updateSettings({ heirs: newHeirs });
+                        }}
+                        className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200"
+                      >
+                        {US_STATES.map(st => (
+                          <option key={st} value={st}>{st}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 text-xs mb-1">Approx AGI ($)</label>
+                      <input
+                        type="number"
+                        value={heir.agi || 0}
+                        onChange={(e) => {
+                          const newHeirs = [...settings.heirs];
+                          newHeirs[index] = { ...heir, agi: parseInt(e.target.value) || 0 };
+                          updateSettings({ heirs: newHeirs });
+                        }}
+                        className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 text-xs mb-1">Split %</label>
+                      <input
+                        type="number"
+                        value={heir.splitPercent || 0}
+                        onChange={(e) => {
+                          const newHeirs = [...settings.heirs];
+                          newHeirs[index] = { ...heir, splitPercent: parseInt(e.target.value) || 0 };
+                          updateSettings({ heirs: newHeirs });
+                        }}
+                        className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-2 border-t border-slate-700 text-xs">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Computed Tax Rates:</span>
+                      <span>
+                        Fed: <span className="text-amber-400">{(fedRate * 100).toFixed(0)}%</span>
+                        {' + '}
+                        State: <span className="text-blue-400">{(stateRate * 100).toFixed(1)}%</span>
+                        {' = '}
+                        <span className="text-rose-400">{(combinedRate * 100).toFixed(1)}%</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            <button
+              onClick={() => {
+                const newHeirs = [...(settings.heirs || []), {
+                  name: `Heir ${(settings.heirs || []).length + 1}`,
+                  state: 'IL',
+                  agi: 200000,
+                  splitPercent: 0,
+                }];
+                updateSettings({ heirs: newHeirs });
+              }}
+              className="w-full px-3 py-2 bg-slate-700 text-slate-300 rounded text-xs flex items-center justify-center gap-1.5 hover:bg-slate-600"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Heir
+            </button>
+
+            {(settings.heirs || []).length > 0 && (
+              <div className="text-slate-500 text-xs mt-2">
+                Total split: {(settings.heirs || []).reduce((sum, h) => sum + (h.splitPercent || 0), 0)}%
+                {(settings.heirs || []).reduce((sum, h) => sum + (h.splitPercent || 0), 0) !== 100 && (
+                  <span className="text-amber-400 ml-2">(should equal 100%)</span>
+                )}
+              </div>
+            )}
+          </div>
+        </SettingsSection>
+
         {/* Display Preferences Section */}
         <SettingsSection
           title="Display Preferences"
           icon={Eye}
           expanded={expanded.includes('display')}
           onToggle={() => toggle('display')}
-          color="purple"
+          color="blue"
         >
           <div className="space-y-3">
             <div className="flex items-center justify-between py-2">

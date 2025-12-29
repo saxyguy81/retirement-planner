@@ -33,6 +33,22 @@ const DEFAULT_SETTINGS = {
 
   // Custom Tax Brackets (null means use defaults)
   customBrackets: null,
+
+  // Heir Configuration (for inheritance value calculations)
+  heirs: [
+    {
+      name: 'Scott',
+      state: 'IL',
+      agi: 700000,        // Approximate AGI to determine marginal rates
+      splitPercent: 50,   // % of inheritance
+    },
+    {
+      name: 'Julie',
+      state: 'CA',
+      agi: 1200000,       // Approximate AGI to determine marginal rates
+      splitPercent: 50,   // % of inheritance
+    },
+  ],
 };
 
 // Helper: Load last state from localStorage
@@ -149,6 +165,7 @@ export function useProjections(initialParams = {}) {
       exemptSSFromTax: settings.exemptSSFromTax || false,
       discountRate: settings.discountRate || 0.03,
       birthYear: settings.primaryBirthYear || params.birthYear,
+      heirs: settings.heirs || [],  // Multi-heir configuration
     };
     return generateProjections(projectionParams);
   }, [params, options, settings]);

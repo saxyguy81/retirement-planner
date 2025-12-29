@@ -14,6 +14,7 @@ import {
   calculateRiskAllocation,
   calculateBlendedReturn,
   calculateHeirValue,
+  calculateMultiHeirValue,
 } from './calculations.js';
 
 import {
@@ -301,8 +302,16 @@ export function generateProjections(params = {}) {
     // Update MAGI history for future IRMAA
     magiHistory[year] = withdrawal.ordinaryIncome + withdrawal.capitalGains + rothConversion;
     
-    // Heir value
-    const heirValue = calculateHeirValue(atEOY, iraEOY, rothEOY, p.heirFedRate, p.heirStateRate);
+    // Heir value (use multi-heir if configured, otherwise legacy single-heir)
+    let heirValue, heirDetails;
+    if (p.heirs && p.heirs.length > 0) {
+      const heirResult = calculateMultiHeirValue(atEOY, iraEOY, rothEOY, p.heirs);
+      heirValue = heirResult.totalValue;
+      heirDetails = heirResult.details;
+    } else {
+      heirValue = calculateHeirValue(atEOY, iraEOY, rothEOY, p.heirFedRate, p.heirStateRate);
+      heirDetails = null;
+    }
     
     // Present value factor
     const pvFactor = Math.pow(1 + (p.discountRate || 0.03), yearsFromStart);
@@ -366,6 +375,7 @@ export function generateProjections(params = {}) {
       
       // Heir value
       heirValue,
+      heirDetails,  // Per-heir breakdown (if multi-heir configured)
       rothPercent: totalEOY > 0 ? rothEOY / totalEOY : 0,
       
       // Cumulative
@@ -426,7 +436,7 @@ export function calculateSummary(projections) {
     endingPortfolio: last.totalEOY,
     portfolioGrowth: last.totalEOY - first.totalBOY,
     
-    startingHeirValue: calculateHeirValue(first.atBOY, first.iraBOY, first.rothBOY, 0.37, 0.0495),
+    startingHeirValue: first.heirValue, // Use the calculated value from first year (includes multi-heir if configured)
     endingHeirValue: last.heirValue,
     
     totalTaxPaid: last.cumulativeTax,
