@@ -146,6 +146,7 @@ export const DEFAULT_PARAMS = {
   startYear: 2026,
   endYear: 2055,
   birthYear: 1955, // Ira's birth year for age calculations
+  taxYear: 2024,   // Base year for tax brackets (can be updated via Settings)
   
   // Starting Account Balances
   afterTaxStart: 474000,

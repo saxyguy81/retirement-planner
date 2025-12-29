@@ -167,6 +167,7 @@ export function useProjections(initialParams = {}) {
       birthYear: settings.primaryBirthYear || params.birthYear,
       heirs: settings.heirs || [],  // Multi-heir configuration
       customBrackets: settings.customBrackets || null,  // Custom tax brackets
+      taxYear: settings.taxYear || 2024,  // Base year for tax brackets
     };
     return generateProjections(projectionParams);
   }, [params, options, settings]);

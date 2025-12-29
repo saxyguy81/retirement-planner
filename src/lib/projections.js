@@ -188,7 +188,8 @@ export function generateProjections(params = {}) {
   const originalATBalance = p.afterTaxStart;
   
   for (let year = p.startYear; year <= p.endYear; year++) {
-    const yearsFromBase = year - 2024; // Years from tax table base year
+    const taxBaseYear = p.taxYear || 2024;
+    const yearsFromBase = year - taxBaseYear; // Years from tax table base year
     const yearsFromStart = year - p.startYear;
     const age = year - p.birthYear;
     

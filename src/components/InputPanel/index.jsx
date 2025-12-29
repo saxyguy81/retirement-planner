@@ -437,18 +437,19 @@ export function InputPanel({ params, updateParam, updateRothConversion, updateEx
           <ParamInput label="Survivor Exp %" value={params.survivorExpensePercent} onChange={(v) => updateParam('survivorExpensePercent', v)} format="%" />
         </InputSection>
         
-        {/* Heir Parameters */}
-        <InputSection 
-          title="Heir Parameters" 
-          icon={Users} 
-          expanded={expanded.includes('heir')} 
-          onToggle={() => toggle('heir')} 
+        {/* Heir Parameters - Now configured in Settings */}
+        <InputSection
+          title="Heir Parameters"
+          icon={Users}
+          expanded={expanded.includes('heir')}
+          onToggle={() => toggle('heir')}
           color="indigo"
         >
-          <ParamInput label="Heir Fed Rate" value={params.heirFedRate} onChange={(v) => updateParam('heirFedRate', v)} format="%" />
-          <ParamInput label="Heir State Rate" value={params.heirStateRate} onChange={(v) => updateParam('heirStateRate', v)} format="%" />
-          <div className="mt-1 text-slate-500 text-xs">
-            Combined: {fmtPct(params.heirFedRate + params.heirStateRate)}
+          <div className="text-slate-400 text-xs">
+            Heirs are now configured in the <span className="text-purple-400 font-medium">Settings</span> tab.
+            <div className="mt-2 text-slate-500">
+              Configure heir names, states, AGI, and split percentages to compute accurate tax rates for inheritance calculations.
+            </div>
           </div>
         </InputSection>
       </div>

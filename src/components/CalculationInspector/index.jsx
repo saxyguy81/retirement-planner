@@ -214,8 +214,11 @@ const CALCULATIONS = {
     formula: 'IRA → Roth Transfer (internal, no cash)\nTax Cost = Conversion × Marginal Rate\n\nMoney Flow:\n1. IRA decreases by conversion amount\n2. Roth increases by conversion amount\n3. Tax paid from AT (or IRA if AT insufficient)',
     backOfEnvelope: 'Converting $100K at 22% costs $22K tax (paid from AT/IRA)',
     compute: (data, params) => {
-      const { rothConversion, taxableOrdinary, iraBOY, atWithdrawal, totalTax } = data;
-      const heirRate = params.heirFedRate + params.heirStateRate;
+      const { rothConversion, taxableOrdinary, iraBOY, totalTax, heirDetails } = data;
+      // Use average heir rate from heirDetails if multi-heir, otherwise legacy
+      const heirRate = heirDetails && heirDetails.length > 0
+        ? heirDetails.reduce((sum, h) => sum + h.rates.combined * h.split, 0)
+        : (params.heirFedRate + params.heirStateRate);
       // Estimate marginal rate based on taxable income
       let marginalRate = 0.22;
       if (taxableOrdinary > 383900) marginalRate = 0.32;
@@ -250,10 +253,25 @@ const CALCULATIONS = {
     formula: 'Heir Value = AT + Roth + IRA × (1 − heir_rate)\n\nAT: Step-up basis at death, 0% tax\nRoth: Already tax-free, 0% tax\nIRA: Heir pays income tax over 10 years',
     backOfEnvelope: '≈ Portfolio × 0.85 (if mostly IRA) or × 1.0 (if mostly Roth/AT)',
     compute: (data, params) => {
-      const { atEOY, iraEOY, rothEOY, heirValue, totalEOY } = data;
-      const rate = params.heirFedRate + params.heirStateRate;
-      const iraAfterTax = iraEOY * (1 - rate);
+      const { atEOY, iraEOY, rothEOY, heirValue, totalEOY, heirDetails } = data;
       const effectiveRate = totalEOY > 0 ? (1 - heirValue / totalEOY) : 0;
+
+      // Multi-heir breakdown if available
+      if (heirDetails && heirDetails.length > 0) {
+        const heirLines = heirDetails.map(h =>
+          `${h.name} (${(h.split * 100).toFixed(0)}%): ${fK(h.netValue)} @ ${(h.rates.combined * 100).toFixed(0)}% rate`
+        ).join('\n');
+        const avgRate = heirDetails.reduce((sum, h) => sum + h.rates.combined * h.split, 0);
+        return {
+          formula: `Per heir: Share × (AT + Roth + IRA × (1 − rate))`,
+          values: heirLines,
+          result: `Total Heir Value = ${fM(heirValue)} (avg ${(avgRate * 100).toFixed(0)}% tax rate)`,
+          simple: `${fM(totalEOY)} × ${((1 - effectiveRate)).toFixed(2)} ≈ ${fM(heirValue)}`
+        };
+      }
+
+      // Legacy single-heir
+      const rate = params.heirFedRate + params.heirStateRate;
       return {
         formula: `Heir = AT + Roth + IRA × (1 − ${(rate * 100).toFixed(0)}%)`,
         values: `Heir = ${fK(atEOY)} + ${fK(rothEOY)} + ${fK(iraEOY)} × ${(1 - rate).toFixed(2)}`,
