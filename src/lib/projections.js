@@ -42,7 +42,8 @@ function calculateWithdrawals(inputs, taxParams, options) {
   
   const {
     fedBrackets, ltcgBrackets, standardDeduction,
-    stateTaxRate, capitalGainsPercent, isSingle
+    stateTaxRate, capitalGainsPercent, isSingle,
+    exemptSSFromTax = false,
   } = taxParams;
   
   const { iterative, maxIterations } = options;
@@ -93,9 +94,11 @@ function calculateWithdrawals(inputs, taxParams, options) {
     const cgRatio = atBOY > 0 ? Math.max(0, 1 - costBasisBOY / atBOY) : 0;
     const capitalGains = atW * cgRatio * capitalGainsPercent;
     
-    // Calculate taxable Social Security
+    // Calculate taxable Social Security (0 if Trump's SS exemption is enabled)
     const otherIncomeForSS = iraW + rothConversion + capitalGains;
-    const taxableSS = calculateTaxableSocialSecurity(ssAnnual, otherIncomeForSS, isSingle);
+    const taxableSS = exemptSSFromTax
+      ? 0
+      : calculateTaxableSocialSecurity(ssAnnual, otherIncomeForSS, isSingle);
     
     // Ordinary income
     const ordinaryIncome = taxableSS + iraW + rothConversion;
@@ -237,12 +240,10 @@ export function generateProjections(params = {}) {
       p.bracketInflation, yearsFromBase
     );
     
-    // Standard deduction with inflation, senior bonus, and any bonus deduction
+    // Standard deduction with inflation and senior bonus
     const baseDed = isSingle ? STANDARD_DEDUCTION_SINGLE_2024 : STANDARD_DEDUCTION_MFJ_2024;
     const seniorBonus = isSingle ? SENIOR_BONUS_SINGLE_2024 : SENIOR_BONUS_MFJ_2024;
-    const baseWithSenior = (baseDed + seniorBonus) * Math.pow(1 + p.bracketInflation, yearsFromBase);
-    // Add bonus deduction (e.g., Trump's senior proposal) - not inflated as it would be set in current year dollars
-    const standardDeduction = Math.round(baseWithSenior + (p.bonusDeduction || 0));
+    const standardDeduction = Math.round((baseDed + seniorBonus) * Math.pow(1 + p.bracketInflation, yearsFromBase));
     
     // IRMAA (2-year lookback)
     const irmaaMAGI = magiHistory[year - 2] || 0;
@@ -264,7 +265,8 @@ export function generateProjections(params = {}) {
         fedBrackets, ltcgBrackets, standardDeduction,
         stateTaxRate: p.stateTaxRate,
         capitalGainsPercent: p.capitalGainsPercent,
-        isSingle
+        isSingle,
+        exemptSSFromTax: p.exemptSSFromTax || false,
       },
       {
         iterative: p.iterativeTax,

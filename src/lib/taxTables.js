@@ -179,7 +179,7 @@ export const DEFAULT_PARAMS = {
   stateTaxRate: 0.0495,     // Illinois flat rate
   capitalGainsPercent: 0.75, // % of AT withdrawal that's gains vs basis
   bracketInflation: 0.03,    // Annual bracket inflation assumption
-  bonusDeduction: 0,         // Extra deduction on top of standard (e.g., Trump's senior bonus)
+  exemptSSFromTax: false,    // Trump's proposal: exempt Social Security from federal taxation
   
   // Roth Conversions (year -> amount)
   rothConversions: {

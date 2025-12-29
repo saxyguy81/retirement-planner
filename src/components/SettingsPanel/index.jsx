@@ -147,13 +147,6 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
               helpText="Base year for tax brackets"
             />
             <SettingsInput
-              label="Bonus Deduction"
-              value={settings.bonusDeduction || 0}
-              onChange={(v) => updateSettings({ bonusDeduction: parseInt(v) || 0 })}
-              type="number"
-              helpText="Extra deduction on top of standard (e.g., Trump proposal)"
-            />
-            <SettingsInput
               label="Discount Rate"
               value={((settings.discountRate || 0.03) * 100).toFixed(1)}
               onChange={(v) => updateSettings({ discountRate: parseFloat(v) / 100 || 0.03 })}
@@ -162,11 +155,23 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
             />
           </div>
           <div className="mt-4 p-3 bg-slate-800 rounded border border-slate-700">
-            <div className="text-slate-300 text-sm font-medium mb-2">Bonus Deduction Info</div>
-            <div className="text-slate-500 text-xs">
-              The bonus deduction is added on top of the standard deduction for each year.
-              This can be used to model proposed tax law changes (e.g., Trump's senior bonus,
-              SALT cap changes, etc.).
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-slate-300 text-sm font-medium">Exempt SS from Federal Tax</div>
+                <div className="text-slate-500 text-xs mt-1">
+                  Trump's proposal: Social Security benefits are not included in taxable income
+                </div>
+              </div>
+              <button
+                onClick={() => updateSettings({ exemptSSFromTax: !settings.exemptSSFromTax })}
+                className={`px-3 py-1 rounded text-xs ${
+                  settings.exemptSSFromTax
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-slate-700 text-slate-400'
+                }`}
+              >
+                {settings.exemptSSFromTax ? 'ON' : 'OFF'}
+              </button>
             </div>
           </div>
         </SettingsSection>

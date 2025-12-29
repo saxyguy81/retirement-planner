@@ -25,7 +25,7 @@ const DEFAULT_SETTINGS = {
 
   // Tax Settings
   taxYear: 2024,
-  bonusDeduction: 0,  // Extra deduction on top of standard (e.g., Trump's senior proposal)
+  exemptSSFromTax: false,  // Trump's proposal: exempt Social Security from federal taxation
   discountRate: 0.03, // For PV calculations
 
   // Display Preferences
@@ -141,12 +141,12 @@ export function useProjections(initialParams = {}) {
   }, [settings]);
   
   // Memoized projections - recalculates only when params/options/settings change
-  // Merges relevant settings (bonusDeduction, discountRate, birthYear) into projection params
+  // Merges relevant settings into projection params
   const projections = useMemo(() => {
     const projectionParams = {
       ...params,
       ...options,
-      bonusDeduction: settings.bonusDeduction || 0,
+      exemptSSFromTax: settings.exemptSSFromTax || false,
       discountRate: settings.discountRate || 0.03,
       birthYear: settings.primaryBirthYear || params.birthYear,
     };
