@@ -223,6 +223,86 @@ export const CELL_DEPENDENCIES = {
     { year, field: 'costBasisBOY' },
     { year, field: 'atBOY' },
   ],
+
+  // =============================================================================
+  // WITHDRAWAL FIELDS
+  // =============================================================================
+
+  // AT withdrawal depends on: need calculation + withdrawal order priority
+  atWithdrawal: year => [
+    { year, field: 'expenses' },
+    { year, field: 'totalTax' },
+    { year, field: 'irmaaTotal' },
+    { year, field: 'ssAnnual' },
+    { year, field: 'rmdRequired' },
+    { year, field: 'atBOY' },
+  ],
+
+  // IRA withdrawal depends on: RMD requirement + overflow from AT
+  iraWithdrawal: year => [
+    { year, field: 'expenses' },
+    { year, field: 'totalTax' },
+    { year, field: 'irmaaTotal' },
+    { year, field: 'ssAnnual' },
+    { year, field: 'rmdRequired' },
+    { year, field: 'iraBOY' },
+    { year, field: 'rothConversion' },
+    { year, field: 'atBOY' },
+  ],
+
+  // Roth withdrawal only when IRA+AT exhausted
+  rothWithdrawal: year => [
+    { year, field: 'expenses' },
+    { year, field: 'totalTax' },
+    { year, field: 'irmaaTotal' },
+    { year, field: 'ssAnnual' },
+    { year, field: 'atBOY' },
+    { year, field: 'iraBOY' },
+    { year, field: 'rothBOY' },
+  ],
+
+  // =============================================================================
+  // COST BASIS TRACKING
+  // =============================================================================
+
+  // Cost basis BOY = prior year EOY (or initial value)
+  costBasisBOY: (year, data, allData) => {
+    const priorYear = allData.find(d => d.year === year - 1);
+    return priorYear ? [{ year: year - 1, field: 'costBasisEOY' }] : [];
+  },
+
+  // Cost basis EOY = BOY minus proportional consumption from AT withdrawal
+  costBasisEOY: year => [
+    { year, field: 'costBasisBOY' },
+    { year, field: 'atWithdrawal' },
+    { year, field: 'atBOY' },
+  ],
+
+  // =============================================================================
+  // IRMAA MAGI (computed income, not just lookback reference)
+  // =============================================================================
+
+  // IRMAA MAGI is computed from ordinaryIncome + capitalGains + rothConversion
+  // but used 2 years later for IRMAA calculation
+  irmaaMAGI: year => [
+    { year, field: 'ordinaryIncome' },
+    { year, field: 'capitalGains' },
+    { year, field: 'rothConversion' },
+  ],
+
+  // =============================================================================
+  // CUMULATIVE TRACKING
+  // =============================================================================
+
+  // Cumulative AT (LTCG) tax
+  cumulativeATTax: (year, data, allData) => {
+    const priorYear = allData.find(d => d.year === year - 1);
+    const deps = [{ year, field: 'ltcgTax' }];
+    if (priorYear) {
+      deps.push({ year: year - 1, field: 'cumulativeATTax' });
+    }
+    return deps;
+  },
 };
 
 /**
@@ -277,10 +357,16 @@ export const DEPENDENCY_SIGNS = {
   cumulativeTax: '+',
   cumulativeIRMAA: '+',
   cumulativeCapitalGains: '+',
+  cumulativeATTax: '+',
 
   // Cost basis
   costBasisBOY: '+',
   costBasisEOY: '+',
+
+  // For withdrawal calculations
+  expenses: '+',
+  rmdRequired: '+',
+  irmaaMAGI: '+',
 };
 
 /**
@@ -304,4 +390,61 @@ export function getDependencySign(field, parentField) {
   }
 
   return DEPENDENCY_SIGNS[field] || '+';
+}
+
+/**
+ * Build reverse dependencies: for a given field/year, find all fields that use it.
+ * Returns array of { year, field } representing fields that depend on this value.
+ *
+ * @param {string} field - The field to check
+ * @param {number} year - The year of the field
+ * @param {Array} allData - All projection data
+ * @returns {Array<{year: number, field: string}>} Fields that use this value
+ */
+export function getReverseDependencies(field, year, allData) {
+  const usedBy = [];
+
+  // Check each field to see if it depends on our field
+  for (const [parentField, getDeps] of Object.entries(CELL_DEPENDENCIES)) {
+    // Check the same year
+    const sameYearData = allData.find(d => d.year === year);
+    if (sameYearData) {
+      try {
+        const deps = getDeps(year, sameYearData, allData);
+        if (deps.some(d => d.field === field && d.year === year)) {
+          usedBy.push({ year, field: parentField });
+        }
+      } catch (e) {
+        // Skip if dependency calculation fails
+      }
+    }
+
+    // Check next year (for BOY fields that use prior EOY)
+    const nextYearData = allData.find(d => d.year === year + 1);
+    if (nextYearData) {
+      try {
+        const deps = getDeps(year + 1, nextYearData, allData);
+        if (deps.some(d => d.field === field && d.year === year)) {
+          usedBy.push({ year: year + 1, field: parentField });
+        }
+      } catch (e) {
+        // Skip if dependency calculation fails
+      }
+    }
+
+    // Check 2 years later (for IRMAA lookback)
+    const twoYearsLater = allData.find(d => d.year === year + 2);
+    if (twoYearsLater) {
+      try {
+        const deps = getDeps(year + 2, twoYearsLater, allData);
+        if (deps.some(d => d.field === field && d.year === year)) {
+          usedBy.push({ year: year + 2, field: parentField });
+        }
+      } catch (e) {
+        // Skip if dependency calculation fails
+      }
+    }
+  }
+
+  return usedBy;
 }
