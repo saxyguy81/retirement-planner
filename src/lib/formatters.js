@@ -3,6 +3,31 @@
  */
 
 // =============================================================================
+// GLOBAL PRECISION STATE
+// =============================================================================
+
+// Global precision setting: 'abbreviated' | 'dollars' | 'cents'
+let globalPrecision = 'abbreviated';
+
+/**
+ * Set the global display precision
+ * @param {'abbreviated' | 'dollars' | 'cents'} precision
+ */
+export function setGlobalPrecision(precision) {
+  if (['abbreviated', 'dollars', 'cents'].includes(precision)) {
+    globalPrecision = precision;
+  }
+}
+
+/**
+ * Get the current global precision
+ * @returns {'abbreviated' | 'dollars' | 'cents'}
+ */
+export function getGlobalPrecision() {
+  return globalPrecision;
+}
+
+// =============================================================================
 // CURRENCY FORMATTING
 // =============================================================================
 
@@ -13,12 +38,29 @@
  * @returns {string} Formatted string
  */
 export function formatCurrency(value, options = {}) {
-  const { abbreviate = true, decimals = 0, showSign = false, prefix = '$' } = options;
+  const {
+    abbreviate = true,
+    decimals = 0,
+    showSign = false,
+    prefix = '$',
+    useGlobalPrecision = true,
+  } = options;
 
   if (value == null || isNaN(value)) return `${prefix}0`;
 
   const absValue = Math.abs(value);
   const sign = value < 0 ? '-' : showSign && value > 0 ? '+' : '';
+
+  // Apply global precision if enabled
+  if (useGlobalPrecision) {
+    if (globalPrecision === 'cents') {
+      return `${sign}${prefix}${absValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    if (globalPrecision === 'dollars') {
+      return `${sign}${prefix}${Math.round(absValue).toLocaleString()}`;
+    }
+    // 'abbreviated' falls through to default behavior
+  }
 
   if (abbreviate) {
     if (absValue >= 1e9) {

@@ -31,17 +31,42 @@ import {
   Settings,
   DollarSign,
 } from 'lucide-react';
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
 
-import { Dashboard } from './components/Dashboard';
-import { HeirAnalysis } from './components/HeirAnalysis';
+// Static imports - always needed
 import { InputPanel } from './components/InputPanel';
-import { Optimization } from './components/Optimization';
-import { ProjectionsTable } from './components/ProjectionsTable';
-import { RiskAllocation } from './components/RiskAllocation';
-import { ScenarioComparison } from './components/ScenarioComparison';
-import { SettingsPanel } from './components/SettingsPanel';
 import { SplitPanel } from './components/SplitPanel';
+import { LazyLoadingFallback } from './components/LazyLoadingFallback';
+import { LazyErrorBoundary } from './components/LazyErrorBoundary';
+
+// ProjectionsTable stays static since it's the default tab
+import { ProjectionsTable } from './components/ProjectionsTable';
+
+// Lazy imports - loaded on demand
+const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
+const RiskAllocation = lazy(() => import('./components/RiskAllocation').then(m => ({ default: m.RiskAllocation })));
+const HeirAnalysis = lazy(() => import('./components/HeirAnalysis').then(m => ({ default: m.HeirAnalysis })));
+const ScenarioComparison = lazy(() => import('./components/ScenarioComparison').then(m => ({ default: m.ScenarioComparison })));
+const Optimization = lazy(() => import('./components/Optimization').then(m => ({ default: m.Optimization })));
+const SettingsPanel = lazy(() => import('./components/SettingsPanel').then(m => ({ default: m.SettingsPanel })));
+
+// Preload functions - trigger chunk loading without rendering
+const preloadDashboard = () => import('./components/Dashboard');
+const preloadRisk = () => import('./components/RiskAllocation');
+const preloadHeir = () => import('./components/HeirAnalysis');
+const preloadScenarios = () => import('./components/ScenarioComparison');
+const preloadOptimize = () => import('./components/Optimization');
+const preloadSettings = () => import('./components/SettingsPanel');
+
+// Map tab IDs to preload functions
+const preloadMap = {
+  dashboard: preloadDashboard,
+  risk: preloadRisk,
+  heir: preloadHeir,
+  scenarios: preloadScenarios,
+  optimize: preloadOptimize,
+  settings: preloadSettings,
+};
 import { useProjections } from './hooks/useProjections';
 import {
   exportToExcel,
@@ -50,6 +75,7 @@ import {
   importFromJSON,
   importFromExcel,
 } from './lib/excelExport';
+import { setGlobalPrecision } from './lib/formatters';
 
 const TABS = [
   { id: 'projections', icon: Table, label: 'Projections' },
@@ -111,6 +137,11 @@ export default function App() {
     resetSettings,
   } = useProjections();
 
+  // Apply global display precision setting
+  useEffect(() => {
+    setGlobalPrecision(settings.displayPrecision || 'abbreviated');
+  }, [settings.displayPrecision]);
+
   // Save handler
   const handleSave = useCallback(() => {
     saveState(saveName);
@@ -171,13 +202,13 @@ export default function App() {
     [projections, summary, params]
   );
 
-  // Split panel view configurations
+  // Split panel view configurations - use render functions for lazy loading
   const splitPanelViews = useMemo(
     () => [
       {
         id: 'projections',
         label: 'Projections',
-        component: (
+        render: () => (
           <ProjectionsTable
             projections={projections}
             options={options}
@@ -189,24 +220,34 @@ export default function App() {
       {
         id: 'dashboard',
         label: 'Dashboard',
-        component: <Dashboard projections={projections} params={params} showPV={showPV} />,
+        render: () => (
+          <Suspense fallback={<LazyLoadingFallback />}>
+            <Dashboard projections={projections} params={params} showPV={showPV} />
+          </Suspense>
+        ),
       },
       {
         id: 'risk',
         label: 'Risk Allocation',
-        component: (
-          <RiskAllocation
-            projections={projections}
-            params={params}
-            selectedYear={riskYear}
-            onYearChange={setRiskYear}
-          />
+        render: () => (
+          <Suspense fallback={<LazyLoadingFallback />}>
+            <RiskAllocation
+              projections={projections}
+              params={params}
+              selectedYear={riskYear}
+              onYearChange={setRiskYear}
+            />
+          </Suspense>
         ),
       },
       {
         id: 'heir',
         label: 'Heir Analysis',
-        component: <HeirAnalysis projections={projections} params={params} showPV={showPV} />,
+        render: () => (
+          <Suspense fallback={<LazyLoadingFallback />}>
+            <HeirAnalysis projections={projections} params={params} showPV={showPV} />
+          </Suspense>
+        ),
       },
     ],
     [projections, options, params, riskYear, showPV]
@@ -426,6 +467,7 @@ export default function App() {
           updateATHarvest={updateATHarvest}
           options={options}
           setOptions={setOptions}
+          updateSettings={updateSettings}
         />
 
         {/* Main content area */}
@@ -444,6 +486,11 @@ export default function App() {
                     ) {
                       setSplitView(false);
                     }
+                  }}
+                  onMouseEnter={() => {
+                    // Preload component on hover for faster tab switching
+                    const preload = preloadMap[tab.id];
+                    if (preload) preload();
                   }}
                   className={`h-full px-3 flex items-center gap-1.5 border-b-2 text-xs transition-colors ${
                     activeTab === tab.id && !splitView
@@ -489,7 +536,7 @@ export default function App() {
                 defaultRightView="dashboard"
               />
             ) : (
-              <>
+              <LazyErrorBoundary>
                 {activeTab === 'projections' && (
                   <ProjectionsTable
                     projections={projections}
@@ -499,49 +546,51 @@ export default function App() {
                   />
                 )}
 
-                {activeTab === 'dashboard' && (
-                  <Dashboard projections={projections} params={params} showPV={showPV} />
-                )}
+                <Suspense fallback={<LazyLoadingFallback />}>
+                  {activeTab === 'dashboard' && (
+                    <Dashboard projections={projections} params={params} showPV={showPV} />
+                  )}
 
-                {activeTab === 'risk' && (
-                  <RiskAllocation
-                    projections={projections}
-                    params={params}
-                    selectedYear={riskYear}
-                    onYearChange={setRiskYear}
-                  />
-                )}
+                  {activeTab === 'risk' && (
+                    <RiskAllocation
+                      projections={projections}
+                      params={params}
+                      selectedYear={riskYear}
+                      onYearChange={setRiskYear}
+                    />
+                  )}
 
-                {activeTab === 'heir' && (
-                  <HeirAnalysis projections={projections} params={params} showPV={showPV} />
-                )}
+                  {activeTab === 'heir' && (
+                    <HeirAnalysis projections={projections} params={params} showPV={showPV} />
+                  )}
 
-                {activeTab === 'scenarios' && (
-                  <ScenarioComparison
-                    params={params}
-                    projections={projections}
-                    summary={summary}
-                    showPV={showPV}
-                  />
-                )}
+                  {activeTab === 'scenarios' && (
+                    <ScenarioComparison
+                      params={params}
+                      projections={projections}
+                      summary={summary}
+                      showPV={showPV}
+                    />
+                  )}
 
-                {activeTab === 'optimize' && (
-                  <Optimization
-                    params={params}
-                    projections={projections}
-                    summary={summary}
-                    updateParams={updateParams}
-                  />
-                )}
+                  {activeTab === 'optimize' && (
+                    <Optimization
+                      params={params}
+                      projections={projections}
+                      summary={summary}
+                      updateParams={updateParams}
+                    />
+                  )}
 
-                {activeTab === 'settings' && (
-                  <SettingsPanel
-                    settings={settings}
-                    updateSettings={updateSettings}
-                    resetSettings={resetSettings}
-                  />
-                )}
-              </>
+                  {activeTab === 'settings' && (
+                    <SettingsPanel
+                      settings={settings}
+                      updateSettings={updateSettings}
+                      resetSettings={resetSettings}
+                    />
+                  )}
+                </Suspense>
+              </LazyErrorBoundary>
             )}
           </div>
         </main>

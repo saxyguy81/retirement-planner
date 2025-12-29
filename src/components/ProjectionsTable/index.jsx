@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import React, { useState, useMemo, useCallback } from 'react';
+import { ArrowUp, ArrowDown } from 'lucide-react';
 
 import { CELL_DEPENDENCIES, getDependencySign } from '../../lib/calculationDependencies';
 import { VALUE_COLORS, ROW_SEMANTICS } from '../../lib/colors';
@@ -169,33 +170,56 @@ const DEFAULT_COLLAPSED = {
 
 // Fields that have calculation inspections available
 const INSPECTABLE_FIELDS = [
-  // Taxes
-  'federalTax',
-  'totalTax',
-  'ltcgTax',
-  'niit',
-  'stateTax',
-  'taxableSS',
+  // Beginning of Year
+  'atBOY',
+  'iraBOY',
+  'rothBOY',
+  'totalBOY',
+  'costBasisBOY',
+  // Income
+  'ssAnnual',
+  // Cash Needs
+  'expenses',
   'irmaaTotal',
-  'cumulativeTax',
+  // RMD & Conversions
+  'rmdFactor',
+  'rmdRequired',
+  'rothConversion',
   // Withdrawals
   'atWithdrawal',
   'iraWithdrawal',
   'rothWithdrawal',
   'totalWithdrawal',
-  // Conversions & RMD
-  'rothConversion',
-  'rmdRequired',
-  // EOY Balances
+  // Tax Detail
+  'taxableSS',
+  'ordinaryIncome',
+  'capitalGains',
+  'taxableOrdinary',
+  'standardDeduction',
+  'federalTax',
+  'ltcgTax',
+  'niit',
+  'stateTax',
+  'totalTax',
+  // IRMAA Detail
+  'irmaaMAGI',
+  'irmaaPartB',
+  'irmaaPartD',
+  // Ending Position
   'atEOY',
   'iraEOY',
   'rothEOY',
   'totalEOY',
-  // Heir & Roth %
-  'heirValue',
+  'costBasisEOY',
   'rothPercent',
-  // Capital Gains Analysis
-  'capitalGains',
+  // Heir Value
+  'heirValue',
+  // Analysis & Metrics
+  'effectiveAtReturn',
+  'effectiveIraReturn',
+  'effectiveRothReturn',
+  'cumulativeTax',
+  'cumulativeIRMAA',
   'cumulativeCapitalGains',
   'cumulativeATTax',
   'atLiquidationPercent',
@@ -227,6 +251,10 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
   // Row selection state for custom views
   const [selectedRows, setSelectedRows] = useState(new Set());
   const [customViewType, setCustomViewType] = useState(null); // 'table' | 'chart' | 'dashboard' | null
+
+  // Multi-column sorting state
+  // Array of sort configs: [{key: 'year', direction: 'asc'}, {key: 'totalEOY', direction: 'desc'}]
+  const [sortConfigs, setSortConfigs] = useState([]);
 
   // Handle cell hover to show calculation dependencies
   const handleCellHover = useCallback(
@@ -307,6 +335,53 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
     setSelectedRows(new Set());
   }, []);
 
+  // Multi-sort handler - Shift+click adds secondary sort, regular click sets primary
+  const handleSort = useCallback((key, event) => {
+    setSortConfigs(prev => {
+      const existingIndex = prev.findIndex(s => s.key === key);
+
+      if (event?.shiftKey) {
+        // Shift+click: Add as secondary sort or toggle existing
+        if (existingIndex >= 0) {
+          // Toggle direction of existing sort
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            direction: updated[existingIndex].direction === 'asc' ? 'desc' : 'asc',
+          };
+          return updated;
+        } else {
+          // Add new secondary sort
+          return [...prev, { key, direction: 'asc' }];
+        }
+      } else {
+        // Regular click: Set as single primary sort or toggle
+        if (existingIndex === 0 && prev.length === 1) {
+          // Toggle direction of single sort
+          return [{ key, direction: prev[0].direction === 'asc' ? 'desc' : 'asc' }];
+        } else {
+          // Reset to single sort on this column
+          return [{ key, direction: 'asc' }];
+        }
+      }
+    });
+  }, []);
+
+  // Clear all sorts
+  const clearSort = useCallback(() => setSortConfigs([]), []);
+
+  // Get sort indicator for a column
+  const getSortIndicator = useCallback(
+    key => {
+      const sortIndex = sortConfigs.findIndex(s => s.key === key);
+      if (sortIndex === -1) return null;
+      const config = sortConfigs[sortIndex];
+      const priority = sortConfigs.length > 1 ? sortIndex + 1 : null;
+      return { direction: config.direction, priority };
+    },
+    [sortConfigs]
+  );
+
   // Open custom view modal
   const openCustomView = useCallback(viewType => {
     setCustomViewType(viewType);
@@ -384,6 +459,31 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
     return projections.filter(p => selectedYears.includes(p.year));
   }, [projections, selectedYears]);
 
+  // Apply multi-sort to displayData
+  const sortedDisplayData = useMemo(() => {
+    if (sortConfigs.length === 0) return displayData;
+
+    return [...displayData].sort((a, b) => {
+      for (const { key, direction } of sortConfigs) {
+        const aVal = a[key];
+        const bVal = b[key];
+
+        // Null handling: nulls always sort to the end
+        if (aVal == null && bVal == null) continue;
+        if (aVal == null) return 1;
+        if (bVal == null) return -1;
+
+        // Numeric comparison
+        const compare = Number(aVal) - Number(bVal);
+        if (compare !== 0) {
+          return direction === 'asc' ? compare : -compare;
+        }
+        // If equal, continue to next sort key
+      }
+      return 0;
+    });
+  }, [displayData, sortConfigs]);
+
   return (
     <div data-testid="projections-table" className="flex-1 flex flex-col overflow-hidden text-xs">
       {/* Toolbar */}
@@ -413,10 +513,10 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
           </div>
         </div>
 
-        {options?.iterativeTax && displayData[0]?.iterations > 1 && (
+        {options?.iterativeTax && sortedDisplayData[0]?.iterations > 1 && (
           <span className="text-emerald-400 flex items-center gap-1 text-xs">
             <RefreshCw className="w-3 h-3" />
-            Iterative ({displayData[0].iterations} iter)
+            Iterative ({sortedDisplayData[0].iterations} iter)
           </span>
         )}
       </div>
@@ -468,16 +568,51 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
         <table className="w-full border-collapse">
           <thead className="sticky top-0 bg-slate-950 z-10">
             <tr className="text-slate-400">
-              <th className="text-left py-1.5 px-2 sticky left-0 bg-slate-950 min-w-40">Metric</th>
-              {displayData.map(d => (
-                <th key={d.year} className="text-right py-1.5 px-2 min-w-24">
-                  <div>{d.year}</div>
-                  <div className="text-slate-600 font-normal text-xs">Age {d.age}</div>
-                  {d.isSurvivor && (
-                    <div className="text-pink-400 font-normal text-xs">Survivor</div>
+              <th className="text-left py-1.5 px-2 sticky left-0 bg-slate-950 min-w-40">
+                <div className="flex items-center gap-2">
+                  Metric
+                  {sortConfigs.length > 0 && (
+                    <button
+                      onClick={clearSort}
+                      className="text-xs text-slate-500 hover:text-slate-300"
+                      title="Clear all sorting"
+                    >
+                      Clear sort
+                    </button>
                   )}
-                </th>
-              ))}
+                </div>
+              </th>
+              {sortedDisplayData.map(d => {
+                const yearSort = getSortIndicator('year');
+                return (
+                  <th
+                    key={d.year}
+                    onClick={e => handleSort('year', e)}
+                    className="text-right py-1.5 px-2 min-w-24 cursor-pointer hover:bg-slate-800/50 select-none"
+                    title="Click to sort, Shift+click to add secondary sort"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      {d.year}
+                      {yearSort && (
+                        <span className="text-blue-400 flex items-center">
+                          {yearSort.direction === 'asc' ? (
+                            <ArrowUp className="w-3 h-3" />
+                          ) : (
+                            <ArrowDown className="w-3 h-3" />
+                          )}
+                          {yearSort.priority && (
+                            <sup className="text-[10px]">{yearSort.priority}</sup>
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-slate-600 font-normal text-xs">Age {d.age}</div>
+                    {d.isSurvivor && (
+                      <div className="text-pink-400 font-normal text-xs">Survivor</div>
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -488,7 +623,7 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
                   {/* Section header */}
                   <tr className="border-t border-slate-800">
                     <td
-                      colSpan={displayData.length + 1}
+                      colSpan={sortedDisplayData.length + 1}
                       className="py-1.5 px-2 text-slate-500 font-medium bg-slate-900/30 select-none"
                     >
                       <span className="flex items-center gap-2">
@@ -559,7 +694,7 @@ export function ProjectionsTable({ projections, options, params, showPV = true }
                               </span>
                             </div>
                           </td>
-                          {displayData.map(d => {
+                          {sortedDisplayData.map(d => {
                             // Check if this cell should be highlighted as a dependency
                             const highlight = getCellHighlight(row.key, d.year);
                             const highlightClass =

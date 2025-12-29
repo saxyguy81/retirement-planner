@@ -28,10 +28,11 @@ const DEFAULT_SETTINGS = {
 
   // Tax Settings
   taxYear: 2025, // Updated to current year
-  ssExemptionMode: 'disabled', // 'disabled' | 'through2028' | 'permanent'
+  ssExemptionMode: 'through2028', // 'disabled' | 'through2028' | 'permanent' - Trump proposal default
 
   // Display Preferences
   defaultPV: true,
+  displayPrecision: 'abbreviated', // 'abbreviated' | 'dollars' | 'cents'
 
   // Custom Tax Brackets (null means use defaults)
   customBrackets: null,

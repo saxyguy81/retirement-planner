@@ -80,10 +80,10 @@ export function SplitPanel({
     setRightCollapsed(!rightCollapsed);
   };
 
-  // Get the view component for a panel
+  // Get the view component for a panel - uses render function for lazy loading
   const getViewComponent = viewId => {
     const view = views.find(v => v.id === viewId);
-    return view ? view.component : null;
+    return view ? view.render() : null;
   };
 
   // View selector dropdown

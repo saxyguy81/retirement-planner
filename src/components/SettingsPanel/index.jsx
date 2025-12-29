@@ -10,13 +10,11 @@
 
 import {
   Settings,
-  User,
   Calculator,
   Eye,
   ChevronDown,
   ChevronRight,
   RotateCcw,
-  Users,
   Heart,
 } from 'lucide-react';
 import React, { useState } from 'react';
@@ -76,7 +74,7 @@ function SettingsInput({ label, value, onChange, type = 'text', placeholder, hel
 }
 
 export function SettingsPanel({ settings, updateSettings, resetSettings }) {
-  const [expanded, setExpanded] = useState(['profile', 'tax']);
+  const [expanded, setExpanded] = useState(['tax']);
 
   const toggle = section => {
     setExpanded(prev =>
@@ -103,47 +101,6 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
       </div>
 
       <div className="flex-1 overflow-auto">
-        {/* User Profile Section */}
-        <SettingsSection
-          title="User Profile"
-          icon={User}
-          expanded={expanded.includes('profile')}
-          onToggle={() => toggle('profile')}
-          color="blue"
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <SettingsInput
-              label="Primary Name"
-              value={settings.primaryName || ''}
-              onChange={v => updateSettings({ primaryName: v })}
-              placeholder="e.g., John"
-            />
-            <SettingsInput
-              label="Primary Birth Year"
-              value={settings.primaryBirthYear || ''}
-              onChange={v => updateSettings({ primaryBirthYear: parseInt(v) || 1960 })}
-              type="number"
-              placeholder="e.g., 1960"
-            />
-            <SettingsInput
-              label="Spouse Name"
-              value={settings.spouseName || ''}
-              onChange={v => updateSettings({ spouseName: v })}
-              placeholder="e.g., Jane"
-            />
-            <SettingsInput
-              label="Spouse Birth Year"
-              value={settings.spouseBirthYear || ''}
-              onChange={v => updateSettings({ spouseBirthYear: parseInt(v) || 1962 })}
-              type="number"
-              placeholder="e.g., 1962"
-            />
-          </div>
-          <div className="text-slate-500 text-xs mt-2">
-            Primary birth year is used for age and RMD calculations
-          </div>
-        </SettingsSection>
-
         {/* Tax Settings Section */}
         <SettingsSection
           title="Tax Settings"
@@ -203,24 +160,6 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
           </div>
         </SettingsSection>
 
-        {/* Note about heirs - moved to InputPanel */}
-        <SettingsSection
-          title="Heirs"
-          icon={Users}
-          expanded={expanded.includes('heirs')}
-          onToggle={() => toggle('heirs')}
-          color="purple"
-        >
-          <div className="p-3 bg-slate-800/50 rounded border border-slate-700">
-            <div className="text-slate-400 text-sm mb-2">Heirs Moved to InputPanel</div>
-            <div className="text-slate-500 text-xs">
-              Heir configuration (names, states, AGI, split percentages, and distribution strategy)
-              has been moved to the <span className="text-indigo-400 font-medium">Heirs</span>{' '}
-              section in the InputPanel for easier access while viewing projections.
-            </div>
-          </div>
-        </SettingsSection>
-
         {/* Display Preferences Section */}
         <SettingsSection
           title="Display Preferences"
@@ -229,7 +168,7 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
           onToggle={() => toggle('display')}
           color="blue"
         >
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="flex items-center justify-between py-2">
               <div>
                 <div className="text-slate-300 text-sm">Default to Present Value</div>
@@ -245,6 +184,39 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
               >
                 {settings.defaultPV ? 'ON' : 'OFF'}
               </button>
+            </div>
+
+            {/* Display Precision */}
+            <div className="p-3 bg-slate-800 rounded border border-slate-700">
+              <div className="text-slate-300 text-sm font-medium mb-2">Display Precision</div>
+              <div className="text-slate-500 text-xs mb-3">
+                How currency values are displayed in tables and charts
+              </div>
+              <div className="flex gap-1">
+                {[
+                  { value: 'abbreviated', label: '$100K' },
+                  { value: 'dollars', label: '$100,000' },
+                  { value: 'cents', label: '$100,000.00' },
+                ].map(option => (
+                  <button
+                    key={option.value}
+                    onClick={() => updateSettings({ displayPrecision: option.value })}
+                    className={`flex-1 px-2 py-1.5 rounded text-xs ${
+                      (settings.displayPrecision || 'abbreviated') === option.value
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="text-slate-500 text-xs mt-2">
+                {(settings.displayPrecision || 'abbreviated') === 'abbreviated' &&
+                  'Abbreviated format (K, M, B)'}
+                {settings.displayPrecision === 'dollars' && 'Full dollar amounts with commas'}
+                {settings.displayPrecision === 'cents' && 'Full precision with cents'}
+              </div>
             </div>
           </div>
         </SettingsSection>

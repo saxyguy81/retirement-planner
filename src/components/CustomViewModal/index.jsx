@@ -7,8 +7,8 @@
  * - Dashboard: Combined summary cards, chart, and table
  */
 
-import { X, Download, Copy, Check } from 'lucide-react';
-import React, { useState, useMemo } from 'react';
+import { X, Download, Copy, Check, ArrowUp, ArrowDown, Filter } from 'lucide-react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   LineChart,
   Line,
@@ -55,6 +55,15 @@ export function CustomViewModal({ viewType, selectedRows, projections, sections,
   const [chartType, setChartType] = useState('line'); // 'line' | 'area' | 'stacked'
   const [copied, setCopied] = useState(false);
 
+  // Multi-sort state
+  const [sortConfigs, setSortConfigs] = useState([]);
+
+  // Filter state
+  const [filterField, setFilterField] = useState(null);
+  const [filterMode, setFilterMode] = useState('all'); // 'all' | 'above' | 'below' | 'between'
+  const [filterThreshold, setFilterThreshold] = useState(0);
+  const [filterThresholdMax, setFilterThresholdMax] = useState(0);
+
   // Get row metadata (labels and formats) from sections
   const rowMetadata = useMemo(() => {
     const metadata = {};
@@ -72,26 +81,103 @@ export function CustomViewModal({ viewType, selectedRows, projections, sections,
   // Convert selectedRows Set to array
   const selectedRowsArray = useMemo(() => [...selectedRows], [selectedRows]);
 
-  // Build chart data with all projections
+  // Multi-sort handler - Shift+click adds secondary sort, regular click sets primary
+  const handleSort = useCallback((key, event) => {
+    setSortConfigs(prev => {
+      const existingIndex = prev.findIndex(s => s.key === key);
+
+      if (event?.shiftKey) {
+        if (existingIndex >= 0) {
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            direction: updated[existingIndex].direction === 'asc' ? 'desc' : 'asc',
+          };
+          return updated;
+        } else {
+          return [...prev, { key, direction: 'asc' }];
+        }
+      } else {
+        if (existingIndex === 0 && prev.length === 1) {
+          return [{ key, direction: prev[0].direction === 'asc' ? 'desc' : 'asc' }];
+        } else {
+          return [{ key, direction: 'asc' }];
+        }
+      }
+    });
+  }, []);
+
+  const clearSort = useCallback(() => setSortConfigs([]), []);
+
+  const getSortIndicator = useCallback(
+    key => {
+      const sortIndex = sortConfigs.findIndex(s => s.key === key);
+      if (sortIndex === -1) return null;
+      const config = sortConfigs[sortIndex];
+      const priority = sortConfigs.length > 1 ? sortIndex + 1 : null;
+      return { direction: config.direction, priority };
+    },
+    [sortConfigs]
+  );
+
+  // Filter data
+  const filteredData = useMemo(() => {
+    if (filterMode === 'all' || !filterField) return projections;
+
+    return projections.filter(p => {
+      const val = p[filterField];
+      if (val == null) return false;
+      if (filterMode === 'above') return val >= filterThreshold;
+      if (filterMode === 'below') return val <= filterThreshold;
+      if (filterMode === 'between') return val >= filterThreshold && val <= filterThresholdMax;
+      return true;
+    });
+  }, [projections, filterMode, filterField, filterThreshold, filterThresholdMax]);
+
+  // Sort filtered data
+  const sortedData = useMemo(() => {
+    if (sortConfigs.length === 0) return filteredData;
+
+    return [...filteredData].sort((a, b) => {
+      for (const { key, direction } of sortConfigs) {
+        const aVal = a[key];
+        const bVal = b[key];
+
+        if (aVal == null && bVal == null) continue;
+        if (aVal == null) return 1;
+        if (bVal == null) return -1;
+
+        const compare = Number(aVal) - Number(bVal);
+        if (compare !== 0) {
+          return direction === 'asc' ? compare : -compare;
+        }
+      }
+      return 0;
+    });
+  }, [filteredData, sortConfigs]);
+
+  const hasNoResults = filteredData.length === 0 && filterMode !== 'all';
+
+  // Build chart data with filtered/sorted projections
   const chartData = useMemo(() => {
-    return projections.map(p => {
+    return sortedData.map(p => {
       const point = { year: p.year, age: p.age };
       selectedRowsArray.forEach(key => {
         point[key] = p[key];
       });
       return point;
     });
-  }, [projections, selectedRowsArray]);
+  }, [sortedData, selectedRowsArray]);
 
-  // Calculate summary statistics for dashboard
+  // Calculate summary statistics for dashboard (uses filtered data)
   const summaryStats = useMemo(() => {
-    if (projections.length === 0) return {};
+    if (sortedData.length === 0) return {};
 
-    const first = projections[0];
-    const last = projections[projections.length - 1];
+    const first = sortedData[0];
+    const last = sortedData[sortedData.length - 1];
 
     return selectedRowsArray.reduce((acc, key) => {
-      const values = projections.map(p => p[key]).filter(v => v != null && !isNaN(v));
+      const values = sortedData.map(p => p[key]).filter(v => v != null && !isNaN(v));
       if (values.length > 0) {
         acc[key] = {
           first: first[key],
@@ -104,12 +190,12 @@ export function CustomViewModal({ viewType, selectedRows, projections, sections,
       }
       return acc;
     }, {});
-  }, [projections, selectedRowsArray]);
+  }, [sortedData, selectedRowsArray]);
 
   // Copy table data to clipboard
   const copyToClipboard = async () => {
     const headers = ['Year', ...selectedRowsArray.map(key => rowMetadata[key]?.label || key)];
-    const rows = projections.map(p => [
+    const rows = sortedData.map(p => [
       p.year,
       ...selectedRowsArray.map(key => {
         const val = p[key];
@@ -131,7 +217,7 @@ export function CustomViewModal({ viewType, selectedRows, projections, sections,
   // Export as CSV
   const exportCSV = () => {
     const headers = ['Year', ...selectedRowsArray.map(key => rowMetadata[key]?.label || key)];
-    const rows = projections.map(p => [
+    const rows = sortedData.map(p => [
       p.year,
       ...selectedRowsArray.map(key => {
         const val = p[key];
@@ -175,22 +261,149 @@ export function CustomViewModal({ viewType, selectedRows, projections, sections,
     );
   };
 
-  // Render Table View
+  // Render Table View with sortable headers
   const renderTableView = () => (
     <div className="overflow-auto max-h-[60vh]">
+      {/* Filter controls */}
+      <div className="flex items-center gap-2 mb-3 p-2 bg-slate-800 rounded flex-wrap">
+        <Filter className="w-3 h-3 text-slate-400" />
+        <span className="text-xs text-slate-400">Filter by:</span>
+        <select
+          value={filterField || ''}
+          onChange={e => setFilterField(e.target.value || null)}
+          className="bg-slate-700 text-xs rounded px-2 py-1 text-slate-300 border-0"
+        >
+          <option value="">Select field...</option>
+          {selectedRowsArray.map(key => (
+            <option key={key} value={key}>
+              {rowMetadata[key]?.label || key}
+            </option>
+          ))}
+        </select>
+
+        {filterField && (
+          <>
+            <select
+              value={filterMode}
+              onChange={e => setFilterMode(e.target.value)}
+              className="bg-slate-700 text-xs rounded px-2 py-1 text-slate-300 border-0"
+            >
+              <option value="all">Show All</option>
+              <option value="above">Above</option>
+              <option value="below">Below</option>
+              <option value="between">Between</option>
+            </select>
+
+            {filterMode !== 'all' && (
+              <input
+                type="number"
+                value={filterThreshold}
+                onChange={e => setFilterThreshold(Number(e.target.value))}
+                className="bg-slate-700 text-xs rounded px-2 py-1 w-24 text-slate-300 border-0"
+                placeholder={filterMode === 'between' ? 'Min' : 'Threshold'}
+              />
+            )}
+
+            {filterMode === 'between' && (
+              <>
+                <span className="text-xs text-slate-500">to</span>
+                <input
+                  type="number"
+                  value={filterThresholdMax}
+                  onChange={e => setFilterThresholdMax(Number(e.target.value))}
+                  className="bg-slate-700 text-xs rounded px-2 py-1 w-24 text-slate-300 border-0"
+                  placeholder="Max"
+                />
+              </>
+            )}
+
+            {filterMode !== 'all' && (
+              <span className="text-xs text-slate-500">
+                ({filteredData.length} of {projections.length} rows)
+              </span>
+            )}
+          </>
+        )}
+
+        {sortConfigs.length > 0 && (
+          <button
+            onClick={clearSort}
+            className="ml-auto text-xs text-slate-400 hover:text-slate-200 px-2 py-1 bg-slate-700 rounded"
+          >
+            Clear sort
+          </button>
+        )}
+      </div>
+
+      {/* Empty results message */}
+      {hasNoResults && (
+        <div className="p-4 text-center bg-slate-800/50 rounded border border-slate-700 mb-3">
+          <div className="text-slate-400 text-sm mb-1">No rows match your filter</div>
+          <div className="text-slate-500 text-xs">
+            Try adjusting the threshold or selecting "Show All"
+          </div>
+          <button
+            onClick={() => setFilterMode('all')}
+            className="mt-2 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded"
+          >
+            Clear Filter
+          </button>
+        </div>
+      )}
+
       <table className="w-full text-xs">
         <thead className="sticky top-0 bg-slate-900 z-10">
           <tr>
-            <th className="text-left p-2 text-slate-400 border-b border-slate-700">Year</th>
-            {selectedRowsArray.map(key => (
-              <th key={key} className="text-right p-2 text-slate-400 border-b border-slate-700">
-                {rowMetadata[key]?.label || key}
-              </th>
-            ))}
+            <th
+              onClick={e => handleSort('year', e)}
+              className="text-left p-2 text-slate-400 border-b border-slate-700 cursor-pointer hover:bg-slate-800/50 select-none"
+              title="Click to sort, Shift+click to add secondary sort"
+            >
+              <span className="flex items-center gap-1">
+                Year
+                {getSortIndicator('year') && (
+                  <span className="text-blue-400 flex items-center">
+                    {getSortIndicator('year').direction === 'asc' ? (
+                      <ArrowUp className="w-3 h-3" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3" />
+                    )}
+                    {getSortIndicator('year').priority && (
+                      <sup className="text-[10px]">{getSortIndicator('year').priority}</sup>
+                    )}
+                  </span>
+                )}
+              </span>
+            </th>
+            {selectedRowsArray.map(key => {
+              const sortInfo = getSortIndicator(key);
+              return (
+                <th
+                  key={key}
+                  onClick={e => handleSort(key, e)}
+                  className="text-right p-2 text-slate-400 border-b border-slate-700 cursor-pointer hover:bg-slate-800/50 select-none"
+                  title="Click to sort, Shift+click to add secondary sort"
+                >
+                  <span className="flex items-center justify-end gap-1">
+                    {rowMetadata[key]?.label || key}
+                    {sortInfo && (
+                      <span className="text-blue-400 flex items-center">
+                        {sortInfo.direction === 'asc' ? (
+                          <ArrowUp className="w-3 h-3" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3" />
+                        )}
+                        {sortInfo.priority && <sup className="text-[10px]">{sortInfo.priority}</sup>}
+                      </span>
+                    )}
+                  </span>
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
-          {projections.map(p => (
+          {sortedData.map(p => (
             <tr key={p.year} className="hover:bg-slate-800/50">
               <td className="p-2 text-slate-300 border-b border-slate-800">
                 {p.year}

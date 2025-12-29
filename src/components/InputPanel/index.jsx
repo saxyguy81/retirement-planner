@@ -28,6 +28,7 @@ import {
   Percent,
   Heart,
   Users,
+  User,
   Plus,
   X,
   Calendar,
@@ -212,8 +213,9 @@ export function InputPanel({
   updateATHarvest,
   options,
   setOptions,
+  updateSettings,
 }) {
-  const [expanded, setExpanded] = useState(['accounts', 'conversions']);
+  const [expanded, setExpanded] = useState(['profile', 'accounts', 'conversions']);
   const [newExpenseYear, setNewExpenseYear] = useState('');
   const [newHarvestYear, setNewHarvestYear] = useState('');
 
@@ -260,6 +262,65 @@ export function InputPanel({
         Model Inputs
       </div>
       <div className="flex-1 overflow-y-auto">
+        {/* Profile Section */}
+        <InputSection
+          title="Profile"
+          icon={User}
+          expanded={expanded.includes('profile')}
+          onToggle={() => toggle('profile')}
+          color="blue"
+        >
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-slate-500 text-[10px] mb-0.5">Primary Name</label>
+                <input
+                  type="text"
+                  value={settings?.primaryName || ''}
+                  onChange={e => updateSettings?.({ primaryName: e.target.value })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                  placeholder="e.g., John"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-500 text-[10px] mb-0.5">Birth Year</label>
+                <input
+                  type="number"
+                  value={settings?.primaryBirthYear || ''}
+                  onChange={e => updateSettings?.({ primaryBirthYear: parseInt(e.target.value) || 1960 })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                  placeholder="e.g., 1960"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-slate-500 text-[10px] mb-0.5">Spouse Name</label>
+                <input
+                  type="text"
+                  value={settings?.spouseName || ''}
+                  onChange={e => updateSettings?.({ spouseName: e.target.value })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                  placeholder="e.g., Jane"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-500 text-[10px] mb-0.5">Spouse Birth</label>
+                <input
+                  type="number"
+                  value={settings?.spouseBirthYear || ''}
+                  onChange={e => updateSettings?.({ spouseBirthYear: parseInt(e.target.value) || 1962 })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                  placeholder="e.g., 1962"
+                />
+              </div>
+            </div>
+            <div className="text-slate-500 text-[10px] mt-1">
+              Primary birth year is used for age and RMD calculations
+            </div>
+          </div>
+        </InputSection>
+
         {/* Starting Accounts */}
         <InputSection
           title="Starting Accounts"

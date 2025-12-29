@@ -978,7 +978,306 @@ const CALCULATIONS = {
       };
     },
   },
+
+  // =============================================================================
+  // ADDITIONAL FIELDS - INCOME, EXPENSES, RMD DETAILS, ETC.
+  // =============================================================================
+
+  ssAnnual: {
+    name: 'Annual Social Security',
+    concept:
+      'Total Social Security income for the year. Based on monthly benefit x 12, adjusted annually by COLA (Cost of Living Adjustment). This is gross SS before any taxation calculations.',
+    formula:
+      'ssAnnual = Monthly SS x 12 x (1 + COLA)^years\n\nMonthly SS: Your stated monthly benefit at claiming\nCOLA: Annual cost-of-living adjustment (default 2.5%)\nYears: Years since projection start',
+    backOfEnvelope: 'Monthly x 12 x 1.025 each year',
+    compute: (data, params) => {
+      const { ssAnnual, year } = data;
+      const monthlyApprox = ssAnnual / 12;
+      return {
+        formula: `Monthly SS x 12`,
+        values: `${f$(monthlyApprox)}/month x 12`,
+        result: `Annual SS = ${fK(ssAnnual)}`,
+        simple: fK(ssAnnual),
+      };
+    },
+  },
+
+  expenses: {
+    name: 'Annual Expenses',
+    concept:
+      'Total spending needs for the year. Base expenses from inputs, inflated annually, plus any year-specific overrides. This determines how much you need to withdraw from accounts.',
+    formula:
+      'expenses = baseExpenses x (1 + inflation)^years + overrides\n\nBase: Starting annual expenses\nInflation: Annual expense inflation rate\nOverrides: Year-specific adjustments (e.g., one-time purchases)',
+    backOfEnvelope: 'Base x 1.03 each year (3% inflation)',
+    compute: (data, params) => {
+      const { expenses, year } = data;
+      const baseExpenses = params?.annualExpenses || 150000;
+      const yearsFromStart = data.yearsFromStart || 0;
+      const inflatedBase = baseExpenses * Math.pow(1.03, yearsFromStart);
+      return {
+        formula: `Base expenses + inflation adjustments`,
+        values: `${fK(baseExpenses)} base x (1.03)^${yearsFromStart}`,
+        result: `Expenses = ${fK(expenses)}`,
+        simple: fK(expenses),
+      };
+    },
+  },
+
+  rmdFactor: {
+    name: 'RMD Life Expectancy Factor',
+    concept:
+      'IRS Uniform Lifetime Table factor used to calculate Required Minimum Distribution. Decreases with age, meaning larger required withdrawals as you get older.',
+    formula:
+      'From IRS Uniform Lifetime Table:\n\nAge 73: 26.5\nAge 75: 24.6\nAge 80: 20.2\nAge 85: 16.0\nAge 90: 12.2\nAge 95: 8.6\nAge 100: 6.4',
+    backOfEnvelope: 'Roughly 100 - age (simplified)',
+    compute: (data, params) => {
+      const { rmdFactor, age } = data;
+      const rmdPct = rmdFactor > 0 ? (100 / rmdFactor).toFixed(1) : 0;
+      return {
+        formula: `IRS Uniform Lifetime Table lookup`,
+        values: `Age ${age} -> Factor ${rmdFactor?.toFixed(1) || 'N/A'}`,
+        result: age >= 73 ? `RMD % = ${rmdPct}% of IRA` : 'No RMD until age 73',
+        simple: rmdFactor ? `${rmdFactor.toFixed(1)} (${rmdPct}%)` : 'N/A',
+      };
+    },
+  },
+
+  ordinaryIncome: {
+    name: 'Ordinary Income',
+    concept:
+      'Total income taxed at ordinary rates (not capital gains). Includes taxable Social Security, IRA withdrawals, and Roth conversions. This is the base for federal tax brackets.',
+    formula:
+      'ordinaryIncome = taxableSS + iraWithdrawal + rothConversion\n\nNote: AT withdrawals are NOT ordinary income (taxed as cap gains)\nNote: Roth withdrawals are NOT income (tax-free)',
+    backOfEnvelope: 'SS (85%) + IRA withdrawals + conversions',
+    compute: (data, params) => {
+      const { ordinaryIncome, taxableSS, iraWithdrawal, rothConversion } = data;
+      return {
+        formula: `ordinaryIncome = taxableSS + iraWithdrawal + rothConversion`,
+        values: `${fK(taxableSS)} + ${fK(iraWithdrawal)} + ${fK(rothConversion)}`,
+        result: `Ordinary Income = ${fK(ordinaryIncome)}`,
+        simple: fK(ordinaryIncome),
+      };
+    },
+  },
+
+  taxableOrdinary: {
+    name: 'Taxable Ordinary Income',
+    concept:
+      'Ordinary income minus standard deduction. This is the amount actually subject to federal income tax brackets. Higher taxableOrdinary means higher marginal bracket.',
+    formula:
+      'taxableOrdinary = ordinaryIncome - standardDeduction\n\nStandard Deduction (2025 MFJ over 65): ~$32,300\nThis is what flows through tax brackets.',
+    backOfEnvelope: 'ordinaryIncome - $32K deduction',
+    compute: (data, params) => {
+      const { taxableOrdinary, ordinaryIncome, standardDeduction } = data;
+      return {
+        formula: `taxableOrdinary = ordinaryIncome - standardDeduction`,
+        values: `${fK(ordinaryIncome)} - ${fK(standardDeduction || 32000)}`,
+        result: `Taxable = ${fK(taxableOrdinary)}`,
+        simple: fK(Math.max(0, taxableOrdinary)),
+      };
+    },
+  },
+
+  standardDeduction: {
+    name: 'Standard Deduction',
+    concept:
+      'Amount of income excluded from taxation. For married filing jointly over 65, this is significantly higher. Reduces taxable income dollar-for-dollar.',
+    formula:
+      'Standard Deduction (2025 MFJ):\nBase: $30,000\nAge 65+ bonus: +$1,600 each\nBoth 65+: $30,000 + $3,200 = $33,200',
+    backOfEnvelope: '~$32K-$33K for retired couples',
+    compute: (data, params) => {
+      const { standardDeduction, age } = data;
+      return {
+        formula: `MFJ base + age 65+ bonuses`,
+        values: `Age ${age}: Both spouses 65+ assumed`,
+        result: `Standard Deduction = ${fK(standardDeduction || 32000)}`,
+        simple: fK(standardDeduction || 32000),
+      };
+    },
+  },
+
+  costBasisBOY: {
+    name: 'Cost Basis (Beginning of Year)',
+    concept:
+      'The original purchase price of investments in your After-Tax account at start of year. Used to calculate capital gains when you sell. Higher basis = lower taxable gains.',
+    formula:
+      'Cost Basis tracks: Total amount you put IN to AT account\n\nWhen you withdraw, gains = withdrawal x (1 - basis/value)\nBasis is consumed proportionally with withdrawals.',
+    backOfEnvelope: 'Original investment amount (what you paid)',
+    compute: (data, params) => {
+      const { costBasisBOY, atBOY } = data;
+      const basisPct = atBOY > 0 ? ((costBasisBOY / atBOY) * 100).toFixed(0) : 0;
+      const gainsPct = 100 - basisPct;
+      return {
+        formula: `Tracks original investment in AT account`,
+        values: `Basis: ${fK(costBasisBOY)} of ${fK(atBOY)} AT value`,
+        result: `${basisPct}% basis, ${gainsPct}% gains`,
+        simple: `${fK(costBasisBOY)} (${basisPct}% of AT)`,
+      };
+    },
+  },
+
+  costBasisEOY: {
+    name: 'Cost Basis (End of Year)',
+    concept:
+      'Cost basis remaining in After-Tax account at year end. Reduced proportionally when you withdraw. Does not change with market growth (only original cost matters).',
+    formula:
+      'costBasisEOY = costBasisBOY x (1 - withdrawal_rate)\n\nwithdrawal_rate = atWithdrawal / atBOY\nBasis is consumed at same rate as withdrawals.',
+    backOfEnvelope: 'Starting basis minus basis consumed by withdrawals',
+    compute: (data, params) => {
+      const { costBasisEOY, costBasisBOY, atBOY, atWithdrawal } = data;
+      const basisConsumed = costBasisBOY - costBasisEOY;
+      return {
+        formula: `Basis consumed proportionally with withdrawals`,
+        values: atWithdrawal > 0
+          ? `${fK(costBasisBOY)} - ${fK(basisConsumed)} consumed`
+          : `${fK(costBasisBOY)} (no withdrawal)`,
+        result: `EOY Basis = ${fK(costBasisEOY)}`,
+        simple: fK(costBasisEOY),
+      };
+    },
+  },
+
+  effectiveAtReturn: {
+    name: 'After-Tax Effective Return',
+    concept:
+      'Actual growth rate applied to After-Tax account this year. May differ from base return if using risk-adjusted returns. Applied after withdrawals.',
+    formula:
+      'atEOY = (atBOY - atWithdrawal) x (1 + effectiveAtReturn)\n\nBase return adjusted for:\n- Risk allocation mode\n- Account-specific factors',
+    backOfEnvelope: 'Base return (e.g., 6-7%)',
+    compute: (data, params) => {
+      const { effectiveAtReturn, atReturn, atBOY } = data;
+      const returnPct = ((effectiveAtReturn || 0) * 100).toFixed(1);
+      return {
+        formula: `After-tax account growth rate`,
+        values: `${returnPct}% on remaining balance`,
+        result: `Growth = ${fK(atReturn)}`,
+        simple: `${returnPct}%`,
+      };
+    },
+  },
+
+  effectiveIraReturn: {
+    name: 'IRA Effective Return',
+    concept:
+      'Actual growth rate applied to Traditional IRA this year. May differ from base return if using risk-adjusted returns. Applied after withdrawals and conversions.',
+    formula:
+      'iraEOY = (iraBOY - iraWithdrawal - rothConversion) x (1 + effectiveIraReturn)\n\nTax-deferred growth.',
+    backOfEnvelope: 'Base return (e.g., 6-7%)',
+    compute: (data, params) => {
+      const { effectiveIraReturn, iraReturn, iraBOY } = data;
+      const returnPct = ((effectiveIraReturn || 0) * 100).toFixed(1);
+      return {
+        formula: `IRA account growth rate`,
+        values: `${returnPct}% on remaining balance`,
+        result: `Growth = ${fK(iraReturn)}`,
+        simple: `${returnPct}%`,
+      };
+    },
+  },
+
+  effectiveRothReturn: {
+    name: 'Roth Effective Return',
+    concept:
+      'Actual growth rate applied to Roth IRA this year. Growth is completely tax-free. Applied after any withdrawals and additions from conversions.',
+    formula:
+      'rothEOY = (rothBOY - rothWithdrawal + rothConversion) x (1 + effectiveRothReturn)\n\nTax-free growth forever!',
+    backOfEnvelope: 'Base return (e.g., 6-7%)',
+    compute: (data, params) => {
+      const { effectiveRothReturn, rothReturn, rothBOY } = data;
+      const returnPct = ((effectiveRothReturn || 0) * 100).toFixed(1);
+      return {
+        formula: `Roth account growth rate (tax-free!)`,
+        values: `${returnPct}% on balance after conversions`,
+        result: `Growth = ${fK(rothReturn)}`,
+        simple: `${returnPct}% (tax-free)`,
+      };
+    },
+  },
+
+  cumulativeIRMAA: {
+    name: 'Cumulative IRMAA Paid',
+    concept:
+      'Running total of IRMAA Medicare surcharges paid since projection start. Tracks the cost of having high income (MAGI > $206K from 2 years prior).',
+    formula:
+      'cumulativeIRMAA = Sum(Annual IRMAA)\n\nIRMAA is an extra Medicare premium, not a tax.\nBased on MAGI from 2 years prior.',
+    backOfEnvelope: 'Sum of annual IRMAA surcharges',
+    compute: (data, params) => {
+      const { cumulativeIRMAA, irmaaTotal, year } = data;
+      return {
+        formula: `Running sum of annual IRMAA`,
+        values: `Through ${year}: ${fK(cumulativeIRMAA)}`,
+        result: `Total IRMAA = ${fK(cumulativeIRMAA)}`,
+        simple: irmaaTotal > 0
+          ? `~${fK(irmaaTotal)}/year`
+          : `${fK(cumulativeIRMAA)} total`,
+      };
+    },
+  },
+
+  irmaaMAGI: {
+    name: 'IRMAA Lookback MAGI',
+    concept:
+      'Modified Adjusted Gross Income from 2 years prior, used to determine IRMAA bracket. High MAGI = higher Medicare premiums.',
+    formula:
+      'irmaaMAGI = MAGI from (current year - 2)\n\nThresholds (MFJ 2025):\n< $206K: $0 surcharge\n$206K-$258K: Tier 1\n$258K-$322K: Tier 2\netc.',
+    backOfEnvelope: "Your income from 2 years ago determines this year's IRMAA",
+    compute: (data, params) => {
+      const { irmaaMAGI, year, irmaaTotal } = data;
+      const tier = irmaaTotal === 0 ? 'None' :
+                   irmaaMAGI < 258000 ? 'Tier 1' :
+                   irmaaMAGI < 322000 ? 'Tier 2' : 'Tier 3+';
+      return {
+        formula: `MAGI from ${year - 2}`,
+        values: `${fK(irmaaMAGI)} (${tier})`,
+        result: irmaaTotal > 0 ? `Triggered ${fK(irmaaTotal)} IRMAA` : 'Below threshold',
+        simple: fK(irmaaMAGI),
+      };
+    },
+  },
+
+  irmaaPartB: {
+    name: 'IRMAA Part B Surcharge',
+    concept:
+      'Income-related surcharge on Medicare Part B (medical insurance). Added to base premium when MAGI exceeds thresholds. Per person, per year.',
+    formula:
+      'Part B Surcharge (per person annually):\nTier 1 ($206K-$258K): ~$1,000\nTier 2 ($258K-$322K): ~$2,500\nTier 3 ($322K-$386K): ~$4,000\netc.',
+    backOfEnvelope: 'Doubles your Part B premium at higher tiers',
+    compute: (data, params) => {
+      const { irmaaPartB } = data;
+      const perPerson = irmaaPartB / 2;
+      const monthly = perPerson / 12;
+      return {
+        formula: `Part B surcharge x 2 people x 12 months`,
+        values: `${f$(monthly)}/person/month`,
+        result: `Annual Part B = ${fK(irmaaPartB)}`,
+        simple: fK(irmaaPartB),
+      };
+    },
+  },
+
+  irmaaPartD: {
+    name: 'IRMAA Part D Surcharge',
+    concept:
+      'Income-related surcharge on Medicare Part D (prescription drugs). Smaller than Part B but adds up. Per person, per year.',
+    formula:
+      'Part D Surcharge (per person annually):\nTier 1: ~$150\nTier 2: ~$400\nTier 3: ~$650\netc.',
+    backOfEnvelope: 'Smaller than Part B, ~10-20% of Part B surcharge',
+    compute: (data, params) => {
+      const { irmaaPartD, irmaaPartB } = data;
+      const perPerson = irmaaPartD / 2;
+      const pctOfB = irmaaPartB > 0 ? ((irmaaPartD / irmaaPartB) * 100).toFixed(0) : 0;
+      return {
+        formula: `Part D surcharge x 2 people x 12 months`,
+        values: `${f$(perPerson)}/person/year`,
+        result: `Annual Part D = ${fK(irmaaPartD)} (${pctOfB}% of Part B)`,
+        simple: fK(irmaaPartD),
+      };
+    },
+  },
 };
+
+// Export CALCULATIONS for testing
+export { CALCULATIONS };
 
 /**
  * CalculationInspector - Unified single-page view showing all calculation info
