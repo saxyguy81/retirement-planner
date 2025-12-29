@@ -19,9 +19,9 @@ const DEFAULT_OPTIONS = { iterativeTax: true, maxIterations: 5 };
 const DEFAULT_SETTINGS = {
   // User Profile
   primaryName: 'Ira',
-  primaryBirthYear: 1955,
+  primaryBirthYear: 1955,  // 2/17/55
   spouseName: 'Carol',
-  spouseBirthYear: 1957,
+  spouseBirthYear: 1954,   // 7/17/54
 
   // Tax Settings
   taxYear: 2024,
