@@ -13,18 +13,13 @@
  * @returns {string} Formatted string
  */
 export function formatCurrency(value, options = {}) {
-  const { 
-    abbreviate = true, 
-    decimals = 0,
-    showSign = false,
-    prefix = '$'
-  } = options;
-  
+  const { abbreviate = true, decimals = 0, showSign = false, prefix = '$' } = options;
+
   if (value == null || isNaN(value)) return `${prefix}0`;
-  
+
   const absValue = Math.abs(value);
-  const sign = value < 0 ? '-' : (showSign && value > 0 ? '+' : '');
-  
+  const sign = value < 0 ? '-' : showSign && value > 0 ? '+' : '';
+
   if (abbreviate) {
     if (absValue >= 1e9) {
       return `${sign}${prefix}${(absValue / 1e9).toFixed(1)}B`;
@@ -34,7 +29,7 @@ export function formatCurrency(value, options = {}) {
       return `${sign}${prefix}${(absValue / 1e3).toFixed(decimals)}K`;
     }
   }
-  
+
   return `${sign}${prefix}${Math.round(absValue).toLocaleString()}`;
 }
 
@@ -64,10 +59,10 @@ export function fmtFull$(value) {
  */
 export function formatPercent(value, options = {}) {
   const { decimals = 1, showSign = false } = options;
-  
+
   if (value == null || isNaN(value)) return '0%';
-  
-  const sign = value < 0 ? '' : (showSign && value > 0 ? '+' : '');
+
+  const sign = value < 0 ? '' : showSign && value > 0 ? '+' : '';
   return `${sign}${(value * 100).toFixed(decimals)}%`;
 }
 
@@ -110,13 +105,13 @@ export function formatYearAge(year, age) {
  * Get color for a value based on positive/negative/neutral
  */
 export function getValueColor(value, options = {}) {
-  const { 
+  const {
     positiveClass = 'text-emerald-400',
     negativeClass = 'text-rose-400',
     neutralClass = 'text-slate-300',
-    threshold = 0
+    threshold = 0,
   } = options;
-  
+
   if (value > threshold) return positiveClass;
   if (value < -threshold) return negativeClass;
   return neutralClass;
@@ -159,17 +154,17 @@ export function formatProjectionValue(key, value) {
   if (key.includes('Percent') || key.includes('Return') || key.includes('Rate')) {
     return fmtPct(value);
   }
-  
+
   // Factor fields (like RMD factor)
   if (key === 'rmdFactor') {
     return value > 0 ? value.toFixed(1) : '-';
   }
-  
+
   // Iteration count
   if (key === 'iterations') {
     return value.toString();
   }
-  
+
   // Default: currency
   return fmt$(value);
 }
@@ -183,16 +178,18 @@ export function formatProjectionValue(key, value) {
  */
 export function projectionsToCSV(projections, columns) {
   const headers = columns.map(c => c.label).join(',');
-  const rows = projections.map(p => 
-    columns.map(c => {
-      const value = p[c.key];
-      if (typeof value === 'number') {
-        return c.format === '%' ? (value * 100).toFixed(2) : value.toString();
-      }
-      return value?.toString() || '';
-    }).join(',')
+  const rows = projections.map(p =>
+    columns
+      .map(c => {
+        const value = p[c.key];
+        if (typeof value === 'number') {
+          return c.format === '%' ? (value * 100).toFixed(2) : value.toString();
+        }
+        return value?.toString() || '';
+      })
+      .join(',')
   );
-  
+
   return [headers, ...rows].join('\n');
 }
 
@@ -200,9 +197,13 @@ export function projectionsToCSV(projections, columns) {
  * Convert projections to JSON for export
  */
 export function projectionsToJSON(projections, params) {
-  return JSON.stringify({
-    generatedAt: new Date().toISOString(),
-    params,
-    projections,
-  }, null, 2);
+  return JSON.stringify(
+    {
+      generatedAt: new Date().toISOString(),
+      params,
+      projections,
+    },
+    null,
+    2
+  );
 }

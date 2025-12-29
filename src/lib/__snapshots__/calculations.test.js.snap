@@ -1,0 +1,134 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Baseline Scenario Snapshots > Complex multi-heir scenarios > matches baseline for 3-heir wealth transfer 1`] = `
+{
+  "details": [
+    {
+      "grossInheritance": 1750000,
+      "name": "Child1",
+      "netValue": 1377000,
+      "rates": {
+        "combined": 0.373,
+        "federal": 0.24,
+        "state": 0.133,
+      },
+      "split": 0.5,
+      "taxOnIra": 373000,
+    },
+    {
+      "grossInheritance": 1050000,
+      "name": "Child2",
+      "netValue": 888300,
+      "rates": {
+        "combined": 0.2695,
+        "federal": 0.22,
+        "state": 0.0495,
+      },
+      "split": 0.3,
+      "taxOnIra": 161700,
+    },
+    {
+      "grossInheritance": 700000,
+      "name": "Grandchild",
+      "netValue": 652000,
+      "rates": {
+        "combined": 0.12,
+        "federal": 0.12,
+        "state": 0,
+      },
+      "split": 0.2,
+      "taxOnIra": 48000,
+    },
+  ],
+  "totalValue": 2917300,
+}
+`;
+
+exports[`Baseline Scenario Snapshots > Risk allocation scenarios > matches baseline for large portfolio allocation 1`] = `
+{
+  "at": {
+    "high": 0,
+    "low": 500000,
+    "mod": 0,
+  },
+  "ira": {
+    "high": 0,
+    "low": 3000000,
+    "mod": 3000000,
+  },
+  "portfolio": {
+    "high": 2500000,
+    "low": 3500000,
+    "mod": 3000000,
+  },
+  "roth": {
+    "high": 2500000,
+    "low": 0,
+    "mod": 0,
+  },
+}
+`;
+
+exports[`Baseline Scenario Snapshots > calculateAllTaxes > matches baseline for high Roth conversion year 1`] = `
+{
+  "capitalGains": 50000,
+  "effectiveRate": 0.23566513056835636,
+  "federalLTCGTax": 9248,
+  "federalOrdinaryTax": 139795,
+  "grossOrdinaryIncome": 601000,
+  "niit": 1900,
+  "standardDeduction": 32300,
+  "stateTax": 2475,
+  "taxableOrdinary": 568700,
+  "taxableSS": 51000,
+  "totalTax": 153418,
+}
+`;
+
+exports[`Baseline Scenario Snapshots > calculateAllTaxes > matches baseline for survivor (Single) scenario 1`] = `
+{
+  "capitalGains": 20000,
+  "effectiveRate": 0.14486012526096034,
+  "federalLTCGTax": 3000,
+  "federalOrdinaryTax": 13357,
+  "grossOrdinaryIncome": 99750,
+  "niit": 0,
+  "standardDeduction": 16550,
+  "stateTax": 990,
+  "taxableOrdinary": 83200,
+  "taxableSS": 29750,
+  "totalTax": 17347,
+}
+`;
+
+exports[`Baseline Scenario Snapshots > calculateAllTaxes > matches baseline for typical MFJ retiree scenario 1`] = `
+{
+  "capitalGains": 30000,
+  "effectiveRate": 0.10339672131147541,
+  "federalLTCGTax": 3923,
+  "federalOrdinaryTax": 10360,
+  "grossOrdinaryIncome": 122500,
+  "niit": 0,
+  "standardDeduction": 32300,
+  "stateTax": 1485,
+  "taxableOrdinary": 90200,
+  "taxableSS": 42500,
+  "totalTax": 15768,
+}
+`;
+
+exports[`Baseline Scenario Snapshots > calculateAllTaxes > matches baseline with bracket inflation 1`] = `
+{
+  "capitalGains": 40000,
+  "effectiveRate": 0.1517061946902655,
+  "federalLTCGTax": 6000,
+  "federalOrdinaryTax": 33642,
+  "grossOrdinaryIncome": 242500,
+  "niit": 1235,
+  "standardDeduction": 37445,
+  "stateTax": 1980,
+  "taxableOrdinary": 205055,
+  "taxableSS": 42500,
+  "totalTax": 42857,
+}
+`;

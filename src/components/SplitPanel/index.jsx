@@ -9,8 +9,8 @@
  * - Remembers panel sizes
  */
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { GripVertical, Maximize2, Minimize2, X } from 'lucide-react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 
 const MIN_PANEL_WIDTH = 200; // Minimum width in pixels
 
@@ -19,7 +19,7 @@ export function SplitPanel({
   views,
   defaultLeftView = 'projections',
   defaultRightView = 'charts',
-  onViewChange
+  onViewChange,
 }) {
   const [leftView, setLeftView] = useState(defaultLeftView);
   const [rightView, setRightView] = useState(defaultRightView);
@@ -29,24 +29,27 @@ export function SplitPanel({
   const containerRef = useRef(null);
 
   // Handle drag start
-  const handleDragStart = useCallback((e) => {
+  const handleDragStart = useCallback(e => {
     e.preventDefault();
     setIsDragging(true);
   }, []);
 
   // Handle drag
-  const handleDrag = useCallback((e) => {
-    if (!isDragging || !containerRef.current) return;
+  const handleDrag = useCallback(
+    e => {
+      if (!isDragging || !containerRef.current) return;
 
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percentage = (x / rect.width) * 100;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const percentage = (x / rect.width) * 100;
 
-    // Clamp between min widths
-    const minPercentage = (MIN_PANEL_WIDTH / rect.width) * 100;
-    const maxPercentage = 100 - minPercentage;
-    setSplitPosition(Math.max(minPercentage, Math.min(maxPercentage, percentage)));
-  }, [isDragging]);
+      // Clamp between min widths
+      const minPercentage = (MIN_PANEL_WIDTH / rect.width) * 100;
+      const maxPercentage = 100 - minPercentage;
+      setSplitPosition(Math.max(minPercentage, Math.min(maxPercentage, percentage)));
+    },
+    [isDragging]
+  );
 
   // Handle drag end
   const handleDragEnd = useCallback(() => {
@@ -78,7 +81,7 @@ export function SplitPanel({
   };
 
   // Get the view component for a panel
-  const getViewComponent = (viewId) => {
+  const getViewComponent = viewId => {
     const view = views.find(v => v.id === viewId);
     return view ? view.component : null;
   };
@@ -87,15 +90,11 @@ export function SplitPanel({
   const ViewSelector = ({ value, onChange, exclude }) => (
     <select
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={e => onChange(e.target.value)}
       className="bg-slate-800 text-xs rounded px-2 py-1 border border-slate-700 focus:border-blue-500 focus:outline-none"
     >
       {views.map(view => (
-        <option
-          key={view.id}
-          value={view.id}
-          disabled={view.id === exclude}
-        >
+        <option key={view.id} value={view.id} disabled={view.id === exclude}>
           {view.label}
         </option>
       ))}
@@ -113,16 +112,12 @@ export function SplitPanel({
         className="flex flex-col overflow-hidden bg-slate-950"
         style={{
           width: rightCollapsed ? '100%' : `${splitPosition}%`,
-          transition: isDragging ? 'none' : 'width 0.2s ease'
+          transition: isDragging ? 'none' : 'width 0.2s ease',
         }}
       >
         {/* Left panel header */}
         <div className="h-8 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-2 shrink-0">
-          <ViewSelector
-            value={leftView}
-            onChange={setLeftView}
-            exclude={rightView}
-          />
+          <ViewSelector value={leftView} onChange={setLeftView} exclude={rightView} />
           {rightCollapsed && (
             <button
               onClick={toggleRightPanel}
@@ -134,9 +129,7 @@ export function SplitPanel({
           )}
         </div>
         {/* Left panel content */}
-        <div className="flex-1 overflow-hidden">
-          {getViewComponent(leftView)}
-        </div>
+        <div className="flex-1 overflow-hidden">{getViewComponent(leftView)}</div>
       </div>
 
       {/* Resize handle */}
@@ -157,16 +150,12 @@ export function SplitPanel({
           className="flex flex-col overflow-hidden bg-slate-950"
           style={{
             width: `${100 - splitPosition}%`,
-            transition: isDragging ? 'none' : 'width 0.2s ease'
+            transition: isDragging ? 'none' : 'width 0.2s ease',
           }}
         >
           {/* Right panel header */}
           <div className="h-8 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-2 shrink-0">
-            <ViewSelector
-              value={rightView}
-              onChange={setRightView}
-              exclude={leftView}
-            />
+            <ViewSelector value={rightView} onChange={setRightView} exclude={leftView} />
             <button
               onClick={toggleRightPanel}
               className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200"
@@ -176,9 +165,7 @@ export function SplitPanel({
             </button>
           </div>
           {/* Right panel content */}
-          <div className="flex-1 overflow-hidden">
-            {getViewComponent(rightView)}
-          </div>
+          <div className="flex-1 overflow-hidden">{getViewComponent(rightView)}</div>
         </div>
       )}
     </div>

@@ -8,8 +8,8 @@
  * - Custom year selection with multi-select
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Calendar, Type } from 'lucide-react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 
 // Preset configurations
 const PRESETS = {
@@ -23,7 +23,10 @@ const PRESETS = {
 // Parse text input like "2026-2030, 2040, 2055"
 function parseYearRanges(text, allYears) {
   const years = new Set();
-  const parts = text.split(',').map(s => s.trim()).filter(Boolean);
+  const parts = text
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
 
   for (const part of parts) {
     if (part.includes('-')) {
@@ -75,11 +78,11 @@ function formatYearRanges(years) {
 }
 
 export function YearSelector({
-  years,           // Array of all available years
-  selectedYears,   // Currently selected years
-  onChange,        // Callback when selection changes
-  mode,            // Current mode
-  onModeChange,    // Callback when mode changes
+  years, // Array of all available years
+  selectedYears, // Currently selected years
+  onChange, // Callback when selection changes
+  mode, // Current mode
+  onModeChange, // Callback when mode changes
 }) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
@@ -95,33 +98,36 @@ export function YearSelector({
   }, [selectedYears, mode, isDragging]);
 
   // Generate years based on mode
-  const getYearsForMode = useCallback((m) => {
-    if (!years || years.length === 0) return [];
-    if (m === 'all') return years;
-    if (m === 'brief') {
-      return [years[0], years[1], years[years.length - 1]].filter(Boolean);
-    }
-    if (m === 'moderate') {
-      const result = [years[0], years[1], years[2]];
-      const idx10 = years.findIndex(y => y >= years[0] + 10);
-      const idx20 = years.findIndex(y => y >= years[0] + 20);
-      const idx30 = years.findIndex(y => y >= years[0] + 30);
-      if (idx10 >= 0) result.push(years[idx10]);
-      if (idx20 >= 0) result.push(years[idx20]);
-      if (idx30 >= 0) result.push(years[idx30]);
-      if (!result.includes(years[years.length - 1])) {
-        result.push(years[years.length - 1]);
+  const getYearsForMode = useCallback(
+    m => {
+      if (!years || years.length === 0) return [];
+      if (m === 'all') return years;
+      if (m === 'brief') {
+        return [years[0], years[1], years[years.length - 1]].filter(Boolean);
       }
-      return [...new Set(result)].filter(Boolean);
-    }
-    if (m === 'detailed') {
-      return years.filter((_, i) => i < 5 || i % 5 === 0 || i === years.length - 1);
-    }
-    return selectedYears;
-  }, [years, selectedYears]);
+      if (m === 'moderate') {
+        const result = [years[0], years[1], years[2]];
+        const idx10 = years.findIndex(y => y >= years[0] + 10);
+        const idx20 = years.findIndex(y => y >= years[0] + 20);
+        const idx30 = years.findIndex(y => y >= years[0] + 30);
+        if (idx10 >= 0) result.push(years[idx10]);
+        if (idx20 >= 0) result.push(years[idx20]);
+        if (idx30 >= 0) result.push(years[idx30]);
+        if (!result.includes(years[years.length - 1])) {
+          result.push(years[years.length - 1]);
+        }
+        return [...new Set(result)].filter(Boolean);
+      }
+      if (m === 'detailed') {
+        return years.filter((_, i) => i < 5 || i % 5 === 0 || i === years.length - 1);
+      }
+      return selectedYears;
+    },
+    [years, selectedYears]
+  );
 
   // Handle mode change
-  const handleModeChange = (newMode) => {
+  const handleModeChange = newMode => {
     onModeChange(newMode);
     if (newMode !== 'custom') {
       onChange(getYearsForMode(newMode));
@@ -129,7 +135,7 @@ export function YearSelector({
   };
 
   // Handle year click (toggle in custom mode)
-  const handleYearClick = (year) => {
+  const handleYearClick = year => {
     if (mode !== 'custom') {
       onModeChange('custom');
       onChange([...selectedYears, year].sort((a, b) => a - b));
@@ -151,7 +157,7 @@ export function YearSelector({
     setDragStart(year);
   };
 
-  const handleDragEnter = (year) => {
+  const handleDragEnter = year => {
     if (!isDragging || dragStart === null) return;
     const start = Math.min(dragStart, year);
     const end = Math.max(dragStart, year);
@@ -174,7 +180,7 @@ export function YearSelector({
     setShowTextInput(false);
   };
 
-  const handleTextKeyDown = (e) => {
+  const handleTextKeyDown = e => {
     if (e.key === 'Enter') {
       handleTextSubmit();
     } else if (e.key === 'Escape') {
@@ -189,11 +195,13 @@ export function YearSelector({
         <Calendar className="w-3 h-3 text-slate-400" />
         <select
           value={mode}
-          onChange={(e) => handleModeChange(e.target.value)}
+          onChange={e => handleModeChange(e.target.value)}
           className="bg-slate-800 rounded px-1.5 py-0.5 text-xs border border-slate-700"
         >
           {Object.entries(PRESETS).map(([key, { label }]) => (
-            <option key={key} value={key}>{label}</option>
+            <option key={key} value={key}>
+              {label}
+            </option>
           ))}
         </select>
       </div>
@@ -215,11 +223,9 @@ export function YearSelector({
             <div key={year} className="relative group">
               <button
                 className={`h-4 transition-all ${
-                  isSelected
-                    ? 'bg-blue-500 w-2'
-                    : 'bg-slate-700 hover:bg-slate-600 w-1.5'
+                  isSelected ? 'bg-blue-500 w-2' : 'bg-slate-700 hover:bg-slate-600 w-1.5'
                 } ${isFirst || isLast ? 'rounded-sm' : ''}`}
-                onMouseDown={(e) => handleDragStart(year, e)}
+                onMouseDown={e => handleDragStart(year, e)}
                 onMouseEnter={() => handleDragEnter(year)}
                 onClick={() => !isDragging && handleYearClick(year)}
                 title={`${year}${isSelected ? ' (selected)' : ''}`}
@@ -250,7 +256,7 @@ export function YearSelector({
           <input
             type="text"
             value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
+            onChange={e => setTextInput(e.target.value)}
             onKeyDown={handleTextKeyDown}
             onBlur={handleTextSubmit}
             placeholder="2026-2030, 2040, 2055"
@@ -261,9 +267,7 @@ export function YearSelector({
       )}
 
       {/* Year count */}
-      <span className="text-slate-500 text-xs">
-        {selectedYears.length} yrs
-      </span>
+      <span className="text-slate-500 text-xs">{selectedYears.length} yrs</span>
     </div>
   );
 }

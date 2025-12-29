@@ -5,8 +5,9 @@
  * Supports both Single and Married Filing Jointly (MFJ) thresholds.
  */
 
-import React, { useState, useMemo } from 'react';
 import { Plus, Trash2, RotateCcw, AlertCircle } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+
 import {
   FEDERAL_BRACKETS_MFJ_2024,
   FEDERAL_BRACKETS_SINGLE_2024,
@@ -100,7 +101,7 @@ export function TaxBracketEditor({ brackets, onUpdate, taxYear }) {
   // Add a new bracket
   const addBracket = () => {
     const lastBracket = activeBrackets[activeBrackets.length - 1];
-    const newRate = lastBracket ? Math.min(lastBracket.rate + 0.05, 0.99) : 0.10;
+    const newRate = lastBracket ? Math.min(lastBracket.rate + 0.05, 0.99) : 0.1;
     const newSingleThreshold = lastBracket ? lastBracket.singleThreshold + 50000 : 0;
     const newMfjThreshold = lastBracket ? lastBracket.mfjThreshold + 100000 : 0;
 
@@ -120,7 +121,7 @@ export function TaxBracketEditor({ brackets, onUpdate, taxYear }) {
   };
 
   // Remove a bracket
-  const removeBracket = (index) => {
+  const removeBracket = index => {
     if (activeBrackets.length <= 1) return; // Keep at least one bracket
 
     const newBrackets = activeBrackets.filter((_, i) => i !== index);
@@ -154,7 +155,7 @@ export function TaxBracketEditor({ brackets, onUpdate, taxYear }) {
     updateBracket(rowIndex, field, value);
   };
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = e => {
     if (e.key === 'Enter' || e.key === 'Escape') {
       setEditingCell(null);
     }
@@ -220,7 +221,7 @@ export function TaxBracketEditor({ brackets, onUpdate, taxYear }) {
                       type="text"
                       defaultValue={(bracket.rate * 100).toFixed(0)}
                       onBlur={handleCellBlur}
-                      onChange={(e) => handleCellChange(index, 'rate', e.target.value)}
+                      onChange={e => handleCellChange(index, 'rate', e.target.value)}
                       onKeyDown={handleKeyDown}
                       autoFocus
                       className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
@@ -242,7 +243,7 @@ export function TaxBracketEditor({ brackets, onUpdate, taxYear }) {
                       type="text"
                       defaultValue={bracket.singleThreshold}
                       onBlur={handleCellBlur}
-                      onChange={(e) => handleCellChange(index, 'singleThreshold', e.target.value)}
+                      onChange={e => handleCellChange(index, 'singleThreshold', e.target.value)}
                       onKeyDown={handleKeyDown}
                       autoFocus
                       className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
@@ -264,7 +265,7 @@ export function TaxBracketEditor({ brackets, onUpdate, taxYear }) {
                       type="text"
                       defaultValue={bracket.mfjThreshold}
                       onBlur={handleCellBlur}
-                      onChange={(e) => handleCellChange(index, 'mfjThreshold', e.target.value)}
+                      onChange={e => handleCellChange(index, 'mfjThreshold', e.target.value)}
                       onKeyDown={handleKeyDown}
                       autoFocus
                       className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
@@ -289,7 +290,9 @@ export function TaxBracketEditor({ brackets, onUpdate, taxYear }) {
                         ? 'text-slate-600 cursor-not-allowed'
                         : 'text-slate-400 hover:text-red-400 hover:bg-slate-700'
                     }`}
-                    title={activeBrackets.length <= 1 ? 'Cannot delete last bracket' : 'Delete bracket'}
+                    title={
+                      activeBrackets.length <= 1 ? 'Cannot delete last bracket' : 'Delete bracket'
+                    }
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

@@ -7,17 +7,35 @@
  * - Risk allocation recommendations
  */
 
+import {
+  Zap,
+  Play,
+  Loader2,
+  CheckCircle2,
+  Target,
+  TrendingUp,
+  DollarSign,
+  Users,
+  BarChart2,
+  AlertCircle,
+  RefreshCw,
+} from 'lucide-react';
 import React, { useState, useMemo, useCallback } from 'react';
 import {
-  Zap, Play, Loader2, CheckCircle2, Target, TrendingUp,
-  DollarSign, Users, BarChart2, AlertCircle, RefreshCw
-} from 'lucide-react';
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
+
 import { generateProjections, calculateSummary } from '../../lib';
 import { fmt$, fmtPct } from '../../lib/formatters';
-import {
-  LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
-} from 'recharts';
 
 // Optimization objectives
 const OBJECTIVES = [
@@ -178,7 +196,11 @@ export function Optimization({ params, projections, summary, updateParams }) {
     }));
   }, [results, objective]);
 
-  const tooltipStyle = { backgroundColor: '#1e293b', border: '1px solid #334155', fontSize: '11px' };
+  const tooltipStyle = {
+    backgroundColor: '#1e293b',
+    border: '1px solid #334155',
+    fontSize: '11px',
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden text-xs">
@@ -192,9 +214,7 @@ export function Optimization({ params, projections, summary, updateParams }) {
           onClick={runOptimization}
           disabled={isRunning}
           className={`px-3 py-1.5 rounded flex items-center gap-2 ${
-            isRunning
-              ? 'bg-slate-700 text-slate-400'
-              : 'bg-amber-600 text-white hover:bg-amber-500'
+            isRunning ? 'bg-slate-700 text-slate-400' : 'bg-amber-600 text-white hover:bg-amber-500'
           }`}
         >
           {isRunning ? (
@@ -230,10 +250,14 @@ export function Optimization({ params, projections, summary, updateParams }) {
                       : 'border-slate-700 hover:border-slate-600'
                   }`}
                 >
-                  <obj.icon className={`w-4 h-4 mb-1 ${
-                    selectedObjective === obj.id ? 'text-amber-400' : 'text-slate-400'
-                  }`} />
-                  <div className={selectedObjective === obj.id ? 'text-amber-200' : 'text-slate-200'}>
+                  <obj.icon
+                    className={`w-4 h-4 mb-1 ${
+                      selectedObjective === obj.id ? 'text-amber-400' : 'text-slate-400'
+                    }`}
+                  />
+                  <div
+                    className={selectedObjective === obj.id ? 'text-amber-200' : 'text-slate-200'}
+                  >
                     {obj.name}
                   </div>
                   <div className="text-slate-500 text-xs mt-0.5">{obj.description}</div>
@@ -249,7 +273,7 @@ export function Optimization({ params, projections, summary, updateParams }) {
                   min="0"
                   max="100"
                   value={targetRoth * 100}
-                  onChange={(e) => setTargetRoth(e.target.value / 100)}
+                  onChange={e => setTargetRoth(e.target.value / 100)}
                   className="flex-1"
                 />
                 <span className="text-amber-400 font-medium w-12">{fmtPct(targetRoth)}</span>
@@ -266,9 +290,7 @@ export function Optimization({ params, projections, summary, updateParams }) {
                   key={year}
                   onClick={() => {
                     setConversionYears(prev =>
-                      prev.includes(year)
-                        ? prev.filter(y => y !== year)
-                        : [...prev, year].sort()
+                      prev.includes(year) ? prev.filter(y => y !== year) : [...prev, year].sort()
                     );
                   }}
                   className={`px-2 py-1 rounded border ${
@@ -289,11 +311,15 @@ export function Optimization({ params, projections, summary, updateParams }) {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <div className="text-slate-400 mb-1">Ending Portfolio</div>
-                <div className="text-lg font-bold text-emerald-400">{fmt$(summary.endingPortfolio)}</div>
+                <div className="text-lg font-bold text-emerald-400">
+                  {fmt$(summary.endingPortfolio)}
+                </div>
               </div>
               <div>
                 <div className="text-slate-400 mb-1">Heir Value</div>
-                <div className="text-lg font-bold text-blue-400">{fmt$(summary.endingHeirValue)}</div>
+                <div className="text-lg font-bold text-blue-400">
+                  {fmt$(summary.endingHeirValue)}
+                </div>
               </div>
               <div>
                 <div className="text-slate-400 mb-1">Total Tax</div>
@@ -301,7 +327,9 @@ export function Optimization({ params, projections, summary, updateParams }) {
               </div>
               <div>
                 <div className="text-slate-400 mb-1">Final Roth %</div>
-                <div className="text-lg font-bold text-purple-400">{fmtPct(summary.finalRothPercent)}</div>
+                <div className="text-lg font-bold text-purple-400">
+                  {fmtPct(summary.finalRothPercent)}
+                </div>
               </div>
             </div>
             <div className="mt-3 pt-3 border-t border-slate-700">
@@ -345,11 +373,15 @@ export function Optimization({ params, projections, summary, updateParams }) {
                   </div>
                   <div>
                     <div className="text-slate-400 text-xs mb-1">Ending Portfolio</div>
-                    <div className="text-slate-200">{fmt$(results.best.summary.endingPortfolio)}</div>
+                    <div className="text-slate-200">
+                      {fmt$(results.best.summary.endingPortfolio)}
+                    </div>
                   </div>
                   <div>
                     <div className="text-slate-400 text-xs mb-1">Heir Value</div>
-                    <div className="text-slate-200">{fmt$(results.best.summary.endingHeirValue)}</div>
+                    <div className="text-slate-200">
+                      {fmt$(results.best.summary.endingHeirValue)}
+                    </div>
                   </div>
                   <div>
                     <div className="text-slate-400 text-xs mb-1">Total Tax</div>
@@ -362,8 +394,7 @@ export function Optimization({ params, projections, summary, updateParams }) {
                         ? `+${fmt$(results.best.score - results.current.score)}`
                         : objective.better === 'lower'
                           ? `-${fmt$(results.current.score - results.best.score)}`
-                          : `${fmtPct(Math.abs(results.best.score - targetRoth))} from target`
-                      }
+                          : `${fmtPct(Math.abs(results.best.score - targetRoth))} from target`}
                     </div>
                   </div>
                 </div>
@@ -372,7 +403,10 @@ export function Optimization({ params, projections, summary, updateParams }) {
                   <div className="text-slate-400 text-xs mb-2">Recommended Conversions:</div>
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(results.best.conversions || {}).map(([year, amount]) => (
-                      <span key={year} className="px-2 py-1 bg-emerald-800/30 rounded text-emerald-200">
+                      <span
+                        key={year}
+                        className="px-2 py-1 bg-emerald-800/30 rounded text-emerald-200"
+                      >
                         {year}: {fmt$(amount)}
                       </span>
                     ))}
@@ -392,14 +426,20 @@ export function Optimization({ params, projections, summary, updateParams }) {
                   <BarChart data={chartData} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                     <XAxis type="number" stroke="#64748b" fontSize={10} />
-                    <YAxis dataKey="name" type="category" stroke="#64748b" fontSize={10} width={150} />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      stroke="#64748b"
+                      fontSize={10}
+                      width={150}
+                    />
                     <Tooltip
                       contentStyle={tooltipStyle}
                       formatter={(value, name, props) => [
                         objective.metric.includes('Percent')
                           ? `${value.toFixed(1)}%`
                           : `$${value.toFixed(2)}M`,
-                        props.payload.fullName
+                        props.payload.fullName,
                       ]}
                     />
                     <Bar dataKey="value" fill="#10b981" />
@@ -418,9 +458,15 @@ export function Optimization({ params, projections, summary, updateParams }) {
                       <tr className="text-left">
                         <th className="py-2 px-3 text-slate-400 font-normal">Rank</th>
                         <th className="py-2 px-3 text-slate-400 font-normal">Strategy</th>
-                        <th className="py-2 px-3 text-slate-400 font-normal text-right">End Portfolio</th>
-                        <th className="py-2 px-3 text-slate-400 font-normal text-right">Heir Value</th>
-                        <th className="py-2 px-3 text-slate-400 font-normal text-right">Total Tax</th>
+                        <th className="py-2 px-3 text-slate-400 font-normal text-right">
+                          End Portfolio
+                        </th>
+                        <th className="py-2 px-3 text-slate-400 font-normal text-right">
+                          Heir Value
+                        </th>
+                        <th className="py-2 px-3 text-slate-400 font-normal text-right">
+                          Total Tax
+                        </th>
                         <th className="py-2 px-3 text-slate-400 font-normal text-right">Roth %</th>
                       </tr>
                     </thead>
@@ -464,24 +510,23 @@ export function Optimization({ params, projections, summary, updateParams }) {
                   <div>
                     <div className="text-amber-300 font-medium mb-1">Optimization Insights</div>
                     <ul className="text-slate-300 space-y-1 list-disc list-inside">
-                      <li>
-                        Tested {results.scenarios.length} different conversion strategies
-                      </li>
+                      <li>Tested {results.scenarios.length} different conversion strategies</li>
                       <li>
                         Best strategy improves {objective.name.toLowerCase()} by{' '}
                         {objective.better === 'higher'
                           ? fmt$(results.best.score - results.current.score)
                           : objective.better === 'lower'
                             ? fmt$(results.current.score - results.best.score)
-                            : fmtPct(Math.abs(results.best.score - targetRoth))
-                        }
+                            : fmtPct(Math.abs(results.best.score - targetRoth))}
                       </li>
                       <li>
-                        Range of outcomes: {fmt$(results.worst.summary.endingHeirValue)} to {fmt$(results.best.summary.endingHeirValue)} heir value
+                        Range of outcomes: {fmt$(results.worst.summary.endingHeirValue)} to{' '}
+                        {fmt$(results.best.summary.endingHeirValue)} heir value
                       </li>
                       {results.best.summary.shortfallYears?.length > 0 && (
                         <li className="text-amber-400">
-                          Warning: Optimal strategy has shortfall in {results.best.summary.shortfallYears.length} years
+                          Warning: Optimal strategy has shortfall in{' '}
+                          {results.best.summary.shortfallYears.length} years
                         </li>
                       )}
                     </ul>

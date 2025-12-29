@@ -1,0 +1,18 @@
+FROM mcr.microsoft.com/playwright:v1.40.0-jammy
+
+WORKDIR /app
+
+# Copy package files first for better caching
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Install Playwright browsers
+RUN npx playwright install chromium
+
+# Copy source code
+COPY . .
+
+# Default command runs visual tests
+CMD ["npx", "vitest", "run", "--config", "vitest.browser.config.js"]

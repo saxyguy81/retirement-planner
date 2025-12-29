@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  visual-tests:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test
+    working_dir: /app
+    volumes:
+      - ..:/app
+      - /app/node_modules
+    environment:
+      - CI=true
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    command: npx vitest run --config vitest.browser.config.js
+
+  visual-tests-update:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test
+    working_dir: /app
+    volumes:
+      - ..:/app
+      - /app/node_modules
+    environment:
+      - CI=true
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    command: npx vitest run --config vitest.browser.config.js --update

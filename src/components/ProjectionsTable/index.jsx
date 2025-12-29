@@ -1,6 +1,6 @@
 /**
  * ProjectionsTable Component
- * 
+ *
  * Main data table showing year-by-year projections.
  * Features:
  * - Transposed layout (years as columns, metrics as rows)
@@ -9,43 +9,71 @@
  * - Sticky row labels
  * - Color coding for key values
  * - Click to inspect calculation
- * 
+ *
  * TODO: Implement full table with all sections from spec
  */
 
-import React, { useState, useMemo } from 'react';
-import { RefreshCw, ChevronDown, ChevronRight, Info } from 'lucide-react';
-import { fmt$, fmtPct } from '../../lib/formatters';
-import { YearSelector } from '../YearSelector';
-import { CalculationInspector } from '../CalculationInspector';
+import {
+  RefreshCw,
+  ChevronDown,
+  ChevronRight,
+  Info,
+  Table,
+  LineChart,
+  LayoutDashboard,
+  X,
+} from 'lucide-react';
+import React, { useState, useMemo, useCallback } from 'react';
 
-// Define row sections matching the spreadsheet
-// PV keys are used when showPV is true
-const getSections = (showPV) => [
+import { CELL_DEPENDENCIES, getDependencySign } from '../../lib/calculationDependencies';
+import { VALUE_COLORS, ROW_SEMANTICS } from '../../lib/colors';
+import { fmt$, fmtPct } from '../../lib/formatters';
+import { CalculationInspector } from '../CalculationInspector';
+import { CustomViewModal } from '../CustomViewModal';
+import { YearSelector } from '../YearSelector';
+
+// Define row sections following the logical "story of a retirement year":
+// 1. What do I have? (Starting Position)
+// 2. What money is coming in? (Income)
+// 3. What money is going out? (Cash Needs)
+// 4. What am I required/choosing to distribute? (RMD & Conversions)
+// 5. Where does the withdrawal come from? (Withdrawals)
+// 6. How much tax do I owe? (Tax Detail)
+// 7. IRMAA breakdown (IRMAA Detail)
+// 8. What do I have left? (Ending Position)
+// 9. What's it worth to heirs? (Heir Value)
+// 10. Performance metrics (Analysis & Metrics)
+//
+// Note: PV transformation is applied dynamically at render time for all $ format fields
+const SECTIONS = [
   {
-    title: 'ACCOUNT BALANCES (BOY)',
+    title: 'STARTING POSITION',
     rows: [
       { key: 'atBOY', label: 'After-Tax', format: '$' },
       { key: 'iraBOY', label: 'Traditional IRA', format: '$' },
       { key: 'rothBOY', label: 'Roth IRA', format: '$' },
       { key: 'totalBOY', label: 'Total', format: '$', highlight: true },
       { key: 'costBasisBOY', label: 'Cost Basis', format: '$', dim: true },
-    ]
+    ],
   },
   {
-    title: 'INCOME & EXPENSES',
-    rows: [
-      { key: 'ssAnnual', label: 'Social Security', format: '$' },
-      { key: showPV ? 'pvExpenses' : 'expenses', label: 'Annual Expenses', format: '$' },
-      { key: 'rothConversion', label: 'Roth Conversion', format: '$', highlight: true },
-    ]
+    title: 'INCOME',
+    rows: [{ key: 'ssAnnual', label: 'Social Security', format: '$' }],
   },
   {
-    title: 'RMD',
+    title: 'CASH NEEDS',
     rows: [
-      { key: 'rmdFactor', label: 'RMD Factor', format: 'n' },
+      { key: 'expenses', label: 'Annual Expenses', format: '$' },
+      { key: 'irmaaTotal', label: 'IRMAA Surcharges', format: '$' },
+    ],
+  },
+  {
+    title: 'RMD & CONVERSIONS',
+    rows: [
+      { key: 'rmdFactor', label: 'RMD Factor', format: 'n', dim: true },
       { key: 'rmdRequired', label: 'RMD Required', format: '$' },
-    ]
+      { key: 'rothConversion', label: 'Roth Conversion', format: '$', highlight: true },
+    ],
   },
   {
     title: 'WITHDRAWALS',
@@ -54,7 +82,7 @@ const getSections = (showPV) => [
       { key: 'iraWithdrawal', label: 'From IRA', format: '$' },
       { key: 'rothWithdrawal', label: 'From Roth', format: '$' },
       { key: 'totalWithdrawal', label: 'Total Withdrawal', format: '$', highlight: true },
-    ]
+    ],
   },
   {
     title: 'TAX DETAIL',
@@ -66,121 +94,238 @@ const getSections = (showPV) => [
       { key: 'federalTax', label: 'Federal Tax', format: '$' },
       { key: 'ltcgTax', label: 'LTCG Tax', format: '$' },
       { key: 'niit', label: 'NIIT (3.8%)', format: '$' },
-      { key: 'stateTax', label: 'IL State Tax', format: '$' },
+      { key: 'stateTax', label: 'State Tax', format: '$' },
       { key: 'totalTax', label: 'Total Tax', format: '$', highlight: true },
-    ]
+    ],
   },
   {
-    title: 'IRMAA (MEDICARE)',
+    title: 'IRMAA DETAIL',
     rows: [
       { key: 'irmaaMAGI', label: 'MAGI (2yr prior)', format: '$', dim: true },
       { key: 'irmaaPartB', label: 'Part B Surcharge', format: '$', dim: true },
       { key: 'irmaaPartD', label: 'Part D Surcharge', format: '$', dim: true },
-      { key: 'irmaaTotal', label: 'Total IRMAA', format: '$', highlight: true },
-    ]
+    ],
   },
   {
-    title: 'END OF YEAR BALANCES',
+    title: 'ENDING POSITION',
     rows: [
-      { key: showPV ? 'pvAtEOY' : 'atEOY', label: 'After-Tax', format: '$' },
-      { key: showPV ? 'pvIraEOY' : 'iraEOY', label: 'Traditional IRA', format: '$' },
-      { key: showPV ? 'pvRothEOY' : 'rothEOY', label: 'Roth IRA', format: '$' },
-      { key: showPV ? 'pvTotalEOY' : 'totalEOY', label: 'Total', format: '$', highlight: true },
+      { key: 'atEOY', label: 'After-Tax', format: '$' },
+      { key: 'iraEOY', label: 'Traditional IRA', format: '$' },
+      { key: 'rothEOY', label: 'Roth IRA', format: '$' },
+      { key: 'totalEOY', label: 'Total', format: '$', highlight: true },
       { key: 'costBasisEOY', label: 'Cost Basis', format: '$', dim: true },
       { key: 'rothPercent', label: 'Roth %', format: '%', dim: true },
-    ]
+    ],
   },
   {
     title: 'HEIR VALUE',
-    rows: [
-      { key: showPV ? 'pvHeirValue' : 'heirValue', label: 'After-Tax to Heirs', format: '$', highlight: true },
-    ]
+    rows: [{ key: 'heirValue', label: 'After-Tax to Heirs', format: '$', highlight: true }],
   },
   {
-    title: 'EFFECTIVE RETURNS',
+    title: 'ANALYSIS & METRICS',
     rows: [
-      { key: 'effectiveAtReturn', label: 'After-Tax', format: '%' },
-      { key: 'effectiveIraReturn', label: 'IRA', format: '%' },
-      { key: 'effectiveRothReturn', label: 'Roth', format: '%' },
-    ]
-  },
-  {
-    title: 'CUMULATIVE',
-    rows: [
-      { key: 'cumulativeTax', label: 'Total Tax Paid', format: '$' },
-      { key: 'cumulativeIRMAA', label: 'Total IRMAA Paid', format: '$' },
-    ]
-  },
-  {
-    title: 'CAPITAL GAINS ANALYSIS',
-    rows: [
-      { key: 'capitalGains', label: 'Year Cap Gains', format: '$' },
+      { key: 'effectiveAtReturn', label: 'AT Return Rate', format: '%', dim: true },
+      { key: 'effectiveIraReturn', label: 'IRA Return Rate', format: '%', dim: true },
+      { key: 'effectiveRothReturn', label: 'Roth Return Rate', format: '%', dim: true },
+      { key: 'cumulativeTax', label: 'Cumulative Tax Paid', format: '$' },
+      { key: 'cumulativeIRMAA', label: 'Cumulative IRMAA', format: '$' },
       { key: 'cumulativeCapitalGains', label: 'Cumulative Cap Gains', format: '$' },
       { key: 'atLiquidationPercent', label: 'AT Liquidation %', format: '%', highlight: true },
-    ]
+    ],
   },
 ];
 
+// Helper function to apply Present Value discount factor
+// PV = FV / (1 + r)^n where r = discount rate and n = years from start
+const applyPV = (value, yearsFromStart, discountRate) => {
+  if (typeof value !== 'number' || isNaN(value)) return value;
+  const pvFactor = Math.pow(1 + discountRate, yearsFromStart);
+  return value / pvFactor;
+};
+
 function formatValue(value, format) {
   if (value == null || (typeof value === 'number' && isNaN(value))) return '-';
-  
+
   switch (format) {
-    case '$': return fmt$(value);
-    case '%': return fmtPct(value);
-    case 'n': return value > 0 ? value.toFixed(1) : '-';
-    default: return value.toString();
+    case '$':
+      return fmt$(value);
+    case '%':
+      return fmtPct(value);
+    case 'n':
+      return value > 0 ? value.toFixed(1) : '-';
+    default:
+      return value.toString();
   }
 }
 
 // Default collapsed state for sections
+// Primary flow stays expanded: STARTING POSITION, INCOME, CASH NEEDS,
+// RMD & CONVERSIONS, WITHDRAWALS, ENDING POSITION, HEIR VALUE
 const DEFAULT_COLLAPSED = {
   'TAX DETAIL': true,
-  'IRMAA (MEDICARE)': true,
-  'RMD': true,
-  'EFFECTIVE RETURNS': true,
-  'CUMULATIVE': true,
-  'CAPITAL GAINS ANALYSIS': true,
+  'IRMAA DETAIL': true,
+  'ANALYSIS & METRICS': true,
 };
 
 // Fields that have calculation inspections available
 const INSPECTABLE_FIELDS = [
   // Taxes
-  'federalTax', 'totalTax', 'ltcgTax', 'niit', 'stateTax', 'taxableSS',
-  'irmaaTotal', 'cumulativeTax',
+  'federalTax',
+  'totalTax',
+  'ltcgTax',
+  'niit',
+  'stateTax',
+  'taxableSS',
+  'irmaaTotal',
+  'cumulativeTax',
   // Withdrawals
-  'atWithdrawal', 'iraWithdrawal', 'rothWithdrawal', 'totalWithdrawal',
+  'atWithdrawal',
+  'iraWithdrawal',
+  'rothWithdrawal',
+  'totalWithdrawal',
   // Conversions & RMD
-  'rothConversion', 'rmdRequired',
+  'rothConversion',
+  'rmdRequired',
   // EOY Balances
-  'atEOY', 'iraEOY', 'rothEOY', 'totalEOY',
-  'pvTotalEOY',
+  'atEOY',
+  'iraEOY',
+  'rothEOY',
+  'totalEOY',
   // Heir & Roth %
-  'heirValue', 'pvHeirValue', 'rothPercent',
+  'heirValue',
+  'rothPercent',
   // Capital Gains Analysis
-  'capitalGains', 'cumulativeCapitalGains', 'atLiquidationPercent',
+  'capitalGains',
+  'cumulativeCapitalGains',
+  'cumulativeATTax',
+  'atLiquidationPercent',
 ];
 
-export function ProjectionsTable({ projections, options, params }) {
+// Helper to get semantic color class for a cell based on row key
+function getCellColorClass(rowKey, row) {
+  // If row has explicit highlight or dim, use legacy styling
+  if (row.highlight) return 'text-emerald-400 font-medium';
+  if (row.dim) return 'text-slate-500';
+
+  // Use semantic coloring from ROW_SEMANTICS
+  const semantic = ROW_SEMANTICS[rowKey];
+  if (!semantic) return 'text-slate-300';
+
+  const colors = VALUE_COLORS[semantic];
+  return colors?.text || 'text-slate-300';
+}
+
+export function ProjectionsTable({ projections, options, params, showPV = true }) {
   const [yearMode, setYearMode] = useState('moderate');
   const [customYears, setCustomYears] = useState([]);
   const [collapsedSections, setCollapsedSections] = useState(DEFAULT_COLLAPSED);
-  const [showPV, setShowPV] = useState(true); // Default to Present Value
   const [inspecting, setInspecting] = useState(null); // { field, year, data }
 
-  const toggleSection = (title) => {
+  // Cell highlighting state for dependency visualization
+  const [highlightedCells, setHighlightedCells] = useState([]); // Array of { year, field, sign }
+
+  // Row selection state for custom views
+  const [selectedRows, setSelectedRows] = useState(new Set());
+  const [customViewType, setCustomViewType] = useState(null); // 'table' | 'chart' | 'dashboard' | null
+
+  // Handle cell hover to show calculation dependencies
+  const handleCellHover = useCallback(
+    (field, year, data) => {
+      const getDeps = CELL_DEPENDENCIES[field];
+      if (getDeps) {
+        const deps = getDeps(year, data, projections);
+        const withSigns = deps.map(d => ({
+          ...d,
+          sign: getDependencySign(d.field, field),
+        }));
+        setHighlightedCells(withSigns);
+      } else {
+        setHighlightedCells([]);
+      }
+    },
+    [projections]
+  );
+
+  // Clear highlights when mouse leaves cell
+  const handleCellLeave = useCallback(() => {
+    setHighlightedCells([]);
+  }, []);
+
+  // Check if a cell should be highlighted and return its type
+  const getCellHighlight = useCallback(
+    (field, year) => {
+      const match = highlightedCells.find(h => h.field === field && h.year === year);
+      if (!match) return null;
+      return match.sign === '-' ? 'negative' : 'positive';
+    },
+    [highlightedCells]
+  );
+
+  const toggleSection = title => {
     setCollapsedSections(prev => ({
       ...prev,
-      [title]: !prev[title]
+      [title]: !prev[title],
     }));
   };
 
-  // Get sections based on current PV mode
-  const sections = useMemo(() => getSections(showPV), [showPV]);
+  // Toggle individual row selection
+  const toggleRowSelection = useCallback(rowKey => {
+    setSelectedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) {
+        next.delete(rowKey);
+      } else {
+        next.add(rowKey);
+      }
+      return next;
+    });
+  }, []);
+
+  // Select/deselect all rows in a section
+  const toggleSectionSelection = useCallback(
+    section => {
+      const sectionKeys = section.rows.map(r => r.key);
+      const allSelected = sectionKeys.every(k => selectedRows.has(k));
+
+      setSelectedRows(prev => {
+        const next = new Set(prev);
+        sectionKeys.forEach(k => {
+          if (allSelected) {
+            next.delete(k);
+          } else {
+            next.add(k);
+          }
+        });
+        return next;
+      });
+    },
+    [selectedRows]
+  );
+
+  // Clear all selections
+  const clearSelection = useCallback(() => {
+    setSelectedRows(new Set());
+  }, []);
+
+  // Open custom view modal
+  const openCustomView = useCallback(viewType => {
+    setCustomViewType(viewType);
+  }, []);
+
+  // Close custom view modal
+  const closeCustomView = useCallback(() => {
+    setCustomViewType(null);
+  }, []);
+
+  // Sections are now static - PV is applied dynamically at render time
+  const sections = SECTIONS;
 
   const expandAll = () => setCollapsedSections({});
   const collapseAll = () => {
     const allCollapsed = {};
-    sections.forEach(s => { allCollapsed[s.title] = true; });
+    sections.forEach(s => {
+      allCollapsed[s.title] = true;
+    });
     setCollapsedSections(allCollapsed);
   };
 
@@ -188,7 +333,7 @@ export function ProjectionsTable({ projections, options, params }) {
   const allYears = useMemo(() => projections.map(p => p.year), [projections]);
 
   // Get years based on mode (for non-custom modes)
-  const getYearsForMode = (mode) => {
+  const getYearsForMode = mode => {
     switch (mode) {
       case 'brief':
         return [allYears[0], allYears[1], allYears[allYears.length - 1]].filter(Boolean);
@@ -222,12 +367,12 @@ export function ProjectionsTable({ projections, options, params }) {
   }, [yearMode, customYears, allYears]);
 
   // Handle year selection change
-  const handleYearsChange = (newYears) => {
+  const handleYearsChange = newYears => {
     setCustomYears(newYears);
   };
 
   // Handle mode change
-  const handleModeChange = (newMode) => {
+  const handleModeChange = newMode => {
     setYearMode(newMode);
     if (newMode !== 'custom') {
       setCustomYears(getYearsForMode(newMode));
@@ -238,9 +383,9 @@ export function ProjectionsTable({ projections, options, params }) {
   const displayData = useMemo(() => {
     return projections.filter(p => selectedYears.includes(p.year));
   }, [projections, selectedYears]);
-  
+
   return (
-    <div className="flex-1 flex flex-col overflow-hidden text-xs">
+    <div data-testid="projections-table" className="flex-1 flex flex-col overflow-hidden text-xs">
       {/* Toolbar */}
       <div className="h-10 bg-slate-900/50 border-b border-slate-800 flex items-center px-3 justify-between shrink-0">
         <div className="flex items-center gap-3">
@@ -251,19 +396,7 @@ export function ProjectionsTable({ projections, options, params }) {
             mode={yearMode}
             onModeChange={handleModeChange}
           />
-          <div className="flex items-center gap-1 border-l border-slate-700 pl-3">
-            <button
-              onClick={() => setShowPV(!showPV)}
-              className={`px-1.5 py-0.5 text-xs rounded ${
-                showPV
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-              }`}
-              title={showPV ? 'Showing Present Value (today\'s dollars)' : 'Showing Future Value (nominal dollars)'}
-            >
-              {showPV ? 'PV' : 'FV'}
-            </button>
-          </div>
+          {/* PV toggle removed - now controlled globally from App.jsx */}
           <div className="flex items-center gap-1 border-l border-slate-700 pl-3">
             <button
               onClick={expandAll}
@@ -287,15 +420,55 @@ export function ProjectionsTable({ projections, options, params }) {
           </span>
         )}
       </div>
-      
+
+      {/* Selection Action Toolbar - shown when rows are selected */}
+      {selectedRows.size > 0 && (
+        <div className="h-10 bg-blue-900/30 border-b border-blue-700 flex items-center px-3 justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <span className="text-blue-300 text-xs">
+              {selectedRows.size} row{selectedRows.size > 1 ? 's' : ''} selected
+            </span>
+            <button
+              onClick={clearSelection}
+              className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+            >
+              <X className="w-3 h-3" />
+              Clear
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => openCustomView('table')}
+              className="px-2 py-1 text-xs bg-slate-700 text-slate-300 rounded hover:bg-slate-600 flex items-center gap-1"
+            >
+              <Table className="w-3 h-3" />
+              Custom Table
+            </button>
+            <button
+              onClick={() => openCustomView('chart')}
+              className="px-2 py-1 text-xs bg-slate-700 text-slate-300 rounded hover:bg-slate-600 flex items-center gap-1"
+            >
+              <LineChart className="w-3 h-3" />
+              Chart
+            </button>
+            <button
+              onClick={() => openCustomView('dashboard')}
+              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-500 flex items-center gap-1"
+            >
+              <LayoutDashboard className="w-3 h-3" />
+              Dashboard
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="flex-1 overflow-auto p-2">
         <table className="w-full border-collapse">
           <thead className="sticky top-0 bg-slate-950 z-10">
             <tr className="text-slate-400">
-              <th className="text-left py-1.5 px-2 sticky left-0 bg-slate-950 min-w-40">
-                Metric
-              </th>
+              <th className="text-left py-1.5 px-2 sticky left-0 bg-slate-950 min-w-40">Metric</th>
               {displayData.map(d => (
                 <th key={d.year} className="text-right py-1.5 px-2 min-w-24">
                   <div>{d.year}</div>
@@ -316,63 +489,114 @@ export function ProjectionsTable({ projections, options, params }) {
                   <tr className="border-t border-slate-800">
                     <td
                       colSpan={displayData.length + 1}
-                      className="py-1.5 px-2 text-slate-500 font-medium bg-slate-900/30 cursor-pointer hover:bg-slate-800/50 select-none"
-                      onClick={() => toggleSection(section.title)}
+                      className="py-1.5 px-2 text-slate-500 font-medium bg-slate-900/30 select-none"
                     >
-                      <span className="flex items-center gap-1">
-                        {isCollapsed ? (
-                          <ChevronRight className="w-3 h-3" />
-                        ) : (
-                          <ChevronDown className="w-3 h-3" />
-                        )}
-                        {section.title}
-                        {isCollapsed && (
-                          <span className="text-slate-600 text-xs ml-2">({section.rows.length} rows)</span>
-                        )}
+                      <span className="flex items-center gap-2">
+                        {/* Section select-all checkbox */}
+                        <input
+                          type="checkbox"
+                          checked={section.rows.every(r => selectedRows.has(r.key))}
+                          onChange={e => {
+                            e.stopPropagation();
+                            toggleSectionSelection(section);
+                          }}
+                          className="w-3 h-3 rounded border-slate-600 bg-slate-800
+                                     checked:bg-blue-600 checked:border-blue-600
+                                     focus:ring-0 focus:ring-offset-0 cursor-pointer accent-blue-600"
+                        />
+                        <span
+                          className="flex items-center gap-1 cursor-pointer hover:text-slate-300 flex-1"
+                          onClick={() => toggleSection(section.title)}
+                        >
+                          {isCollapsed ? (
+                            <ChevronRight className="w-3 h-3" />
+                          ) : (
+                            <ChevronDown className="w-3 h-3" />
+                          )}
+                          {section.title}
+                          {isCollapsed && (
+                            <span className="text-slate-600 text-xs ml-2">
+                              ({section.rows.length} rows)
+                            </span>
+                          )}
+                        </span>
                       </span>
                     </td>
                   </tr>
 
                   {/* Section rows - only render if not collapsed */}
-                  {!isCollapsed && section.rows.map(row => {
-                    // Check if this field is inspectable (strip pv prefix for matching)
-                    const baseKey = row.key.startsWith('pv') ? row.key.charAt(2).toLowerCase() + row.key.slice(3) : row.key;
-                    const isInspectable = INSPECTABLE_FIELDS.includes(row.key) || INSPECTABLE_FIELDS.includes(baseKey);
+                  {!isCollapsed &&
+                    section.rows.map(row => {
+                      // Check if this field has calculation inspection available
+                      const isInspectable = INSPECTABLE_FIELDS.includes(row.key);
 
-                    return (
-                      <tr
-                        key={row.key}
-                        className={`hover:bg-slate-900/50 ${row.highlight ? 'bg-slate-800/20' : ''}`}
-                      >
-                        <td className={`py-1 px-2 sticky left-0 bg-slate-950 ${row.dim ? 'text-slate-500' : 'text-slate-300'}`}>
-                          <span className="flex items-center gap-1">
-                            {row.label}
-                            {isInspectable && (
-                              <Info
-                                className="w-3 h-3 text-blue-400/50 cursor-help"
-                                title="Click any value in this row to see calculation details"
-                              />
-                            )}
-                          </span>
-                        </td>
-                        {displayData.map(d => (
+                      return (
+                        <tr
+                          key={row.key}
+                          className={`hover:bg-slate-900/50 ${row.highlight ? 'bg-slate-800/20' : ''} ${selectedRows.has(row.key) ? 'bg-blue-900/20' : ''}`}
+                        >
                           <td
-                            key={d.year}
-                            onClick={() => isInspectable && setInspecting({ field: row.key, year: d.year, data: d })}
-                            className={`text-right py-1 px-2 tabular-nums ${
-                              row.highlight
-                                ? 'text-emerald-400 font-medium'
-                                : row.dim
-                                  ? 'text-slate-500'
-                                  : 'text-slate-300'
-                            } ${isInspectable ? 'cursor-pointer hover:bg-blue-900/30' : ''}`}
+                            className={`py-1 px-2 sticky left-0 bg-slate-950 ${row.dim ? 'text-slate-500' : 'text-slate-300'}`}
                           >
-                            {formatValue(d[row.key], row.format)}
+                            <div className="flex items-center gap-2">
+                              {/* Row selection checkbox */}
+                              <input
+                                type="checkbox"
+                                checked={selectedRows.has(row.key)}
+                                onChange={() => toggleRowSelection(row.key)}
+                                className="w-3 h-3 rounded border-slate-600 bg-slate-800
+                                         checked:bg-blue-600 checked:border-blue-600
+                                         focus:ring-0 focus:ring-offset-0 cursor-pointer accent-blue-600"
+                              />
+                              <span className="flex items-center gap-1">
+                                {row.label}
+                                {isInspectable && (
+                                  <Info
+                                    className="w-3 h-3 text-blue-400/50 cursor-help"
+                                    title="Click any value in this row to see calculation details"
+                                  />
+                                )}
+                              </span>
+                            </div>
                           </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
+                          {displayData.map(d => {
+                            // Check if this cell should be highlighted as a dependency
+                            const highlight = getCellHighlight(row.key, d.year);
+                            const highlightClass =
+                              highlight === 'positive'
+                                ? 'ring-2 ring-emerald-400 rounded bg-emerald-400/10'
+                                : highlight === 'negative'
+                                  ? 'ring-2 ring-rose-400 rounded bg-rose-400/10'
+                                  : '';
+
+                            // Get semantic color class for cells
+                            const cellColorClass = getCellColorClass(row.key, row);
+
+                            // Apply PV transformation for monetary values when showPV is enabled
+                            const rawValue = d[row.key];
+                            const displayValue =
+                              row.format === '$' && showPV
+                                ? applyPV(rawValue, d.yearsFromStart, params.discountRate || 0.03)
+                                : rawValue;
+
+                            return (
+                              <td
+                                key={d.year}
+                                onClick={() =>
+                                  isInspectable &&
+                                  setInspecting({ field: row.key, year: d.year, data: d })
+                                }
+                                onMouseEnter={() => handleCellHover(row.key, d.year, d)}
+                                onMouseLeave={handleCellLeave}
+                                className={`text-right py-1 px-2 tabular-nums ${cellColorClass} ${isInspectable ? 'cursor-pointer hover:bg-blue-900/30' : ''} ${highlightClass}`}
+                              >
+                                {formatValue(displayValue, row.format)}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
                 </React.Fragment>
               );
             })}
@@ -387,6 +611,17 @@ export function ProjectionsTable({ projections, options, params }) {
           data={inspecting.data}
           params={params}
           onClose={() => setInspecting(null)}
+        />
+      )}
+
+      {/* Custom View Modal */}
+      {customViewType && (
+        <CustomViewModal
+          viewType={customViewType}
+          selectedRows={selectedRows}
+          projections={projections}
+          sections={sections}
+          onClose={closeCustomView}
         />
       )}
     </div>

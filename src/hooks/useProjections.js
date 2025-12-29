@@ -5,6 +5,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
+
 import { generateProjections, calculateSummary, DEFAULT_PARAMS } from '../lib';
 
 // localStorage keys
@@ -16,17 +17,18 @@ const SETTINGS_KEY = 'retirement-planner-settings';
 const DEFAULT_OPTIONS = { iterativeTax: true, maxIterations: 5 };
 
 // Default settings (global configuration)
+// NOTE: Heirs and discountRate have been moved to DEFAULT_PARAMS (in taxTables.js)
+// for direct access in InputPanel
 const DEFAULT_SETTINGS = {
   // User Profile
   primaryName: 'Ira',
-  primaryBirthYear: 1955,  // 2/17/55
+  primaryBirthYear: 1955, // 2/17/55
   spouseName: 'Carol',
-  spouseBirthYear: 1954,   // 7/17/54
+  spouseBirthYear: 1954, // 7/17/54
 
   // Tax Settings
-  taxYear: 2024,
-  exemptSSFromTax: false,  // Trump's proposal: exempt Social Security from federal taxation
-  discountRate: 0.03, // For PV calculations
+  taxYear: 2025, // Updated to current year
+  ssExemptionMode: 'disabled', // 'disabled' | 'through2028' | 'permanent'
 
   // Display Preferences
   defaultPV: true,
@@ -34,21 +36,8 @@ const DEFAULT_SETTINGS = {
   // Custom Tax Brackets (null means use defaults)
   customBrackets: null,
 
-  // Heir Configuration (for inheritance value calculations)
-  heirs: [
-    {
-      name: 'Scott',
-      state: 'CA',        // Lives in CA - pays CA state tax on inherited IRA
-      agi: 700000,        // Approximate AGI to determine marginal rates
-      splitPercent: 50,   // % of inheritance
-    },
-    {
-      name: 'Julie',
-      state: 'IL',        // Lives in IL - pays IL state tax on inherited IRA
-      agi: 1200000,       // Approximate AGI to determine marginal rates
-      splitPercent: 50,   // % of inheritance
-    },
-  ],
+  // Custom IRMAA Brackets (null means use defaults)
+  customIRMAA: null,
 };
 
 // Helper: Load last state from localStorage
@@ -91,7 +80,7 @@ const loadSavedStates = () => {
 };
 
 // Helper: Save states list
-const saveSavedStates = (states) => {
+const saveSavedStates = states => {
   try {
     localStorage.setItem(SAVED_STATES_KEY, JSON.stringify(states));
   } catch (e) {
@@ -113,7 +102,7 @@ const loadSettings = () => {
 };
 
 // Helper: Save settings to localStorage
-const saveSettings = (settings) => {
+const saveSettings = settings => {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch (e) {
@@ -155,43 +144,59 @@ export function useProjections(initialParams = {}) {
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
-  
+
   // Memoized projections - recalculates only when params/options/settings change
   // Merges relevant settings into projection params
   const projections = useMemo(() => {
+    // Compute exemptSSFromTax based on ssExemptionMode
+    const getExemptSSForYear = year => {
+      const mode = settings.ssExemptionMode || 'disabled';
+      if (mode === 'disabled') return false;
+      if (mode === 'permanent') return true;
+      // 'through2028' - only exempt from 2025-2028
+      return year >= 2025 && year <= 2028;
+    };
+
     const projectionParams = {
       ...params,
       ...options,
-      exemptSSFromTax: settings.exemptSSFromTax || false,
-      discountRate: settings.discountRate || 0.03,
+      // Use params values (heirs, discountRate now come from params/DEFAULT_PARAMS)
+      heirs: params.heirs || [],
+      discountRate: params.discountRate || 0.03,
+      heirDistributionStrategy: params.heirDistributionStrategy || 'even',
+      heirNormalizationYears: params.heirNormalizationYears || 10,
+      // Function to check SS exemption per year
+      getExemptSSForYear,
+      // Legacy boolean for backward compatibility (uses first projection year)
+      exemptSSFromTax: getExemptSSForYear(params.startYear || 2026),
       birthYear: settings.primaryBirthYear || params.birthYear,
-      heirs: settings.heirs || [],  // Multi-heir configuration
-      customBrackets: settings.customBrackets || null,  // Custom tax brackets
-      taxYear: settings.taxYear || 2024,  // Base year for tax brackets
+      customBrackets: settings.customBrackets || null,
+      customIRMAA: settings.customIRMAA || null,
+      taxYear: settings.taxYear || 2025,
     };
     return generateProjections(projectionParams);
   }, [params, options, settings]);
-  
+
   // Summary statistics
   const summary = useMemo(() => {
     return calculateSummary(projections);
   }, [projections]);
-  
+
   // Update a single parameter
   const updateParam = useCallback((key, value) => {
     setParams(prev => ({ ...prev, [key]: value }));
   }, []);
-  
+
   // Update multiple parameters at once
-  const updateParams = useCallback((updates) => {
+  const updateParams = useCallback(updates => {
     setParams(prev => ({ ...prev, ...updates }));
   }, []);
-  
+
   // Update Roth conversion for a specific year
   const updateRothConversion = useCallback((year, amount) => {
     setParams(prev => ({
       ...prev,
-      rothConversions: { ...prev.rothConversions, [year]: amount }
+      rothConversions: { ...prev.rothConversions, [year]: amount },
     }));
   }, []);
 
@@ -211,7 +216,7 @@ export function useProjections(initialParams = {}) {
   // Update AT harvest override for a specific year
   const updateATHarvest = useCallback((year, amount) => {
     setParams(prev => {
-      const newOverrides = { ...prev.atHarvestOverrides || {} };
+      const newOverrides = { ...(prev.atHarvestOverrides || {}) };
       if (amount === null || amount === 0) {
         delete newOverrides[year]; // Remove override if cleared
       } else {
@@ -220,7 +225,7 @@ export function useProjections(initialParams = {}) {
       return { ...prev, atHarvestOverrides: newOverrides };
     });
   }, []);
-  
+
   // Reset to defaults
   const resetParams = useCallback(() => {
     setParams(DEFAULT_PARAMS);
@@ -232,40 +237,49 @@ export function useProjections(initialParams = {}) {
   }, []);
 
   // Set max iterations
-  const setMaxIterations = useCallback((max) => {
+  const setMaxIterations = useCallback(max => {
     setOptions(prev => ({ ...prev, maxIterations: max }));
   }, []);
 
   // Save current state with optional name
-  const saveState = useCallback((name = '') => {
-    const newState = {
-      id: Date.now(),
-      name: name.trim() || `Saved ${new Date().toLocaleString()}`,
-      createdAt: new Date().toISOString(),
-      params: { ...params },
-      options: { ...options },
-    };
-    const updated = [...savedStates, newState];
-    setSavedStates(updated);
-    saveSavedStates(updated);
-    return newState;
-  }, [params, options, savedStates]);
+  const saveState = useCallback(
+    (name = '') => {
+      const newState = {
+        id: Date.now(),
+        name: name.trim() || `Saved ${new Date().toLocaleString()}`,
+        createdAt: new Date().toISOString(),
+        params: { ...params },
+        options: { ...options },
+      };
+      const updated = [...savedStates, newState];
+      setSavedStates(updated);
+      saveSavedStates(updated);
+      return newState;
+    },
+    [params, options, savedStates]
+  );
 
   // Load a saved state
-  const loadState = useCallback((stateId) => {
-    const state = savedStates.find(s => s.id === stateId);
-    if (state) {
-      setParams({ ...DEFAULT_PARAMS, ...state.params });
-      setOptions({ ...DEFAULT_OPTIONS, ...state.options });
-    }
-  }, [savedStates]);
+  const loadState = useCallback(
+    stateId => {
+      const state = savedStates.find(s => s.id === stateId);
+      if (state) {
+        setParams({ ...DEFAULT_PARAMS, ...state.params });
+        setOptions({ ...DEFAULT_OPTIONS, ...state.options });
+      }
+    },
+    [savedStates]
+  );
 
   // Delete a saved state
-  const deleteState = useCallback((stateId) => {
-    const updated = savedStates.filter(s => s.id !== stateId);
-    setSavedStates(updated);
-    saveSavedStates(updated);
-  }, [savedStates]);
+  const deleteState = useCallback(
+    stateId => {
+      const updated = savedStates.filter(s => s.id !== stateId);
+      setSavedStates(updated);
+      saveSavedStates(updated);
+    },
+    [savedStates]
+  );
 
   // Reset to defaults (start fresh)
   const resetToDefaults = useCallback(() => {
@@ -274,7 +288,7 @@ export function useProjections(initialParams = {}) {
   }, []);
 
   // Update settings
-  const updateSettings = useCallback((updates) => {
+  const updateSettings = useCallback(updates => {
     setSettings(prev => ({ ...prev, ...updates }));
   }, []);
 

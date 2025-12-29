@@ -8,9 +8,10 @@
  * - Formatted headers and styling
  */
 
-import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+
 import { DEFAULT_PARAMS } from './taxTables.js';
 
 // Column definitions for projections export
@@ -101,7 +102,9 @@ function createProjectionsSheet(projections, scenarioName = '') {
     data.push(row);
   });
 
-  const ws = XLSX.utils.aoa_to_array ? XLSX.utils.aoa_to_sheet(data) : XLSX.utils.aoa_to_sheet(data);
+  const ws = XLSX.utils.aoa_to_array
+    ? XLSX.utils.aoa_to_sheet(data)
+    : XLSX.utils.aoa_to_sheet(data);
 
   // Set column widths
   ws['!cols'] = PROJECTION_COLUMNS.map(col => ({ wch: col.width }));
@@ -265,7 +268,13 @@ function createParamsSheet(params) {
  * @param {Array} [options.scenarios] - Optional array of scenario results for comparison
  * @param {string} [options.filename] - Output filename (without extension)
  */
-export function exportToExcel({ projections, summary, params, scenarios = [], filename = 'retirement-projections' }) {
+export function exportToExcel({
+  projections,
+  summary,
+  params,
+  scenarios = [],
+  filename = 'retirement-projections',
+}) {
   const wb = XLSX.utils.book_new();
 
   // Add main projections sheet
@@ -295,7 +304,13 @@ export function exportToExcel({ projections, summary, params, scenarios = [], fi
 /**
  * Export comparison of multiple scenarios
  */
-export function exportScenarioComparison({ baseProjections, baseSummary, scenarios, params, filename = 'scenario-comparison' }) {
+export function exportScenarioComparison({
+  baseProjections,
+  baseSummary,
+  scenarios,
+  params,
+  filename = 'scenario-comparison',
+}) {
   const wb = XLSX.utils.book_new();
 
   // Create comparison summary sheet
@@ -303,15 +318,31 @@ export function exportScenarioComparison({ baseProjections, baseSummary, scenari
     ['SCENARIO COMPARISON SUMMARY'],
     [],
     ['Metric', 'Base Case', ...scenarios.map(s => s.name)],
-    ['Ending Portfolio', baseSummary.endingPortfolio, ...scenarios.map(s => s.summary.endingPortfolio)],
+    [
+      'Ending Portfolio',
+      baseSummary.endingPortfolio,
+      ...scenarios.map(s => s.summary.endingPortfolio),
+    ],
     ['Heir Value', baseSummary.endingHeirValue, ...scenarios.map(s => s.summary.endingHeirValue)],
     ['Total Tax Paid', baseSummary.totalTaxPaid, ...scenarios.map(s => s.summary.totalTaxPaid)],
     ['Total IRMAA', baseSummary.totalIRMAAPaid, ...scenarios.map(s => s.summary.totalIRMAAPaid)],
-    ['Final Roth %', baseSummary.finalRothPercent, ...scenarios.map(s => s.summary.finalRothPercent)],
+    [
+      'Final Roth %',
+      baseSummary.finalRothPercent,
+      ...scenarios.map(s => s.summary.finalRothPercent),
+    ],
     [],
     ['Difference from Base'],
-    ['Ending Portfolio', 0, ...scenarios.map(s => s.summary.endingPortfolio - baseSummary.endingPortfolio)],
-    ['Heir Value', 0, ...scenarios.map(s => s.summary.endingHeirValue - baseSummary.endingHeirValue)],
+    [
+      'Ending Portfolio',
+      0,
+      ...scenarios.map(s => s.summary.endingPortfolio - baseSummary.endingPortfolio),
+    ],
+    [
+      'Heir Value',
+      0,
+      ...scenarios.map(s => s.summary.endingHeirValue - baseSummary.endingHeirValue),
+    ],
     ['Total Tax Paid', 0, ...scenarios.map(s => s.summary.totalTaxPaid - baseSummary.totalTaxPaid)],
   ];
 
@@ -326,7 +357,9 @@ export function exportScenarioComparison({ baseProjections, baseSummary, scenari
   // Add each scenario
   scenarios.forEach((scenario, idx) => {
     const sheet = createProjectionsSheet(scenario.projections);
-    const name = (scenario.name || `Scenario ${idx + 1}`).substring(0, 31).replace(/[/\\?*[\]]/g, '');
+    const name = (scenario.name || `Scenario ${idx + 1}`)
+      .substring(0, 31)
+      .replace(/[/\\?*[\]]/g, '');
     XLSX.utils.book_append_sheet(wb, sheet, name);
   });
 
@@ -348,7 +381,7 @@ export async function importFromJSON(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = e => {
       try {
         const json = JSON.parse(e.target.result);
         // Merge with defaults to ensure all required params exist
@@ -374,7 +407,7 @@ export async function importFromExcel(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = e => {
       try {
         const data = new Uint8Array(e.target.result);
         const wb = XLSX.read(data, { type: 'array' });
@@ -402,8 +435,18 @@ export async function importFromExcel(file) {
 
           // Skip headers and section titles
           if (key === 'PARAMETER' || !key || value === undefined) continue;
-          if (['Timeline', 'Starting Balances', 'Return Assumptions', 'Income',
-               'Expenses', 'Tax Parameters', 'Survivor Scenario', 'Heir Parameters'].includes(key)) {
+          if (
+            [
+              'Timeline',
+              'Starting Balances',
+              'Return Assumptions',
+              'Income',
+              'Expenses',
+              'Tax Parameters',
+              'Survivor Scenario',
+              'Heir Parameters',
+            ].includes(key)
+          ) {
             inRothConversions = false;
             continue;
           }
@@ -463,7 +506,12 @@ export function exportParamsToJSON(params, filename = 'retirement-params') {
 /**
  * Export full data to JSON (projections, summary, and params)
  */
-export function exportToJSON({ projections, summary, params, filename = 'retirement-projections' }) {
+export function exportToJSON({
+  projections,
+  summary,
+  params,
+  filename = 'retirement-projections',
+}) {
   const data = {
     exportDate: new Date().toISOString(),
     params,
@@ -554,9 +602,7 @@ export function exportToPDF({ projections, summary, params, filename = 'retireme
   doc.text('Year-by-Year Projections', 40, tableStartY);
 
   const headers = PDF_COLUMNS.map(c => c.header);
-  const rows = projections.map(p =>
-    PDF_COLUMNS.map(c => formatPDFValue(p[c.key], c.format))
-  );
+  const rows = projections.map(p => PDF_COLUMNS.map(c => formatPDFValue(p[c.key], c.format)));
 
   autoTable(doc, {
     startY: tableStartY + 10,
@@ -609,7 +655,7 @@ export function exportToPDF({ projections, summary, params, filename = 'retireme
       1: { cellWidth: 120 },
     },
     margin: { left: 40 },
-    didParseCell: (data) => {
+    didParseCell: data => {
       // Style section headers
       if (data.row.raw[1] === '' && data.row.raw[0] !== '') {
         data.cell.styles.fillColor = [226, 232, 240];
@@ -625,7 +671,10 @@ export function exportToPDF({ projections, summary, params, filename = 'retireme
     doc.setFontSize(12);
     doc.text('Roth Conversions', 40, rothY);
 
-    const rothRows = rothEntries.map(([year, amt]) => [year, '$' + Math.round(amt).toLocaleString()]);
+    const rothRows = rothEntries.map(([year, amt]) => [
+      year,
+      '$' + Math.round(amt).toLocaleString(),
+    ]);
 
     autoTable(doc, {
       startY: rothY + 10,
@@ -642,4 +691,12 @@ export function exportToPDF({ projections, summary, params, filename = 'retireme
   doc.save(`${filename}-${timestamp}.pdf`);
 }
 
-export default { exportToExcel, exportToJSON, exportToPDF, exportScenarioComparison, importFromJSON, importFromExcel, exportParamsToJSON };
+export default {
+  exportToExcel,
+  exportToJSON,
+  exportToPDF,
+  exportScenarioComparison,
+  importFromJSON,
+  importFromExcel,
+  exportParamsToJSON,
+};

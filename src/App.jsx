@@ -10,20 +10,46 @@
  * - Header with iterative tax toggle and scenario management
  */
 
+import {
+  Calculator,
+  Table,
+  LineChart,
+  Shield,
+  Users,
+  RefreshCw,
+  GitCompare,
+  Zap,
+  Download,
+  Upload,
+  ChevronDown,
+  Columns,
+  Square,
+  Save,
+  FolderOpen,
+  RotateCcw,
+  Trash2,
+  Settings,
+  DollarSign,
+} from 'lucide-react';
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Calculator, Table, LineChart, Shield, Users, RefreshCw, GitCompare, Zap, Download, Upload, ChevronDown, Columns, Square, Save, FolderOpen, RotateCcw, Trash2, Settings } from 'lucide-react';
 
-import { useProjections } from './hooks/useProjections';
-import { InputPanel } from './components/InputPanel';
-import { ProjectionsTable } from './components/ProjectionsTable';
 import { Dashboard } from './components/Dashboard';
-import { RiskAllocation } from './components/RiskAllocation';
 import { HeirAnalysis } from './components/HeirAnalysis';
-import { ScenarioComparison } from './components/ScenarioComparison';
+import { InputPanel } from './components/InputPanel';
 import { Optimization } from './components/Optimization';
-import { SplitPanel } from './components/SplitPanel';
+import { ProjectionsTable } from './components/ProjectionsTable';
+import { RiskAllocation } from './components/RiskAllocation';
+import { ScenarioComparison } from './components/ScenarioComparison';
 import { SettingsPanel } from './components/SettingsPanel';
-import { exportToExcel, exportToJSON, exportToPDF, importFromJSON, importFromExcel } from './lib/excelExport';
+import { SplitPanel } from './components/SplitPanel';
+import { useProjections } from './hooks/useProjections';
+import {
+  exportToExcel,
+  exportToJSON,
+  exportToPDF,
+  importFromJSON,
+  importFromExcel,
+} from './lib/excelExport';
 
 const TABS = [
   { id: 'projections', icon: Table, label: 'Projections' },
@@ -43,13 +69,14 @@ export default function App() {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showLoadMenu, setShowLoadMenu] = useState(false);
   const [saveName, setSaveName] = useState('');
+  const [showPV, setShowPV] = useState(true); // Global Present Value toggle
   const fileInputRef = useRef(null);
   const exportMenuRef = useRef(null);
   const loadMenuRef = useRef(null);
 
   // Close menus when clicking outside
   useEffect(() => {
-    const handleClickOutside = (e) => {
+    const handleClickOutside = e => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
         setShowExportMenu(false);
       }
@@ -73,6 +100,7 @@ export default function App() {
     updateATHarvest,
     toggleIterative,
     setMaxIterations,
+    setOptions,
     savedStates,
     saveState,
     loadState,
@@ -91,96 +119,101 @@ export default function App() {
   }, [saveState, saveName]);
 
   // Import handler
-  const handleImport = useCallback(async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleImport = useCallback(
+    async e => {
+      const file = e.target.files?.[0];
+      if (!file) return;
 
-    try {
-      let importedParams;
-      if (file.name.endsWith('.json')) {
-        importedParams = await importFromJSON(file);
-      } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-        importedParams = await importFromExcel(file);
-      } else {
-        alert('Please select a .json or .xlsx file');
-        return;
+      try {
+        let importedParams;
+        if (file.name.endsWith('.json')) {
+          importedParams = await importFromJSON(file);
+        } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+          importedParams = await importFromExcel(file);
+        } else {
+          alert('Please select a .json or .xlsx file');
+          return;
+        }
+        updateParams(importedParams);
+      } catch (err) {
+        alert('Import failed: ' + err.message);
       }
-      updateParams(importedParams);
-    } catch (err) {
-      alert('Import failed: ' + err.message);
-    }
 
-    // Reset file input
-    e.target.value = '';
-  }, [updateParams]);
+      // Reset file input
+      e.target.value = '';
+    },
+    [updateParams]
+  );
 
   // Export handlers
-  const handleExport = useCallback((format) => {
-    const exportData = {
-      projections,
-      summary,
-      params,
-      filename: 'retirement-projections',
-    };
+  const handleExport = useCallback(
+    format => {
+      const exportData = {
+        projections,
+        summary,
+        params,
+        filename: 'retirement-projections',
+      };
 
-    switch (format) {
-      case 'xlsx':
-        exportToExcel(exportData);
-        break;
-      case 'json':
-        exportToJSON(exportData);
-        break;
-      case 'pdf':
-        exportToPDF(exportData);
-        break;
-    }
-    setShowExportMenu(false);
-  }, [projections, summary, params]);
+      switch (format) {
+        case 'xlsx':
+          exportToExcel(exportData);
+          break;
+        case 'json':
+          exportToJSON(exportData);
+          break;
+        case 'pdf':
+          exportToPDF(exportData);
+          break;
+      }
+      setShowExportMenu(false);
+    },
+    [projections, summary, params]
+  );
 
   // Split panel view configurations
-  const splitPanelViews = useMemo(() => [
-    {
-      id: 'projections',
-      label: 'Projections',
-      component: (
-        <ProjectionsTable
-          projections={projections}
-          options={options}
-          params={params}
-        />
-      )
-    },
-    {
-      id: 'dashboard',
-      label: 'Dashboard',
-      component: <Dashboard projections={projections} params={params} />
-    },
-    {
-      id: 'risk',
-      label: 'Risk Allocation',
-      component: (
-        <RiskAllocation
-          projections={projections}
-          params={params}
-          selectedYear={riskYear}
-          onYearChange={setRiskYear}
-        />
-      )
-    },
-    {
-      id: 'heir',
-      label: 'Heir Analysis',
-      component: (
-        <HeirAnalysis
-          projections={projections}
-          params={params}
-        />
-      )
-    },
-  ], [projections, options, params, riskYear]);
+  const splitPanelViews = useMemo(
+    () => [
+      {
+        id: 'projections',
+        label: 'Projections',
+        component: (
+          <ProjectionsTable
+            projections={projections}
+            options={options}
+            params={params}
+            showPV={showPV}
+          />
+        ),
+      },
+      {
+        id: 'dashboard',
+        label: 'Dashboard',
+        component: <Dashboard projections={projections} params={params} showPV={showPV} />,
+      },
+      {
+        id: 'risk',
+        label: 'Risk Allocation',
+        component: (
+          <RiskAllocation
+            projections={projections}
+            params={params}
+            selectedYear={riskYear}
+            onYearChange={setRiskYear}
+          />
+        ),
+      },
+      {
+        id: 'heir',
+        label: 'Heir Analysis',
+        component: <HeirAnalysis projections={projections} params={params} showPV={showPV} />,
+      },
+    ],
+    [projections, options, params, riskYear, showPV]
+  );
 
   return (
-    <div 
+    <div
       className="h-screen w-full bg-slate-950 text-slate-100 flex flex-col overflow-hidden"
       style={{ fontFamily: 'ui-monospace, SFMono-Regular, Monaco, Consolas, monospace' }}
     >
@@ -191,18 +224,36 @@ export default function App() {
           <span className="font-semibold text-sm">Retirement Planner</span>
           <span className="text-xs text-slate-500">v2.0</span>
         </div>
-        
+
         <div className="flex items-center gap-2">
+          {/* PV/FV Toggle - visible on all tabs except Settings */}
+          {activeTab !== 'settings' && (
+            <button
+              onClick={() => setShowPV(!showPV)}
+              className={`px-2 py-1 text-xs rounded flex items-center gap-1 ${
+                showPV ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
+              title={
+                showPV
+                  ? "Showing Present Value (today's dollars)"
+                  : 'Showing Future Value (nominal dollars)'
+              }
+            >
+              <DollarSign className="w-3 h-3" />
+              {showPV ? 'PV' : 'FV'}
+            </button>
+          )}
+
           {/* Iterative tax toggle */}
           <div className="flex items-center gap-1.5 bg-slate-800 rounded px-2 py-1">
-            <RefreshCw className={`w-3 h-3 ${options.iterativeTax ? 'text-emerald-400' : 'text-slate-500'}`} />
+            <RefreshCw
+              className={`w-3 h-3 ${options.iterativeTax ? 'text-emerald-400' : 'text-slate-500'}`}
+            />
             <span className="text-xs text-slate-400">Iterative Tax:</span>
             <button
               onClick={toggleIterative}
               className={`px-2 py-0.5 rounded text-xs ${
-                options.iterativeTax 
-                  ? 'bg-emerald-600 text-white' 
-                  : 'bg-slate-700 text-slate-400'
+                options.iterativeTax ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-400'
               }`}
             >
               {options.iterativeTax ? 'ON' : 'OFF'}
@@ -210,7 +261,7 @@ export default function App() {
             {options.iterativeTax && (
               <select
                 value={options.maxIterations}
-                onChange={(e) => setMaxIterations(+e.target.value)}
+                onChange={e => setMaxIterations(+e.target.value)}
                 className="bg-slate-700 text-xs rounded px-1 py-0.5 ml-1"
               >
                 <option value={3}>3 iter</option>
@@ -219,17 +270,26 @@ export default function App() {
               </select>
             )}
           </div>
-          
+
           {/* Summary stats */}
           <div className="flex items-center gap-3 ml-4 text-xs">
             <div className="text-slate-400">
-              Final: <span className="text-emerald-400 font-medium">${(summary.endingPortfolio / 1e6).toFixed(1)}M</span>
+              Final:{' '}
+              <span className="text-emerald-400 font-medium">
+                ${(summary.endingPortfolio / 1e6).toFixed(1)}M
+              </span>
             </div>
             <div className="text-slate-400">
-              Heir: <span className="text-blue-400 font-medium">${(summary.endingHeirValue / 1e6).toFixed(1)}M</span>
+              Heir:{' '}
+              <span className="text-blue-400 font-medium">
+                ${(summary.endingHeirValue / 1e6).toFixed(1)}M
+              </span>
             </div>
             <div className="text-slate-400">
-              Tax: <span className="text-rose-400 font-medium">${(summary.totalTaxPaid / 1e6).toFixed(1)}M</span>
+              Tax:{' '}
+              <span className="text-rose-400 font-medium">
+                ${(summary.totalTaxPaid / 1e6).toFixed(1)}M
+              </span>
             </div>
           </div>
 
@@ -280,7 +340,10 @@ export default function App() {
                       className="px-3 py-2 hover:bg-slate-700 flex items-center justify-between group"
                     >
                       <button
-                        onClick={() => { loadState(state.id); setShowLoadMenu(false); }}
+                        onClick={() => {
+                          loadState(state.id);
+                          setShowLoadMenu(false);
+                        }}
                         className="flex-1 text-left"
                       >
                         <div className="text-slate-200 text-xs">{state.name}</div>
@@ -289,7 +352,10 @@ export default function App() {
                         </div>
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); deleteState(state.id); }}
+                        onClick={e => {
+                          e.stopPropagation();
+                          deleteState(state.id);
+                        }}
                         className="p-1 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100"
                       >
                         <Trash2 className="w-3 h-3" />
@@ -347,17 +413,21 @@ export default function App() {
           </div>
         </div>
       </header>
-      
+
       <div className="flex-1 flex overflow-hidden">
         {/* Left sidebar - Inputs */}
         <InputPanel
           params={params}
+          settings={settings}
           updateParam={updateParam}
+          updateParams={updateParams}
           updateRothConversion={updateRothConversion}
           updateExpenseOverride={updateExpenseOverride}
           updateATHarvest={updateATHarvest}
+          options={options}
+          setOptions={setOptions}
         />
-        
+
         {/* Main content area */}
         <main className="flex-1 flex flex-col overflow-hidden bg-slate-950">
           {/* Tab bar */}
@@ -368,7 +438,10 @@ export default function App() {
                   key={tab.id}
                   onClick={() => {
                     setActiveTab(tab.id);
-                    if (splitView && (tab.id === 'scenarios' || tab.id === 'optimize' || tab.id === 'settings')) {
+                    if (
+                      splitView &&
+                      (tab.id === 'scenarios' || tab.id === 'optimize' || tab.id === 'settings')
+                    ) {
                       setSplitView(false);
                     }
                   }}
@@ -406,7 +479,7 @@ export default function App() {
               )}
             </button>
           </div>
-          
+
           {/* Tab content */}
           <div className="flex-1 flex flex-col overflow-hidden">
             {splitView ? (
@@ -422,11 +495,12 @@ export default function App() {
                     projections={projections}
                     options={options}
                     params={params}
+                    showPV={showPV}
                   />
                 )}
 
                 {activeTab === 'dashboard' && (
-                  <Dashboard projections={projections} params={params} />
+                  <Dashboard projections={projections} params={params} showPV={showPV} />
                 )}
 
                 {activeTab === 'risk' && (
@@ -439,10 +513,7 @@ export default function App() {
                 )}
 
                 {activeTab === 'heir' && (
-                  <HeirAnalysis
-                    projections={projections}
-                    params={params}
-                  />
+                  <HeirAnalysis projections={projections} params={params} showPV={showPV} />
                 )}
 
                 {activeTab === 'scenarios' && (
@@ -450,6 +521,7 @@ export default function App() {
                     params={params}
                     projections={projections}
                     summary={summary}
+                    showPV={showPV}
                   />
                 )}
 
@@ -483,15 +555,18 @@ export default function App() {
             <input
               type="text"
               value={saveName}
-              onChange={(e) => setSaveName(e.target.value)}
+              onChange={e => setSaveName(e.target.value)}
               placeholder="Optional name (or leave blank)"
               className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm mb-3 focus:border-blue-500 focus:outline-none"
               autoFocus
-              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              onKeyDown={e => e.key === 'Enter' && handleSave()}
             />
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => { setShowSaveDialog(false); setSaveName(''); }}
+                onClick={() => {
+                  setShowSaveDialog(false);
+                  setSaveName('');
+                }}
                 className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded text-xs hover:bg-slate-600"
               >
                 Cancel

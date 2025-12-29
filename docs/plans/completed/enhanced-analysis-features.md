@@ -1,5 +1,17 @@
 # Enhanced Analysis Features Implementation Plan
 
+> **STATUS: 100% COMPLETE** - Updated 2025-12-28
+>
+> **DONE:**
+> - Phase 1: YearSelector with drag support, presets, custom mode
+> - Phase 2: CalculationInspector with formula breakdown (unified view with 4 modes)
+> - Phase 3: SplitPanel layout for side-by-side views
+> - Phase 4: Dashboard with widget-based layout and summary cards
+> - Phase 5: ScenarioComparison with multiple view modes and ScenarioNameModal
+> - Phase 6: Additional visualizations (Tax Bracket Waterfall, Roth Analysis, Portfolio Composition, Effective Tax Rate)
+> - Dashboard drag-and-drop widget reordering (handleDragStart, handleDrop, visual feedback)
+> - Full diff view with color-coded changes (DiffTable with emerald/rose highlighting)
+
 ## Overview
 
 This plan adds comprehensive analysis and visualization features to the retirement planner:

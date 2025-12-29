@@ -1,0 +1,166 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`DEFAULT_PARAMS > matches baseline > default-params 1`] = `
+{
+  "afterTaxCostBasis": 119000,
+  "afterTaxStart": 474000,
+  "annualExpenses": 180000,
+  "atHarvestOverrides": {},
+  "atReturn": 0.04,
+  "birthYear": 1955,
+  "bracketInflation": 0.03,
+  "capitalGainsPercent": 0.75,
+  "discountRate": 0.03,
+  "endYear": 2055,
+  "exemptSSFromTax": false,
+  "expenseInflation": 0.03,
+  "expenseOverrides": {},
+  "heirDistributionStrategy": "even",
+  "heirFedRate": 0.37,
+  "heirNormalizationYears": 10,
+  "heirStateRate": 0.0495,
+  "heirs": [
+    {
+      "agi": 200000,
+      "name": "Heir 1",
+      "splitPercent": 50,
+      "state": "IL",
+      "taxableRoR": 0.06,
+    },
+    {
+      "agi": 200000,
+      "name": "Heir 2",
+      "splitPercent": 50,
+      "state": "IL",
+      "taxableRoR": 0.06,
+    },
+  ],
+  "highRiskReturn": 0.08,
+  "iraReturn": 0.06,
+  "iraStart": 6121000,
+  "iterativeTax": true,
+  "lowRiskReturn": 0.04,
+  "lowRiskTarget": 3500000,
+  "magi2024": 600000,
+  "magi2025": 600000,
+  "maxIterations": 5,
+  "modRiskReturn": 0.06,
+  "modRiskTarget": 3000000,
+  "returnMode": "blended",
+  "rothConversions": {
+    "2026": 700000,
+    "2027": 700000,
+  },
+  "rothReturn": 0.08,
+  "rothStart": 2612000,
+  "socialSecurityMonthly": 5800,
+  "ssCOLA": 0.025,
+  "startYear": 2026,
+  "stateTaxRate": 0.0495,
+  "survivorDeathYear": null,
+  "survivorExpensePercent": 0.7,
+  "survivorSSPercent": 0.72,
+  "taxYear": 2025,
+}
+`;
+
+exports[`Federal Tax Bracket Structure > MFJ Brackets > matches 2024 IRS brackets > federal-mfj-2024 1`] = `
+[
+  {
+    "rate": 0.1,
+    "threshold": 0,
+  },
+  {
+    "rate": 0.12,
+    "threshold": 23200,
+  },
+  {
+    "rate": 0.22,
+    "threshold": 94300,
+  },
+  {
+    "rate": 0.24,
+    "threshold": 201050,
+  },
+  {
+    "rate": 0.32,
+    "threshold": 383900,
+  },
+  {
+    "rate": 0.35,
+    "threshold": 487450,
+  },
+  {
+    "rate": 0.37,
+    "threshold": 731200,
+  },
+]
+`;
+
+exports[`Federal Tax Bracket Structure > Single Brackets > matches 2024 IRS brackets > federal-single-2024 1`] = `
+[
+  {
+    "rate": 0.1,
+    "threshold": 0,
+  },
+  {
+    "rate": 0.12,
+    "threshold": 11600,
+  },
+  {
+    "rate": 0.22,
+    "threshold": 47150,
+  },
+  {
+    "rate": 0.24,
+    "threshold": 100525,
+  },
+  {
+    "rate": 0.32,
+    "threshold": 191950,
+  },
+  {
+    "rate": 0.35,
+    "threshold": 243725,
+  },
+  {
+    "rate": 0.37,
+    "threshold": 609350,
+  },
+]
+`;
+
+exports[`IRMAA Brackets > matches 2024 CMS brackets > irmaa-mfj-2024 1`] = `
+[
+  {
+    "partB": 174.7,
+    "partD": 0,
+    "threshold": 0,
+  },
+  {
+    "partB": 244.6,
+    "partD": 12.9,
+    "threshold": 206000,
+  },
+  {
+    "partB": 349.4,
+    "partD": 33.3,
+    "threshold": 258000,
+  },
+  {
+    "partB": 454.2,
+    "partD": 53.8,
+    "threshold": 322000,
+  },
+  {
+    "partB": 559,
+    "partD": 74.2,
+    "threshold": 386000,
+  },
+  {
+    "partB": 594,
+    "partD": 81,
+    "threshold": 750000,
+  },
+]
+`;

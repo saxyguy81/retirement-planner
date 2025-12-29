@@ -7,7 +7,22 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run --exclude 'src/**/*.visual.test.jsx'",
+    "test:visual": "docker compose -f docker/docker-compose.test.yml run --rm visual-tests",
+    "test:visual:update": "docker compose -f docker/docker-compose.test.yml run --rm visual-tests-update",
+    "test:visual:local": "vitest run --config vitest.browser.config.js",
+    "test:visual:local:update": "vitest run --config vitest.browser.config.js --update",
+    "test:coverage": "vitest run --coverage",
+    "baseline:review": "node scripts/review-baseline-changes.js",
+    "baseline:approve": "node scripts/approve-baseline.js",
+    "hooks:install": "node scripts/install-hooks.js",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write \"src/**/*.{js,jsx,json,css}\"",
+    "format:check": "prettier --check \"src/**/*.{js,jsx,json,css}\"",
+    "check": "npm run lint && npm run test:unit && npm run build"
   },
   "dependencies": {
     "jspdf": "^3.0.4",
@@ -19,13 +34,29 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@playwright/test": "^1.40.0",
+    "@testing-library/jest-dom": "^6.1.0",
+    "@testing-library/react": "^14.1.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.0",
+    "@vitest/browser": "^2.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
     "autoprefixer": "^10.4.16",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-vitest": "^0.5.4",
+    "jsdom": "^24.0.0",
+    "playwright": "^1.40.0",
     "postcss": "^8.4.32",
+    "prettier": "^3.7.4",
     "tailwindcss": "^3.3.6",
     "vite": "^5.0.0",
-    "vitest": "^1.0.0"
+    "vitest": "^2.0.0"
   }
 }
