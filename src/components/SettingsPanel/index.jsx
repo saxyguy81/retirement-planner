@@ -12,15 +12,21 @@ import {
   Settings,
   Calculator,
   Eye,
+  EyeOff,
   ChevronDown,
   ChevronRight,
   RotateCcw,
   Heart,
+  Bot,
+  CheckCircle2,
+  XCircle,
+  Loader2,
 } from 'lucide-react';
 import { useState } from 'react';
 
 import { IRMAAEditor } from './IRMAAEditor';
 import { TaxBracketEditor } from './TaxBracketEditor';
+import { PROVIDERS, AIService, saveAIConfig, loadAIConfig } from '../../lib/aiService';
 
 // Collapsible section wrapper
 function SettingsSection({ title, icon: Icon, expanded, onToggle, color, children }) {
@@ -76,11 +82,49 @@ function SettingsInput({ label, value, onChange, type = 'text', placeholder, hel
 export function SettingsPanel({ settings, updateSettings, resetSettings }) {
   const [expanded, setExpanded] = useState(['tax']);
 
+  // AI Configuration state
+  const [aiConfig, setAiConfig] = useState(
+    () =>
+      loadAIConfig() || {
+        provider: 'anthropic',
+        apiKey: '',
+        model: 'claude-sonnet-4-20250514',
+        customBaseUrl: '',
+      }
+  );
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [testStatus, setTestStatus] = useState(null);
+  const [testMessage, setTestMessage] = useState('');
+
   const toggle = section => {
     setExpanded(prev =>
       prev.includes(section) ? prev.filter(s => s !== section) : [...prev, section]
     );
   };
+
+  // AI config handlers
+  const updateAiConfig = updates => {
+    const newConfig = { ...aiConfig, ...updates };
+    setAiConfig(newConfig);
+    saveAIConfig(newConfig);
+    setTestStatus(null);
+  };
+
+  const handleTestConnection = async () => {
+    if (!aiConfig.apiKey && aiConfig.provider !== 'custom') {
+      setTestStatus('error');
+      setTestMessage('Please enter an API key');
+      return;
+    }
+    setTestStatus('testing');
+    setTestMessage('Testing connection...');
+    const service = new AIService(aiConfig);
+    const result = await service.testConnection();
+    setTestStatus(result.success ? 'success' : 'error');
+    setTestMessage(result.success ? 'Connected!' : result.message);
+  };
+
+  const currentProvider = PROVIDERS[aiConfig.provider];
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden text-xs">
@@ -221,6 +265,131 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
                 {settings.displayPrecision === 'dollars' && 'Full dollar amounts with commas'}
                 {settings.displayPrecision === 'cents' && 'Full precision with cents'}
               </div>
+            </div>
+          </div>
+        </SettingsSection>
+
+        {/* AI Assistant Section */}
+        <SettingsSection
+          title="AI Assistant"
+          icon={Bot}
+          expanded={expanded.includes('ai')}
+          onToggle={() => toggle('ai')}
+          color="purple"
+        >
+          <div className="space-y-4">
+            {/* Provider Selection */}
+            <div>
+              <label className="block text-slate-400 text-xs mb-1">Provider</label>
+              <select
+                value={aiConfig.provider}
+                onChange={e => {
+                  const newProvider = e.target.value;
+                  const defaultModel = PROVIDERS[newProvider]?.models[0] || '';
+                  updateAiConfig({ provider: newProvider, model: defaultModel });
+                }}
+                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+              >
+                {Object.entries(PROVIDERS).map(([key, provider]) => (
+                  <option key={key} value={key}>
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* API Key */}
+            <div>
+              <label className="block text-slate-400 text-xs mb-1">API Key</label>
+              <div className="relative">
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={aiConfig.apiKey}
+                  onChange={e => updateAiConfig({ apiKey: e.target.value })}
+                  placeholder={`Enter your ${currentProvider?.name || 'API'} key`}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 pr-10 text-sm focus:border-purple-500 focus:outline-none"
+                />
+                <button
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                >
+                  {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <div className="text-slate-500 text-[10px] mt-1">
+                Your API key is stored locally and never sent to our servers.
+              </div>
+            </div>
+
+            {/* Model Selection */}
+            <div>
+              <label className="block text-slate-400 text-xs mb-1">Model</label>
+              {aiConfig.provider === 'custom' ? (
+                <input
+                  type="text"
+                  value={aiConfig.model}
+                  onChange={e => updateAiConfig({ model: e.target.value })}
+                  placeholder="Model name"
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                />
+              ) : (
+                <select
+                  value={aiConfig.model}
+                  onChange={e => updateAiConfig({ model: e.target.value })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                >
+                  {currentProvider?.models.map(model => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* Custom Base URL (for custom provider) */}
+            {aiConfig.provider === 'custom' && (
+              <div>
+                <label className="block text-slate-400 text-xs mb-1">Base URL</label>
+                <input
+                  type="text"
+                  value={aiConfig.customBaseUrl}
+                  onChange={e => updateAiConfig({ customBaseUrl: e.target.value })}
+                  placeholder="http://localhost:4000/api/v1/chat/completions"
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                />
+              </div>
+            )}
+
+            {/* Test Connection Button */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleTestConnection}
+                disabled={testStatus === 'testing'}
+                className="px-4 py-2 bg-purple-600 text-white rounded text-sm hover:bg-purple-500 disabled:opacity-50 flex items-center gap-2"
+              >
+                {testStatus === 'testing' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Testing...
+                  </>
+                ) : (
+                  'Test Connection'
+                )}
+              </button>
+
+              {testStatus === 'success' && (
+                <div className="flex items-center gap-1 text-emerald-400 text-sm">
+                  <CheckCircle2 className="w-4 h-4" />
+                  {testMessage}
+                </div>
+              )}
+              {testStatus === 'error' && (
+                <div className="flex items-center gap-1 text-rose-400 text-sm">
+                  <XCircle className="w-4 h-4" />
+                  {testMessage}
+                </div>
+              )}
             </div>
           </div>
         </SettingsSection>

@@ -26,7 +26,6 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { generateProjections, calculateSummary } from '../../lib';
 import { AIService, AGENT_TOOLS, loadAIConfig } from '../../lib/aiService';
 import { fmt$ } from '../../lib/formatters';
-import { AISettings } from '../AISettings';
 
 // Storage key for chat history
 const CHAT_STORAGE_KEY = 'rp-chat-history';
@@ -81,9 +80,23 @@ export function Chat({
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [showSettings, setShowSettings] = useState(false);
   const [aiConfig, setAIConfig] = useState(() => loadAIConfig());
   const messagesEndRef = useRef(null);
+
+  // Reload AI config when it might have changed (e.g., user configured in Settings)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setAIConfig(loadAIConfig());
+    };
+    window.addEventListener('storage', handleStorageChange);
+    // Also check on focus in case user changed settings in same tab
+    const handleFocus = () => setAIConfig(loadAIConfig());
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
 
   // Calculate context usage
   const contextUsage = calculateContextUsage(messages);
@@ -180,9 +193,8 @@ export function Chat({
   // Send message to AI
   const sendMessage = useCallback(async () => {
     if (!input.trim() || isLoading) return;
-    if (!aiConfig?.apiKey) {
-      setError('Please configure your AI provider first');
-      setShowSettings(true);
+    if (!aiConfig?.apiKey && aiConfig?.provider !== 'custom') {
+      setError('Please configure your AI provider in the Settings tab');
       return;
     }
 
@@ -285,16 +297,6 @@ export function Chat({
             <Trash2 className="w-3 h-3" />
             New Chat
           </button>
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className={`px-2 py-1 rounded text-xs flex items-center gap-1 ${
-              showSettings
-                ? 'bg-purple-600 text-white'
-                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-            }`}
-          >
-            Settings
-          </button>
         </div>
       </div>
 
@@ -302,7 +304,7 @@ export function Chat({
         {/* Messages Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.length === 0 && !showSettings && (
+            {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-slate-400">
                 <Bot className="w-12 h-12 mb-3 opacity-50" />
                 <div className="text-lg mb-2">AI Assistant</div>
@@ -403,20 +405,13 @@ export function Chat({
                 <Send className="w-4 h-4" />
               </button>
             </div>
-            {!aiConfig?.apiKey && (
+            {!aiConfig?.apiKey && aiConfig?.provider !== 'custom' && (
               <div className="text-amber-400 text-xs mt-2">
-                Configure your AI provider in Settings to start chatting.
+                Configure your AI provider in the Settings tab to start chatting.
               </div>
             )}
           </div>
         </div>
-
-        {/* Settings Panel */}
-        {showSettings && (
-          <div className="w-80 border-l border-slate-800 p-4 overflow-y-auto">
-            <AISettings onConfigChange={setAIConfig} />
-          </div>
-        )}
       </div>
     </div>
   );

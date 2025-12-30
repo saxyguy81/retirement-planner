@@ -137,18 +137,53 @@ export class AIService {
     this.apiKey = config.apiKey;
     this.model = config.model;
     this.customBaseUrl = config.customBaseUrl;
+
+    // Detect API format for custom endpoints based on URL pattern
+    this.customFormat = this.detectCustomFormat();
+  }
+
+  /**
+   * Detect whether custom endpoint uses Anthropic or OpenAI format
+   * based on URL pattern
+   */
+  detectCustomFormat() {
+    if (this.provider !== 'custom' || !this.customBaseUrl) {
+      return null;
+    }
+    // Anthropic-style endpoints typically end with /messages
+    if (this.customBaseUrl.includes('/messages')) {
+      return 'anthropic';
+    }
+    // OpenAI-style endpoints typically end with /chat/completions
+    if (this.customBaseUrl.includes('/chat/completions')) {
+      return 'openai';
+    }
+    // Default to OpenAI format
+    return 'openai';
   }
 
   async sendMessage(messages, tools, onToolCall) {
     const providerConfig = PROVIDERS[this.provider];
     const baseUrl = this.customBaseUrl || providerConfig.baseUrl;
 
-    // Format request based on provider
+    // Format request based on provider/format
     const request = this.formatRequest(messages, tools);
+
+    // Determine headers - custom endpoints use format-specific headers
+    let headers;
+    if (this.provider === 'custom' && this.customFormat === 'anthropic') {
+      headers = {
+        'x-api-key': this.apiKey || '',
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      };
+    } else {
+      headers = providerConfig.headers(this.apiKey);
+    }
 
     const response = await fetch(baseUrl, {
       method: 'POST',
-      headers: providerConfig.headers(this.apiKey),
+      headers,
       body: JSON.stringify(request),
     });
 
@@ -161,10 +196,24 @@ export class AIService {
     return this.parseResponse(data, onToolCall);
   }
 
+  /**
+   * Determine which API format to use
+   */
+  getApiFormat() {
+    // Custom endpoints use detected format
+    if (this.provider === 'custom') {
+      return this.customFormat || 'openai';
+    }
+    // Native providers use their specific format
+    return this.provider === 'anthropic' ? 'anthropic' : 'openai';
+  }
+
   formatRequest(messages, tools) {
+    const format = this.getApiFormat();
     const systemMessage = { role: 'system', content: SYSTEM_PROMPT };
 
-    if (this.provider === 'anthropic') {
+    if (format === 'anthropic') {
+      // Anthropic Messages API format
       return {
         model: this.model,
         max_tokens: 4096,
@@ -173,7 +222,7 @@ export class AIService {
           .filter(m => m.role !== 'system')
           .map(m => ({
             role: m.role === 'assistant' ? 'assistant' : 'user',
-            content: m.content,
+            content: m.content || ' ', // Anthropic requires non-empty content
           })),
         tools: tools?.map(t => ({
           name: t.name,
@@ -185,7 +234,10 @@ export class AIService {
       // OpenAI / OpenRouter format
       return {
         model: this.model,
-        messages: [systemMessage, ...messages],
+        messages: [systemMessage, ...messages].map(m => ({
+          ...m,
+          content: m.content || '', // Ensure content is never undefined
+        })),
         tools: tools?.map(t => ({
           type: 'function',
           function: {
@@ -199,7 +251,9 @@ export class AIService {
   }
 
   parseResponse(data, onToolCall) {
-    if (this.provider === 'anthropic') {
+    const format = this.getApiFormat();
+
+    if (format === 'anthropic') {
       // Anthropic response format
       const content = data.content || [];
       const textBlocks = content.filter(b => b.type === 'text');
