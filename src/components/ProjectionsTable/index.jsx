@@ -714,6 +714,8 @@ export function ProjectionsTable({ projections, params, showPV = true }) {
                             return (
                               <td
                                 key={d.year}
+                                data-field={row.key}
+                                data-year={d.year}
                                 onClick={() =>
                                   isInspectable && navigation.navigateTo(row.key, d.year, d)
                                 }

@@ -79,6 +79,7 @@ export const FORMULA_COLORS = {
   ssAnnual: { color: '#0072B2', label: 'SS', key: 'ssAnnual' }, // Okabe-Ito Blue
   taxableSS: { color: '#0072B2', label: 'Taxable SS', key: 'taxableSS' }, // Okabe-Ito Blue
   expenses: { color: '#F0E442', label: 'Expenses', key: 'expenses' }, // Okabe-Ito Yellow
+  cumulativeExpenses: { color: '#F0E442', label: 'Cum Expenses', key: 'cumulativeExpenses' }, // Okabe-Ito Yellow
   irmaaTotal: { color: '#F0E442', label: 'IRMAA', key: 'irmaaTotal' }, // Okabe-Ito Yellow
   propertyTax: { color: '#F0E442', label: 'Property Tax', key: 'propertyTax' }, // Okabe-Ito Yellow
   deductiblePropertyTax: { color: '#F0E442', label: 'SALT Ded', key: 'deductiblePropertyTax' }, // Okabe-Ito Yellow
@@ -95,6 +96,10 @@ export const FORMULA_COLORS = {
 
   // Capital Gains
   capitalGains: { color: '#f59e0b', label: 'Cap Gains', key: 'capitalGains' }, // Amber
+
+  // Cost Basis
+  costBasisBOY: { color: '#8b5cf6', label: 'Basis BOY', key: 'costBasisBOY' }, // Purple
+  costBasisEOY: { color: '#8b5cf6', label: 'Basis EOY', key: 'costBasisEOY' }, // Purple
 
   // Heir
   heirValue: { color: '#a855f7', label: 'Heir Value', key: 'heirValue' }, // Purple
