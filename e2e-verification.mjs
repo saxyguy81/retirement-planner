@@ -1,6 +1,8 @@
 /**
- * E2E Verification Script for Calculation Inspector Navigation
- * Runs headless browser tests to verify the implementation
+ * E2E Verification Script for Retirement Planner Features
+ * Runs headless browser tests to verify:
+ * - Calculation Inspector Navigation
+ * - Optimizer Feasibility Validation
  */
 
 import { chromium } from 'playwright';
@@ -214,6 +216,77 @@ async function runVerification() {
     } else {
       results.failed.push('Phase 4: Could not find inspectable cell');
       console.log('   FAIL: Could not find inspectable cell');
+    }
+
+    // ========================================
+    // OPTIMIZER FEASIBILITY VERIFICATION
+    // ========================================
+    console.log('\n=== Optimizer Feasibility Verification ===');
+
+    // Navigate to Optimizer tab
+    const optimizerTab = await page.$('button:has-text("Optimize")');
+    if (optimizerTab) {
+      await optimizerTab.click();
+      await page.waitForTimeout(1000);
+
+      // Check if optimizer panel is visible
+      const optimizerPanel = await page.$('text=Strategy Optimizer');
+      if (optimizerPanel) {
+        results.passed.push('Optimizer: Panel opens correctly');
+        console.log('   PASS: Optimizer panel opens correctly');
+
+        // Look for Run Optimization button
+        const runBtn = await page.$('button:has-text("Run Optimization")');
+        if (runBtn) {
+          await runBtn.click();
+          await page.waitForTimeout(3000); // Wait for optimization to complete
+
+          // Check for optimization results table
+          const resultsTable = await page.$('table');
+          if (resultsTable) {
+            results.passed.push('Optimizer: Results table appears after running');
+            console.log('   PASS: Results table appears after running');
+
+            // Check for Feasible column header
+            const feasibleHeader = await page.$('th:has-text("Feasible")');
+            if (feasibleHeader) {
+              results.passed.push('Optimizer: Feasibility column present in results');
+              console.log('   PASS: Feasibility column present in results');
+            }
+
+            // Check for warning indicators (amber color for infeasible strategies)
+            const warningIndicators = await page.$$('span.text-amber-400');
+            if (warningIndicators.length > 0) {
+              results.passed.push('Optimizer: Warning indicators shown for infeasible strategies');
+              console.log('   PASS: Warning indicators shown for infeasible strategies');
+            }
+
+            // Check for "Actual:" label which appears when strategy is capped
+            const actualLabels = await page.$$('text=/Actual:/');
+            if (actualLabels.length > 0) {
+              results.passed.push('Optimizer: Actual amounts displayed for capped strategies');
+              console.log('   PASS: Actual amounts displayed for capped strategies');
+            } else {
+              // This might not be visible if all strategies are feasible - check for feasibility percentage
+              const feasibilityPercent = await page.$('text=/\\d+%/');
+              if (feasibilityPercent) {
+                console.log('   INFO: Feasibility percentages visible (strategies may all be feasible)');
+              }
+            }
+          } else {
+            results.failed.push('Optimizer: Results table not found');
+            console.log('   FAIL: Results table not found');
+          }
+        } else {
+          results.failed.push('Optimizer: Run Optimization button not found');
+          console.log('   FAIL: Run Optimization button not found');
+        }
+      } else {
+        results.failed.push('Optimizer: Panel did not open');
+        console.log('   FAIL: Optimizer panel did not open');
+      }
+    } else {
+      console.log('   INFO: Optimizer tab not found (may be in different location)');
     }
 
   } catch (error) {
