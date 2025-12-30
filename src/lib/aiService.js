@@ -290,7 +290,23 @@ export async function webSearch(query) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Tavily API error: ${response.status} - ${errorText}`);
+      const status = response.status;
+
+      // Categorize errors for better user feedback
+      if (status === 429) {
+        console.error('Web search rate limited:', errorText);
+        return 'Web search is temporarily unavailable due to rate limiting (429). Please try again in a few minutes, or I can answer based on my training data.';
+      }
+      if (status === 401 || status === 403) {
+        console.error('Web search auth error:', errorText);
+        return `Web search encountered an authentication error (${status}). Please try again later.`;
+      }
+      if (status >= 500) {
+        console.error('Web search server error:', status, errorText);
+        return `Web search service is temporarily unavailable (${status}). I can try to answer based on my training data instead.`;
+      }
+
+      throw new Error(`Tavily API error: ${status} - ${errorText}`);
     }
 
     const data = await response.json();
@@ -315,7 +331,13 @@ export async function webSearch(query) {
     return result || 'No results found.';
   } catch (error) {
     console.error('Web search error:', error);
-    return `Web search failed: ${error.message}`;
+
+    // Provide user-friendly error message
+    if (error.message.includes('fetch')) {
+      return 'Web search failed due to a network error. Please check your connection and try again.';
+    }
+
+    return `Web search encountered a technical error. I can try to answer based on my training data instead. (Error: ${error.message})`;
   }
 }
 
@@ -344,7 +366,26 @@ export async function fetchPage(url) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Tavily Extract API error: ${response.status} - ${errorText}`);
+      const status = response.status;
+
+      // Categorize errors
+      if (status === 429) {
+        console.error('Page fetch rate limited:', errorText);
+        return 'Page fetching is temporarily rate limited. The search results summary should contain the key information.';
+      }
+      if (status === 403 || status === 451) {
+        console.error('Page fetch blocked:', errorText);
+        return 'This page could not be accessed (may be blocked or require authentication). The search results summary should contain the key information.';
+      }
+      if (status === 404) {
+        return `Failed to fetch page: The page was not found (404). It may have been moved or deleted.`;
+      }
+      if (status >= 500) {
+        console.error('Page fetch server error:', status, errorText);
+        return 'Page fetching service is temporarily unavailable. The search results summary should contain the key information.';
+      }
+
+      throw new Error(`Tavily Extract API error: ${status} - ${errorText}`);
     }
 
     const data = await response.json();
@@ -365,10 +406,15 @@ export async function fetchPage(url) {
       return `**Source:** ${url}\n\n${content || 'No content extracted.'}`;
     }
 
-    return 'No content could be extracted from this page.';
+    return 'No content could be extracted from this page. The search results summary should contain the key information.';
   } catch (error) {
     console.error('Fetch page error:', error);
-    return `Failed to fetch page: ${error.message}`;
+
+    if (error.message.includes('fetch')) {
+      return 'Failed to fetch page due to a network error. The search results summary should contain the key information.';
+    }
+
+    return `Failed to fetch page: ${error.message}. The search results summary should contain the key information.`;
   }
 }
 

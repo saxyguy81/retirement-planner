@@ -5,8 +5,8 @@
  * Error: "messages: text content blocks must contain non-whitespace text"
  */
 
-import { describe, it, expect } from 'vitest';
-import { AIService } from './aiService.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { AIService, webSearch, fetchPage } from './aiService.js';
 
 // =============================================================================
 // formatRequest Tests - Anthropic format message content handling
@@ -187,5 +187,201 @@ describe('AIService.detectCustomFormat', () => {
     });
 
     expect(service.customFormat).toBe('openai');
+  });
+});
+
+// =============================================================================
+// webSearch Tests
+// =============================================================================
+describe('webSearch', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('returns formatted results for successful search', async () => {
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        answer: 'The 2025 Roth IRA contribution limit is $7,000.',
+        results: [
+          {
+            title: 'IRS 2025 Limits',
+            url: 'https://irs.gov/limits',
+            content: 'The contribution limit for 2025 is $7,000...',
+          },
+        ],
+      }),
+    });
+
+    const result = await webSearch('2025 Roth IRA limits');
+
+    expect(result).toContain('$7,000');
+    expect(result).toContain('**Summary:**');
+    expect(result).toContain('**Sources:**');
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'https://api.tavily.com/search',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('2025 Roth IRA limits'),
+      })
+    );
+  });
+
+  it('handles API errors gracefully', async () => {
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      text: async () => 'Rate limit exceeded',
+    });
+
+    const result = await webSearch('test query');
+
+    expect(result).toContain('Web search');
+    expect(result).toContain('429');
+  });
+
+  it('handles network errors gracefully', async () => {
+    globalThis.fetch.mockRejectedValueOnce(new Error('Network error'));
+
+    const result = await webSearch('test query');
+
+    expect(result).toContain('Web search');
+    expect(result).toContain('Network error');
+  });
+
+  it('handles empty results', async () => {
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        results: [],
+      }),
+    });
+
+    const result = await webSearch('obscure query');
+
+    expect(result).toBe('No results found.');
+  });
+
+  it('handles malformed API response', async () => {
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({}), // Missing expected fields
+    });
+
+    const result = await webSearch('test query');
+
+    expect(result).toBe('No results found.');
+  });
+
+  it('truncates long content in results', async () => {
+    const longContent = 'A'.repeat(300);
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            title: 'Test',
+            url: 'https://test.com',
+            content: longContent,
+          },
+        ],
+      }),
+    });
+
+    const result = await webSearch('test');
+
+    expect(result).toContain('...');
+    expect(result.length).toBeLessThan(longContent.length);
+  });
+});
+
+// =============================================================================
+// fetchPage Tests
+// =============================================================================
+describe('fetchPage', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('returns page content for valid HTTPS URL', async () => {
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            raw_content: 'This is the page content about retirement planning.',
+          },
+        ],
+      }),
+    });
+
+    const result = await fetchPage('https://example.com/article');
+
+    expect(result).toContain('**Source:**');
+    expect(result).toContain('retirement planning');
+  });
+
+  it('rejects HTTP URLs for security', async () => {
+    const result = await fetchPage('http://insecure.com/page');
+
+    expect(result).toContain('Only HTTPS URLs are supported');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('handles API errors gracefully', async () => {
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: async () => 'Internal server error',
+    });
+
+    const result = await fetchPage('https://example.com');
+
+    // 500 errors return user-friendly message about service unavailability
+    expect(result).toContain('temporarily unavailable');
+  });
+
+  it('truncates very long content', async () => {
+    const longContent = 'B'.repeat(10000);
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            raw_content: longContent,
+          },
+        ],
+      }),
+    });
+
+    const result = await fetchPage('https://example.com');
+
+    expect(result).toContain('[Content truncated...]');
+    expect(result.length).toBeLessThan(longContent.length);
+  });
+
+  it('handles empty extraction results', async () => {
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        results: [],
+      }),
+    });
+
+    const result = await fetchPage('https://example.com');
+
+    expect(result).toContain('No content could be extracted');
   });
 });
