@@ -368,16 +368,20 @@ export class AIService {
 
     if (format === 'anthropic') {
       // Anthropic Messages API format
+      // Filter out messages with empty/whitespace content - Anthropic requires non-whitespace text
+      const filteredMessages = messages
+        .filter(m => m.role !== 'system')
+        .filter(m => m.content && m.content.trim().length > 0)
+        .map(m => ({
+          role: m.role === 'assistant' ? 'assistant' : 'user',
+          content: m.content,
+        }));
+
       return {
         model: this.model,
         max_tokens: 4096,
         system: SYSTEM_PROMPT,
-        messages: messages
-          .filter(m => m.role !== 'system')
-          .map(m => ({
-            role: m.role === 'assistant' ? 'assistant' : 'user',
-            content: m.content || ' ', // Anthropic requires non-empty content
-          })),
+        messages: filteredMessages,
         tools: tools?.map(t => ({
           name: t.name,
           description: t.description,
@@ -386,11 +390,13 @@ export class AIService {
       };
     } else if (format === 'google') {
       // Google Gemini API format
+      // Filter out messages with empty/whitespace content
       const contents = messages
         .filter(m => m.role !== 'system')
+        .filter(m => m.content && m.content.trim().length > 0)
         .map(m => ({
           role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content || ' ' }],
+          parts: [{ text: m.content }],
         }));
 
       const request = {
@@ -419,12 +425,14 @@ export class AIService {
       return request;
     } else {
       // OpenAI / OpenRouter format
+      // Filter out messages with empty/whitespace content (keep system message)
+      const filteredMessages = [systemMessage, ...messages].filter(
+        m => m.role === 'system' || (m.content && m.content.trim().length > 0)
+      );
+
       return {
         model: this.model,
-        messages: [systemMessage, ...messages].map(m => ({
-          ...m,
-          content: m.content || '', // Ensure content is never undefined
-        })),
+        messages: filteredMessages,
         tools: tools?.map(t => ({
           type: 'function',
           function: {
@@ -814,15 +822,33 @@ export const saveAIConfig = config => {
 };
 
 // Load AI config from localStorage
+// If saved config is incomplete (empty apiKey for non-custom provider), merge with defaults
 export const loadAIConfig = () => {
   try {
     const saved = localStorage.getItem(AI_CONFIG_KEY);
     if (!saved) return null;
     const parsed = JSON.parse(saved);
-    return {
+    const config = {
       ...parsed,
       apiKey: decryptApiKey(parsed.apiKey),
     };
+
+    // If apiKey is empty and provider is not 'custom', fall back to defaults
+    // This handles the case where user visited Settings, changed provider,
+    // but didn't enter an API key - we should use default Gemini config
+    if (!config.apiKey && config.provider !== 'custom') {
+      // If the saved provider matches default, use default API key
+      if (config.provider === DEFAULT_AI_CONFIG.provider) {
+        return {
+          ...config,
+          apiKey: DEFAULT_AI_CONFIG.apiKey,
+        };
+      }
+      // Otherwise return null to trigger full DEFAULT_AI_CONFIG fallback
+      return null;
+    }
+
+    return config;
   } catch {
     return null;
   }
