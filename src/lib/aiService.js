@@ -7,6 +7,10 @@
  * - Custom endpoints (LM Studio, Ollama, etc.)
  */
 
+// Tavily API configuration for web search
+const TAVILY_API_KEY = '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';
+const TAVILY_SEARCH_URL = 'https://api.tavily.com/search';
+
 // UI configuration for each tool - single source of truth
 export const TOOL_UI_CONFIG = {
   create_scenario: {
@@ -55,6 +59,11 @@ export const TOOL_UI_CONFIG = {
     icon: '📸',
     label: 'Capturing data snapshot',
     capability: { title: 'Show Data Tables', description: 'Embed projections in chat' },
+  },
+  web_search: {
+    icon: '🌐',
+    label: 'Searching the web',
+    capability: { title: 'Web Research', description: 'Look up current tax rules & rates' },
   },
 };
 
@@ -218,7 +227,76 @@ export const AGENT_TOOLS = [
       required: ['type'],
     },
   },
+  {
+    name: 'web_search',
+    description:
+      'Search the web for current information about retirement planning, tax rules, IRA/401k limits, Social Security, Medicare/IRMAA, and other financial topics. Use this when the user asks about current rules, rates, or limits that may have changed.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description:
+            'Search query (e.g., "2025 IRA contribution limits", "Social Security COLA 2025")',
+        },
+      },
+      required: ['query'],
+    },
+  },
 ];
+
+/**
+ * Perform a web search using Tavily API
+ * @param {string} query - Search query
+ * @returns {Promise<string>} - Formatted search results
+ */
+export async function webSearch(query) {
+  try {
+    const response = await fetch(TAVILY_SEARCH_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        api_key: TAVILY_API_KEY,
+        query: query,
+        search_depth: 'basic',
+        include_answer: true,
+        include_raw_content: false,
+        max_results: 5,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Tavily API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    // Format results for the AI
+    let result = '';
+
+    if (data.answer) {
+      result += `**Summary:** ${data.answer}\n\n`;
+    }
+
+    if (data.results && data.results.length > 0) {
+      result += '**Sources:**\n';
+      data.results.forEach((r, i) => {
+        result += `${i + 1}. [${r.title}](${r.url})\n`;
+        if (r.content) {
+          result += `   ${r.content.slice(0, 200)}${r.content.length > 200 ? '...' : ''}\n`;
+        }
+      });
+    }
+
+    return result || 'No results found.';
+  } catch (error) {
+    console.error('Web search error:', error);
+    return `Web search failed: ${error.message}`;
+  }
+}
 
 // Provider configurations
 export const PROVIDERS = {

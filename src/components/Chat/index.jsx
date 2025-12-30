@@ -327,6 +327,12 @@ export function Chat({
           return 'Unknown snapshot type';
         }
 
+        case 'web_search': {
+          const { webSearch } = await import('../../lib/aiService');
+          const results = await webSearch(args.query);
+          return results;
+        }
+
         default:
           return `Unknown tool: ${name}`;
       }

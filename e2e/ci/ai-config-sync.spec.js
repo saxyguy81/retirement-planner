@@ -199,12 +199,15 @@ test.describe('AI Config Sync', () => {
     expect(savedConfig.provider).toBe('openai');
   });
 
-  test('Chat shows warning only when API key is missing for non-custom provider', async ({ page }) => {
+  test('empty API key for non-custom provider falls back to defaults (no warning)', async ({
+    page,
+  }) => {
     // Set Anthropic config without API key
+    // With the fix, this should fall back to DEFAULT_AI_CONFIG (Gemini)
     await page.evaluate(key => {
       const config = {
         provider: 'anthropic',
-        apiKey: '', // Empty - should trigger warning
+        apiKey: '', // Empty - will trigger fallback to defaults
         model: 'claude-sonnet-4-20250514',
         customBaseUrl: '',
       };
@@ -218,8 +221,11 @@ test.describe('AI Config Sync', () => {
     await page.click('button:has-text("AI Chat")');
     await page.waitForTimeout(300);
 
-    // Should show the config warning
-    await expect(page.locator('text=Configure your AI provider')).toBeVisible();
+    // Should NOT show the config warning - falls back to default Gemini config
+    await expect(page.locator('text=Configure your AI provider')).not.toBeVisible();
+
+    // Chat should be usable
+    await expect(page.locator('[data-testid="empty-state"]')).toBeVisible();
   });
 
   test('custom provider works without API key', async ({ page }) => {

@@ -126,7 +126,9 @@ export function CalculationInspector({
                 </button>
               </div>
               <div className="text-center flex-1">
-                <h3 className="text-lg font-medium text-slate-200" data-testid="inspector-title">{calc.name}</h3>
+                <h3 className="text-lg font-medium text-slate-200" data-testid="inspector-title">
+                  {calc.name}
+                </h3>
                 <div className="text-slate-500 text-xs">
                   Year {activeData.year} (Age {activeData.age})
                 </div>
@@ -134,7 +136,9 @@ export function CalculationInspector({
             </>
           ) : (
             <div>
-              <h3 className="text-lg font-medium text-slate-200" data-testid="inspector-title">{calc.name}</h3>
+              <h3 className="text-lg font-medium text-slate-200" data-testid="inspector-title">
+                {calc.name}
+              </h3>
               <div className="text-slate-500 text-xs">
                 Year {activeData.year} (Age {activeData.age})
               </div>

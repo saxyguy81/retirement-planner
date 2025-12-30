@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 import MarkdownMessage from './MarkdownMessage';
 
 describe('MarkdownMessage', () => {
@@ -106,7 +106,6 @@ describe('MarkdownMessage', () => {
     expect(img).toHaveAttribute('alt', 'alt text');
   });
 
-  
   it('renders inline code', () => {
     render(<MarkdownMessage content="Use `console.log()` for debugging" />);
     const code = screen.getByText('console.log()');
