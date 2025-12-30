@@ -16,7 +16,6 @@ import {
   ChevronDown,
   ChevronRight,
   RotateCcw,
-  Heart,
   Bot,
   CheckCircle2,
   XCircle,
@@ -24,8 +23,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
-import { IRMAAEditor } from './IRMAAEditor';
-import { TaxBracketEditor } from './TaxBracketEditor';
+import { TaxTablesEditor } from './TaxTablesEditor';
 import {
   PROVIDERS,
   AIService,
@@ -392,32 +390,23 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
           </div>
         </SettingsSection>
 
-        {/* Tax Bracket Editor Section */}
+        {/* Tax Tables (Advanced) - Unified Section */}
         <SettingsSection
-          title="Tax Brackets (Advanced)"
+          title="Tax Tables (Advanced)"
           icon={Calculator}
-          expanded={expanded.includes('brackets')}
-          onToggle={() => toggle('brackets')}
+          expanded={expanded.includes('taxTables')}
+          onToggle={() => toggle('taxTables')}
           color="amber"
         >
-          <TaxBracketEditor
-            brackets={settings.customBrackets}
-            onUpdate={brackets => updateSettings({ customBrackets: brackets })}
-            taxYear={settings.taxYear || 2024}
-          />
-        </SettingsSection>
-
-        {/* IRMAA Brackets Section */}
-        <SettingsSection
-          title="IRMAA Brackets (Advanced)"
-          icon={Heart}
-          expanded={expanded.includes('irmaa')}
-          onToggle={() => toggle('irmaa')}
-          color="rose"
-        >
-          <IRMAAEditor
-            brackets={settings.customIRMAA}
-            onUpdate={brackets => updateSettings({ customIRMAA: brackets })}
+          <TaxTablesEditor
+            customBrackets={settings.customBrackets}
+            customCapGainsBrackets={settings.customCapGainsBrackets}
+            customIRMAA={settings.customIRMAA}
+            onUpdateBrackets={brackets => updateSettings({ customBrackets: brackets })}
+            onUpdateCapGainsBrackets={brackets =>
+              updateSettings({ customCapGainsBrackets: brackets })
+            }
+            onUpdateIRMAA={brackets => updateSettings({ customIRMAA: brackets })}
             taxYear={settings.taxYear || 2024}
           />
         </SettingsSection>

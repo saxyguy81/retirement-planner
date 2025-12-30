@@ -26,7 +26,6 @@ import {
   Zap,
   BarChart3,
   Percent,
-  Heart,
   Users,
   User,
   Plus,
@@ -215,7 +214,7 @@ export function InputPanel({
   setOptions,
   updateSettings,
 }) {
-  const [expanded, setExpanded] = useState(['profile', 'accounts', 'conversions']);
+  const [expanded, setExpanded] = useState(['timeline', 'profile', 'accounts']);
   const [newExpenseYear, setNewExpenseYear] = useState('');
   const [newHarvestYear, setNewHarvestYear] = useState('');
   const [newConversionYear, setNewConversionYear] = useState('');
@@ -263,9 +262,42 @@ export function InputPanel({
         Model Inputs
       </div>
       <div className="flex-1 overflow-y-auto">
-        {/* Profile Section */}
+        {/* Timeline Section */}
         <InputSection
-          title="Profile"
+          title="Timeline"
+          icon={Calendar}
+          expanded={expanded.includes('timeline')}
+          onToggle={() => toggle('timeline')}
+          color="blue"
+        >
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-slate-500 text-[10px] mb-0.5">Start Year</label>
+              <input
+                type="number"
+                value={params.startYear || 2025}
+                onChange={e => updateParam('startYear', parseInt(e.target.value) || 2025)}
+                className="w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-500 text-[10px] mb-0.5">End Year</label>
+              <input
+                type="number"
+                value={params.endYear || 2054}
+                onChange={e => updateParam('endYear', parseInt(e.target.value) || 2054)}
+                className="w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+              />
+            </div>
+          </div>
+          <div className="text-slate-500 text-[10px] mt-1">
+            Planning horizon: {(params.endYear || 2054) - (params.startYear || 2025) + 1} years
+          </div>
+        </InputSection>
+
+        {/* Profile & Life Events Section */}
+        <InputSection
+          title="Profile & Life Events"
           icon={User}
           expanded={expanded.includes('profile')}
           onToggle={() => toggle('profile')}
@@ -323,6 +355,39 @@ export function InputPanel({
             <div className="text-slate-500 text-[10px] mt-1">
               Primary birth year is used for age and RMD calculations
             </div>
+
+            {/* Survivor Scenario */}
+            <div className="mt-3 pt-3 border-t border-slate-700">
+              <div className="text-slate-400 text-xs font-medium mb-2">Survivor Scenario</div>
+              <div className="flex items-center justify-between py-0.5">
+                <span className="text-slate-400 text-xs">Death Year</span>
+                <input
+                  type="text"
+                  value={params.survivorDeathYear || ''}
+                  onChange={e =>
+                    updateParam(
+                      'survivorDeathYear',
+                      e.target.value ? parseInt(e.target.value) : null
+                    )
+                  }
+                  onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+                  placeholder="none"
+                  className="w-20 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs"
+                />
+              </div>
+              <ParamInput
+                label="Survivor SS %"
+                value={params.survivorSSPercent}
+                onChange={v => updateParam('survivorSSPercent', v)}
+                format="%"
+              />
+              <ParamInput
+                label="Survivor Exp %"
+                value={params.survivorExpensePercent}
+                onChange={v => updateParam('survivorExpensePercent', v)}
+                format="%"
+              />
+            </div>
           </div>
         </InputSection>
 
@@ -362,80 +427,116 @@ export function InputPanel({
           </div>
         </InputSection>
 
-        {/* Roth Conversions - Dynamic like Expense Overrides */}
+        {/* Social Security */}
         <InputSection
-          title="Roth Conversions"
-          icon={Zap}
-          expanded={expanded.includes('conversions')}
-          onToggle={() => toggle('conversions')}
-          color="blue"
+          title="Social Security"
+          icon={DollarSign}
+          expanded={expanded.includes('income')}
+          onToggle={() => toggle('income')}
+          color="cyan"
         >
-          {Object.keys(params.rothConversions || {}).length === 0 ? (
-            <div className="text-slate-500 text-xs mb-2">No conversions scheduled</div>
-          ) : (
-            Object.entries(params.rothConversions || {})
-              .sort(([a], [b]) => Number(a) - Number(b))
-              .map(([year, amount]) => (
-                <div key={year} className="flex items-center gap-1 py-0.5">
-                  <span className="text-slate-400 text-xs w-10">{year}</span>
-                  <input
-                    type="text"
-                    value={`$${amount.toLocaleString()}`}
-                    onFocus={e => (e.target.value = amount.toString())}
-                    onBlur={e => {
-                      const parsed = parseFloat(e.target.value.replace(/[,$]/g, ''));
-                      if (!isNaN(parsed) && parsed >= 0) {
-                        updateRothConversion(Number(year), parsed);
-                      }
-                      e.target.value = `$${(parsed || amount).toLocaleString()}`;
-                    }}
-                    onKeyDown={e => e.key === 'Enter' && e.target.blur()}
-                    className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
-                  />
-                  <button
-                    onClick={() => updateRothConversion(Number(year), null)}
-                    className="p-0.5 text-slate-500 hover:text-red-400"
-                    title="Remove conversion"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))
-          )}
+          <ParamInput
+            label="Monthly (2026)"
+            value={params.socialSecurityMonthly}
+            onChange={v => updateParam('socialSecurityMonthly', v)}
+          />
+          <ParamInput
+            label="COLA"
+            value={params.ssCOLA}
+            onChange={v => updateParam('ssCOLA', v)}
+            format="%"
+          />
+        </InputSection>
 
-          {/* Add new conversion */}
-          <div className="mt-2 pt-2 border-t border-slate-700">
-            <div className="flex items-center gap-1">
-              <div className="flex-1">
-                <SmartYearInput
-                  value={newConversionYear ? parseInt(newConversionYear) : null}
-                  onChange={year => {
-                    if (year && !params.rothConversions?.[year]) {
-                      setNewConversionYear(year.toString());
+        {/* Expenses (Combined with Overrides) */}
+        <InputSection
+          title="Expenses"
+          icon={BarChart3}
+          expanded={expanded.includes('expenses')}
+          onToggle={() => toggle('expenses')}
+          color="rose"
+        >
+          <ParamInput
+            label="Annual"
+            value={params.annualExpenses}
+            onChange={v => updateParam('annualExpenses', v)}
+          />
+          <ParamInput
+            label="Inflation"
+            value={params.expenseInflation}
+            onChange={v => updateParam('expenseInflation', v)}
+            format="%"
+          />
+
+          {/* Year-specific overrides */}
+          <div className="mt-3 pt-3 border-t border-slate-700">
+            <div className="text-slate-400 text-xs font-medium mb-2">Year-Specific Overrides</div>
+            {Object.keys(params.expenseOverrides || {}).length === 0 ? (
+              <div className="text-slate-500 text-xs mb-2">No year-specific overrides</div>
+            ) : (
+              Object.entries(params.expenseOverrides || {})
+                .sort(([a], [b]) => Number(a) - Number(b))
+                .map(([year, amount]) => (
+                  <div key={year} className="flex items-center gap-1 py-0.5">
+                    <span className="text-slate-400 text-xs w-10">{year}</span>
+                    <input
+                      type="text"
+                      value={`$${amount.toLocaleString()}`}
+                      onFocus={e => (e.target.value = amount.toString())}
+                      onBlur={e => {
+                        const parsed = parseFloat(e.target.value.replace(/[,$]/g, ''));
+                        if (!isNaN(parsed) && parsed > 0) {
+                          updateExpenseOverride(Number(year), parsed);
+                        }
+                        e.target.value = `$${(parsed || amount).toLocaleString()}`;
+                      }}
+                      onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+                      className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={() => updateExpenseOverride(Number(year), null)}
+                      className="p-0.5 text-slate-500 hover:text-red-400"
+                      title="Remove override"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))
+            )}
+            {/* Add new year - supports age or year input */}
+            <div className="mt-2 pt-2 border-t border-slate-700">
+              <div className="flex items-center gap-1">
+                <div className="flex-1">
+                  <SmartYearInput
+                    value={newExpenseYear ? parseInt(newExpenseYear) : null}
+                    onChange={year => {
+                      if (year && !params.expenseOverrides?.[year]) {
+                        setNewExpenseYear(year.toString());
+                      }
+                    }}
+                    birthYear={birthYear}
+                    min={2026}
+                    max={2060}
+                    placeholder="Year or Age"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    const year = parseInt(newExpenseYear);
+                    if (year >= 2026 && year <= 2060 && !params.expenseOverrides?.[year]) {
+                      updateExpenseOverride(year, params.annualExpenses);
+                      setNewExpenseYear('');
                     }
                   }}
-                  birthYear={birthYear}
-                  min={params.startYear || 2025}
-                  max={params.endYear || 2060}
-                  placeholder="Year or Age"
-                />
+                  className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 hover:bg-slate-600"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add
+                </button>
               </div>
-              <button
-                onClick={() => {
-                  const year = parseInt(newConversionYear);
-                  if (year && !params.rothConversions?.[year]) {
-                    updateRothConversion(year, 100000); // Default to $100K
-                    setNewConversionYear('');
-                  }
-                }}
-                className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 hover:bg-slate-600"
-              >
-                <Plus className="w-3 h-3" />
-                Add
-              </button>
-            </div>
-            <div className="text-slate-500 text-[10px] mt-1">
-              Enter year or age. Conversion amount capped by available IRA balance.
+              <div className="text-slate-500 text-[10px] mt-1">
+                Enter year (2026-2060) or age (71-105). Overrides inflation-adjusted expense.
+              </div>
             </div>
           </div>
         </InputSection>
@@ -517,198 +618,156 @@ export function InputPanel({
           )}
         </InputSection>
 
-        {/* Income */}
+        {/* Tax Strategies - Combined Roth Conversions + AT Harvest */}
         <InputSection
-          title="Social Security"
-          icon={DollarSign}
-          expanded={expanded.includes('income')}
-          onToggle={() => toggle('income')}
-          color="cyan"
+          title="Tax Strategies"
+          icon={Zap}
+          expanded={expanded.includes('taxStrategies')}
+          onToggle={() => toggle('taxStrategies')}
+          color="blue"
         >
-          <ParamInput
-            label="Monthly (2026)"
-            value={params.socialSecurityMonthly}
-            onChange={v => updateParam('socialSecurityMonthly', v)}
-          />
-          <ParamInput
-            label="COLA"
-            value={params.ssCOLA}
-            onChange={v => updateParam('ssCOLA', v)}
-            format="%"
-          />
-        </InputSection>
-
-        {/* Expenses */}
-        <InputSection
-          title="Expenses"
-          icon={BarChart3}
-          expanded={expanded.includes('expenses')}
-          onToggle={() => toggle('expenses')}
-          color="rose"
-        >
-          <ParamInput
-            label="Annual"
-            value={params.annualExpenses}
-            onChange={v => updateParam('annualExpenses', v)}
-          />
-          <ParamInput
-            label="Inflation"
-            value={params.expenseInflation}
-            onChange={v => updateParam('expenseInflation', v)}
-            format="%"
-          />
-        </InputSection>
-
-        {/* Expense Overrides */}
-        <InputSection
-          title="Expense Overrides"
-          icon={Calendar}
-          expanded={expanded.includes('expenseOverrides')}
-          onToggle={() => toggle('expenseOverrides')}
-          color="rose"
-        >
-          {Object.keys(params.expenseOverrides || {}).length === 0 ? (
-            <div className="text-slate-500 text-xs mb-2">No year-specific overrides</div>
-          ) : (
-            Object.entries(params.expenseOverrides || {})
-              .sort(([a], [b]) => Number(a) - Number(b))
-              .map(([year, amount]) => (
-                <div key={year} className="flex items-center gap-1 py-0.5">
-                  <span className="text-slate-400 text-xs w-10">{year}</span>
-                  <input
-                    type="text"
-                    value={`$${amount.toLocaleString()}`}
-                    onFocus={e => (e.target.value = amount.toString())}
-                    onBlur={e => {
-                      const parsed = parseFloat(e.target.value.replace(/[,$]/g, ''));
-                      if (!isNaN(parsed) && parsed > 0) {
-                        updateExpenseOverride(Number(year), parsed);
+          {/* Roth Conversions */}
+          <div className="mb-4">
+            <div className="text-slate-400 text-xs font-medium mb-2">Roth Conversions</div>
+            {Object.keys(params.rothConversions || {}).length === 0 ? (
+              <div className="text-slate-500 text-xs mb-2">No conversions scheduled</div>
+            ) : (
+              Object.entries(params.rothConversions || {})
+                .sort(([a], [b]) => Number(a) - Number(b))
+                .map(([year, amount]) => (
+                  <div key={year} className="flex items-center gap-1 py-0.5">
+                    <span className="text-slate-400 text-xs w-10">{year}</span>
+                    <input
+                      type="text"
+                      value={`$${amount.toLocaleString()}`}
+                      onFocus={e => (e.target.value = amount.toString())}
+                      onBlur={e => {
+                        const parsed = parseFloat(e.target.value.replace(/[,$]/g, ''));
+                        if (!isNaN(parsed) && parsed >= 0) {
+                          updateRothConversion(Number(year), parsed);
+                        }
+                        e.target.value = `$${(parsed || amount).toLocaleString()}`;
+                      }}
+                      onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+                      className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={() => updateRothConversion(Number(year), null)}
+                      className="p-0.5 text-slate-500 hover:text-red-400"
+                      title="Remove conversion"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))
+            )}
+            {/* Add new conversion */}
+            <div className="mt-2 pt-2 border-t border-slate-700">
+              <div className="flex items-center gap-1">
+                <div className="flex-1">
+                  <SmartYearInput
+                    value={newConversionYear ? parseInt(newConversionYear) : null}
+                    onChange={year => {
+                      if (year && !params.rothConversions?.[year]) {
+                        setNewConversionYear(year.toString());
                       }
-                      e.target.value = `$${(parsed || amount).toLocaleString()}`;
                     }}
-                    onKeyDown={e => e.key === 'Enter' && e.target.blur()}
-                    className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                    birthYear={birthYear}
+                    min={params.startYear || 2025}
+                    max={params.endYear || 2060}
+                    placeholder="Year or Age"
                   />
-                  <button
-                    onClick={() => updateExpenseOverride(Number(year), null)}
-                    className="p-0.5 text-slate-500 hover:text-red-400"
-                    title="Remove override"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
                 </div>
-              ))
-          )}
-          {/* Add new year - supports age or year input */}
-          <div className="mt-2 pt-2 border-t border-slate-700">
-            <div className="flex items-center gap-1">
-              <div className="flex-1">
-                <SmartYearInput
-                  value={newExpenseYear ? parseInt(newExpenseYear) : null}
-                  onChange={year => {
-                    if (year && !params.expenseOverrides?.[year]) {
-                      setNewExpenseYear(year.toString());
+                <button
+                  onClick={() => {
+                    const year = parseInt(newConversionYear);
+                    if (year && !params.rothConversions?.[year]) {
+                      updateRothConversion(year, 100000); // Default to $100K
+                      setNewConversionYear('');
                     }
                   }}
-                  birthYear={birthYear}
-                  min={2026}
-                  max={2060}
-                  placeholder="Year or Age"
-                />
+                  className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 hover:bg-slate-600"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add
+                </button>
               </div>
-              <button
-                onClick={() => {
-                  const year = parseInt(newExpenseYear);
-                  if (year >= 2026 && year <= 2060 && !params.expenseOverrides?.[year]) {
-                    updateExpenseOverride(year, params.annualExpenses);
-                    setNewExpenseYear('');
-                  }
-                }}
-                className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 hover:bg-slate-600"
-              >
-                <Plus className="w-3 h-3" />
-                Add
-              </button>
-            </div>
-            <div className="text-slate-500 text-[10px] mt-1">
-              Enter year (2026-2060) or age (71-105). Overrides inflation-adjusted expense.
+              <div className="text-slate-500 text-[10px] mt-1">
+                Enter year or age. Conversion amount capped by available IRA balance.
+              </div>
             </div>
           </div>
-        </InputSection>
 
-        {/* AT Harvest Overrides */}
-        <InputSection
-          title="AT Harvest (Cap Gains)"
-          icon={TrendingUp}
-          expanded={expanded.includes('atHarvest')}
-          onToggle={() => toggle('atHarvest')}
-          color="purple"
-        >
-          {Object.keys(params.atHarvestOverrides || {}).length === 0 ? (
-            <div className="text-slate-500 text-xs mb-2">No year-specific harvests</div>
-          ) : (
-            Object.entries(params.atHarvestOverrides || {})
-              .sort(([a], [b]) => Number(a) - Number(b))
-              .map(([year, amount]) => (
-                <div key={year} className="flex items-center gap-1 py-0.5">
-                  <span className="text-slate-400 text-xs w-10">{year}</span>
-                  <input
-                    type="text"
-                    value={`$${amount.toLocaleString()}`}
-                    onFocus={e => (e.target.value = amount.toString())}
-                    onBlur={e => {
-                      const parsed = parseFloat(e.target.value.replace(/[,$]/g, ''));
-                      if (!isNaN(parsed) && parsed > 0) {
-                        updateATHarvest(Number(year), parsed);
+          {/* Capital Gains Harvesting */}
+          <div className="pt-3 border-t border-slate-700">
+            <div className="text-slate-400 text-xs font-medium mb-2">Capital Gains Harvesting</div>
+            {Object.keys(params.atHarvestOverrides || {}).length === 0 ? (
+              <div className="text-slate-500 text-xs mb-2">No year-specific harvests</div>
+            ) : (
+              Object.entries(params.atHarvestOverrides || {})
+                .sort(([a], [b]) => Number(a) - Number(b))
+                .map(([year, amount]) => (
+                  <div key={year} className="flex items-center gap-1 py-0.5">
+                    <span className="text-slate-400 text-xs w-10">{year}</span>
+                    <input
+                      type="text"
+                      value={`$${amount.toLocaleString()}`}
+                      onFocus={e => (e.target.value = amount.toString())}
+                      onBlur={e => {
+                        const parsed = parseFloat(e.target.value.replace(/[,$]/g, ''));
+                        if (!isNaN(parsed) && parsed > 0) {
+                          updateATHarvest(Number(year), parsed);
+                        }
+                        e.target.value = `$${(parsed || amount).toLocaleString()}`;
+                      }}
+                      onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+                      className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={() => updateATHarvest(Number(year), null)}
+                      className="p-0.5 text-slate-500 hover:text-red-400"
+                      title="Remove harvest"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))
+            )}
+            {/* Add new year - supports age or year input */}
+            <div className="mt-2 pt-2 border-t border-slate-700">
+              <div className="flex items-center gap-1">
+                <div className="flex-1">
+                  <SmartYearInput
+                    value={newHarvestYear ? parseInt(newHarvestYear) : null}
+                    onChange={year => {
+                      if (year && !params.atHarvestOverrides?.[year]) {
+                        setNewHarvestYear(year.toString());
                       }
-                      e.target.value = `$${(parsed || amount).toLocaleString()}`;
                     }}
-                    onKeyDown={e => e.key === 'Enter' && e.target.blur()}
-                    className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                    birthYear={birthYear}
+                    min={2026}
+                    max={2060}
+                    placeholder="Year or Age"
                   />
-                  <button
-                    onClick={() => updateATHarvest(Number(year), null)}
-                    className="p-0.5 text-slate-500 hover:text-red-400"
-                    title="Remove harvest"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
                 </div>
-              ))
-          )}
-          {/* Add new year - supports age or year input */}
-          <div className="mt-2 pt-2 border-t border-slate-700">
-            <div className="flex items-center gap-1">
-              <div className="flex-1">
-                <SmartYearInput
-                  value={newHarvestYear ? parseInt(newHarvestYear) : null}
-                  onChange={year => {
-                    if (year && !params.atHarvestOverrides?.[year]) {
-                      setNewHarvestYear(year.toString());
+                <button
+                  onClick={() => {
+                    const year = parseInt(newHarvestYear);
+                    if (year >= 2026 && year <= 2060 && !params.atHarvestOverrides?.[year]) {
+                      updateATHarvest(year, 50000);
+                      setNewHarvestYear('');
                     }
                   }}
-                  birthYear={birthYear}
-                  min={2026}
-                  max={2060}
-                  placeholder="Year or Age"
-                />
+                  className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 hover:bg-slate-600"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add
+                </button>
               </div>
-              <button
-                onClick={() => {
-                  const year = parseInt(newHarvestYear);
-                  if (year >= 2026 && year <= 2060 && !params.atHarvestOverrides?.[year]) {
-                    updateATHarvest(year, 50000);
-                    setNewHarvestYear('');
-                  }
-                }}
-                className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 hover:bg-slate-600"
-              >
-                <Plus className="w-3 h-3" />
-                Add
-              </button>
-            </div>
-            <div className="text-slate-500 text-[10px] mt-1">
-              Enter year (2026-2060) or age (71-105). Extra AT liquidation for cap gains harvesting.
+              <div className="text-slate-500 text-[10px] mt-1">
+                Enter year (2026-2060) or age (71-105). Extra AT liquidation for cap gains
+                harvesting.
+              </div>
             </div>
           </div>
         </InputSection>
@@ -838,41 +897,6 @@ export function InputPanel({
             />
             <div className="text-slate-500 text-[10px]">Used for present value calculations</div>
           </div>
-        </InputSection>
-
-        {/* Survivor Scenario */}
-        <InputSection
-          title="Survivor Scenario"
-          icon={Heart}
-          expanded={expanded.includes('survivor')}
-          onToggle={() => toggle('survivor')}
-          color="pink"
-        >
-          <div className="flex items-center justify-between py-0.5">
-            <span className="text-slate-400 text-xs">Death Year</span>
-            <input
-              type="text"
-              value={params.survivorDeathYear || ''}
-              onChange={e =>
-                updateParam('survivorDeathYear', e.target.value ? parseInt(e.target.value) : null)
-              }
-              onKeyDown={e => e.key === 'Enter' && e.target.blur()}
-              placeholder="none"
-              className="w-20 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs"
-            />
-          </div>
-          <ParamInput
-            label="Survivor SS %"
-            value={params.survivorSSPercent}
-            onChange={v => updateParam('survivorSSPercent', v)}
-            format="%"
-          />
-          <ParamInput
-            label="Survivor Exp %"
-            value={params.survivorExpensePercent}
-            onChange={v => updateParam('survivorExpensePercent', v)}
-            format="%"
-          />
         </InputSection>
 
         {/* Heir Configuration */}

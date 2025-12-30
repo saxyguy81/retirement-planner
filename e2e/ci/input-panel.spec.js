@@ -19,9 +19,9 @@ test.describe('Input Panel', () => {
     await expect(page.locator('text=Starting Accounts').first()).toBeVisible();
   });
 
-  test('Roth conversions section is visible', async ({ page }) => {
-    // Roth Conversions section should be in the sidebar
-    await expect(page.locator('text=Roth Conversions').first()).toBeVisible();
+  test('Tax Strategies section is visible', async ({ page }) => {
+    // Tax Strategies section (contains Roth Conversions and Cap Gains Harvesting)
+    await expect(page.locator('text=Tax Strategies').first()).toBeVisible();
   });
 
   test('input panel has financial inputs', async ({ page }) => {
@@ -31,18 +31,21 @@ test.describe('Input Panel', () => {
     expect(inputCount).toBeGreaterThan(0);
   });
 
-  test('expense overrides section works', async ({ page }) => {
-    // Expand Expense Overrides section
-    await page.click('text=Expense Overrides');
+  test('expenses section with overrides works', async ({ page }) => {
+    // Expand Expenses section (now contains overrides as subsection)
+    await page.click('text=Expenses');
     await page.waitForTimeout(300);
 
-    // Should see the section content
+    // Should see the Year-Specific Overrides subsection
+    await expect(page.locator('text=Year-Specific Overrides').first()).toBeVisible();
+
+    // Should see the Add button for overrides
     const addButton = page.locator('button:has-text("Add")').first();
     await expect(addButton).toBeVisible();
   });
 
   test('profile section displays correctly', async ({ page }) => {
-    // Profile section should be visible in the sidebar (contains timeline info)
-    await expect(page.locator('text=Profile').first()).toBeVisible();
+    // Profile & Life Events section should be visible in the sidebar
+    await expect(page.locator('text=Profile & Life Events').first()).toBeVisible();
   });
 });

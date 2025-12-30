@@ -59,9 +59,18 @@ function parseRate(str) {
   return isNaN(num) ? 0 : num / 100;
 }
 
-export function TaxBracketEditor({ brackets, onUpdate, taxYear }) {
-  const [activeTab, setActiveTab] = useState('federal');
+export function TaxBracketEditor({ brackets, onUpdate, taxYear, bracketType }) {
+  // bracketType can be 'income' or 'capgains' - when provided, hides internal tabs
+  const [internalTab, setInternalTab] = useState('federal');
   const [editingCell, setEditingCell] = useState(null);
+
+  // Map external bracketType to internal tab names
+  const activeTab = bracketType
+    ? bracketType === 'income'
+      ? 'federal'
+      : 'capitalGains'
+    : internalTab;
+  const setActiveTab = bracketType ? () => {} : setInternalTab;
 
   // Use provided brackets or fall back to defaults
   const currentBrackets = useMemo(() => {
@@ -163,29 +172,31 @@ export function TaxBracketEditor({ brackets, onUpdate, taxYear }) {
 
   return (
     <div className="space-y-3">
-      {/* Tab selector */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setActiveTab('federal')}
-          className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-            activeTab === 'federal'
-              ? 'bg-blue-600 text-white'
-              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-          }`}
-        >
-          Federal Income
-        </button>
-        <button
-          onClick={() => setActiveTab('capitalGains')}
-          className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-            activeTab === 'capitalGains'
-              ? 'bg-blue-600 text-white'
-              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-          }`}
-        >
-          Capital Gains
-        </button>
-      </div>
+      {/* Tab selector - only shown when bracketType is not provided */}
+      {!bracketType && (
+        <div className="flex gap-2">
+          <button
+            onClick={() => setActiveTab('federal')}
+            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              activeTab === 'federal'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            Federal Income
+          </button>
+          <button
+            onClick={() => setActiveTab('capitalGains')}
+            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              activeTab === 'capitalGains'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            Capital Gains
+          </button>
+        </div>
+      )}
 
       {/* Info banner */}
       <div className="flex items-start gap-2 p-2 bg-slate-800 rounded border border-slate-700">
