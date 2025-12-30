@@ -217,6 +217,7 @@ export function InputPanel({
   const [expanded, setExpanded] = useState(['profile', 'accounts', 'conversions']);
   const [newExpenseYear, setNewExpenseYear] = useState('');
   const [newHarvestYear, setNewHarvestYear] = useState('');
+  const [newConversionYear, setNewConversionYear] = useState('');
 
   // Get birthYear from settings or params for SmartYearInput
   const birthYear = settings?.primaryBirthYear || params?.birthYear || 1955;
@@ -360,7 +361,7 @@ export function InputPanel({
           </div>
         </InputSection>
 
-        {/* Roth Conversions */}
+        {/* Roth Conversions - Dynamic like Expense Overrides */}
         <InputSection
           title="Roth Conversions"
           icon={Zap}
@@ -368,14 +369,74 @@ export function InputPanel({
           onToggle={() => toggle('conversions')}
           color="blue"
         >
-          {[2026, 2027, 2028, 2029, 2030].map(year => (
-            <ParamInput
-              key={year}
-              label={year.toString()}
-              value={params.rothConversions[year] || 0}
-              onChange={v => updateRothConversion(year, v)}
-            />
-          ))}
+          {Object.keys(params.rothConversions || {}).length === 0 ? (
+            <div className="text-slate-500 text-xs mb-2">No conversions scheduled</div>
+          ) : (
+            Object.entries(params.rothConversions || {})
+              .sort(([a], [b]) => Number(a) - Number(b))
+              .map(([year, amount]) => (
+                <div key={year} className="flex items-center gap-1 py-0.5">
+                  <span className="text-slate-400 text-xs w-10">{year}</span>
+                  <input
+                    type="text"
+                    value={`$${amount.toLocaleString()}`}
+                    onFocus={e => (e.target.value = amount.toString())}
+                    onBlur={e => {
+                      const parsed = parseFloat(e.target.value.replace(/[,$]/g, ''));
+                      if (!isNaN(parsed) && parsed >= 0) {
+                        updateRothConversion(Number(year), parsed);
+                      }
+                      e.target.value = `$${(parsed || amount).toLocaleString()}`;
+                    }}
+                    onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+                    className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={() => updateRothConversion(Number(year), null)}
+                    className="p-0.5 text-slate-500 hover:text-red-400"
+                    title="Remove conversion"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))
+          )}
+
+          {/* Add new conversion */}
+          <div className="mt-2 pt-2 border-t border-slate-700">
+            <div className="flex items-center gap-1">
+              <div className="flex-1">
+                <SmartYearInput
+                  value={newConversionYear ? parseInt(newConversionYear) : null}
+                  onChange={year => {
+                    if (year && !params.rothConversions?.[year]) {
+                      setNewConversionYear(year.toString());
+                    }
+                  }}
+                  birthYear={birthYear}
+                  min={params.startYear || 2025}
+                  max={params.endYear || 2060}
+                  placeholder="Year or Age"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  const year = parseInt(newConversionYear);
+                  if (year && !params.rothConversions?.[year]) {
+                    updateRothConversion(year, 100000); // Default to $100K
+                    setNewConversionYear('');
+                  }
+                }}
+                className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 hover:bg-slate-600"
+              >
+                <Plus className="w-3 h-3" />
+                Add
+              </button>
+            </div>
+            <div className="text-slate-500 text-[10px] mt-1">
+              Enter year or age. Conversion amount capped by available IRA balance.
+            </div>
+          </div>
         </InputSection>
 
         {/* Returns & Risk */}

@@ -27,7 +27,7 @@ import {
   Columns,
   GitMerge,
 } from 'lucide-react';
-import { useState, useMemo, useCallback, Fragment } from 'react';
+import { useState, useMemo, useCallback, Fragment, useEffect } from 'react';
 import {
   BarChart,
   Bar,
@@ -414,7 +414,14 @@ const saveScenarios = scenarios => {
   }
 };
 
-export function ScenarioComparison({ params, projections, summary, showPV = true }) {
+export function ScenarioComparison({
+  params,
+  projections,
+  summary,
+  showPV = true,
+  pendingScenario = null,
+  onPendingScenarioConsumed = null,
+}) {
   const [scenarios, setScenarios] = useState([]);
   const [savedScenarioSets, setSavedScenarioSets] = useState(() => loadSavedScenarios());
   const [showPresets, setShowPresets] = useState(false);
@@ -429,6 +436,20 @@ export function ScenarioComparison({ params, projections, summary, showPV = true
   // Phase 5: Enhanced view modes
   const [viewMode, setViewMode] = useState('summary'); // 'summary' | 'detailed' | 'diff'
   const [selectedScenarioId, setSelectedScenarioId] = useState(null); // For detailed/diff views
+
+  // Handle incoming scenario from optimizer
+  useEffect(() => {
+    if (pendingScenario) {
+      const newScenario = {
+        id: pendingScenario.createdAt || Date.now(),
+        name: pendingScenario.name || 'From Optimizer',
+        description: pendingScenario.description || '',
+        overrides: pendingScenario.overrides || {},
+      };
+      setScenarios(prev => [...prev, newScenario]);
+      onPendingScenarioConsumed?.();
+    }
+  }, [pendingScenario, onPendingScenarioConsumed]);
 
   // Calculate all scenario projections
   const scenarioResults = useMemo(() => {

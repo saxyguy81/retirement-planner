@@ -16,9 +16,9 @@ import {
   TrendingUp,
   DollarSign,
   Users,
-  BarChart2,
   AlertCircle,
   RefreshCw,
+  GitCompare,
 } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -51,15 +51,6 @@ const OBJECTIVES = [
     icon: TrendingUp,
     metric: 'endingPortfolio',
     better: 'higher',
-  },
-  {
-    id: 'balanceRoth',
-    name: 'Balance Roth Ratio',
-    description: 'Target a specific Roth percentage (e.g., 50%)',
-    icon: BarChart2,
-    metric: 'finalRothPercent',
-    better: 'target',
-    target: 0.5,
   },
 ];
 
@@ -111,12 +102,11 @@ function generateConversionScenarios(baseParams, years, amounts) {
   return scenarios;
 }
 
-export function Optimization({ params, summary, updateParams }) {
+export function Optimization({ params, summary, updateParams, onCreateScenario }) {
   const [selectedObjective, setSelectedObjective] = useState('maxHeir');
   const [isRunning, setIsRunning] = useState(false);
   const [results, setResults] = useState(null);
   const [conversionYears, setConversionYears] = useState([2026, 2027, 2028, 2029, 2030]);
-  const [targetRoth, setTargetRoth] = useState(0.5);
 
   const objective = OBJECTIVES.find(o => o.id === selectedObjective);
 
@@ -158,9 +148,6 @@ export function Optimization({ params, summary, updateParams }) {
       evaluated.sort((a, b) => {
         if (objective.better === 'higher') return b.score - a.score;
         if (objective.better === 'lower') return a.score - b.score;
-        if (objective.better === 'target') {
-          return Math.abs(a.score - targetRoth) - Math.abs(b.score - targetRoth);
-        }
         return 0;
       });
 
@@ -177,7 +164,7 @@ export function Optimization({ params, summary, updateParams }) {
       });
       setIsRunning(false);
     }, 100);
-  }, [params, summary, objective, conversionYears, targetRoth]);
+  }, [params, summary, objective, conversionYears]);
 
   const applyOptimal = useCallback(() => {
     if (results?.best) {
@@ -239,7 +226,7 @@ export function Optimization({ params, summary, updateParams }) {
               <Target className="w-4 h-4 text-amber-400" />
               Optimization Objective
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {OBJECTIVES.map(obj => (
                 <button
                   key={obj.id}
@@ -264,21 +251,6 @@ export function Optimization({ params, summary, updateParams }) {
                 </button>
               ))}
             </div>
-
-            {selectedObjective === 'balanceRoth' && (
-              <div className="mt-3 flex items-center gap-3">
-                <span className="text-slate-400">Target Roth %:</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={targetRoth * 100}
-                  onChange={e => setTargetRoth(e.target.value / 100)}
-                  className="flex-1"
-                />
-                <span className="text-amber-400 font-medium w-12">{fmtPct(targetRoth)}</span>
-              </div>
-            )}
           </div>
 
           {/* Conversion Years Selection */}
@@ -364,6 +336,16 @@ export function Optimization({ params, summary, updateParams }) {
                     <RefreshCw className="w-3.5 h-3.5" />
                     Apply This Strategy
                   </button>
+                  {onCreateScenario && (
+                    <button
+                      onClick={() => onCreateScenario(results.best.conversions, results.best.label)}
+                      className="px-3 py-1.5 bg-purple-600 text-white rounded hover:bg-purple-500 flex items-center gap-2"
+                      title="Create scenario with these conversions for comparison"
+                    >
+                      <GitCompare className="w-3.5 h-3.5" />
+                      Create Scenario
+                    </button>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
@@ -392,9 +374,7 @@ export function Optimization({ params, summary, updateParams }) {
                     <div className="text-emerald-400 font-medium">
                       {objective.better === 'higher'
                         ? `+${fmt$(results.best.score - results.current.score)}`
-                        : objective.better === 'lower'
-                          ? `-${fmt$(results.current.score - results.best.score)}`
-                          : `${fmtPct(Math.abs(results.best.score - targetRoth))} from target`}
+                        : `-${fmt$(results.current.score - results.best.score)}`}
                     </div>
                   </div>
                 </div>
@@ -556,9 +536,7 @@ export function Optimization({ params, summary, updateParams }) {
                         Best strategy improves {objective.name.toLowerCase()} by{' '}
                         {objective.better === 'higher'
                           ? fmt$(results.best.score - results.current.score)
-                          : objective.better === 'lower'
-                            ? fmt$(results.current.score - results.best.score)
-                            : fmtPct(Math.abs(results.best.score - targetRoth))}
+                          : fmt$(results.current.score - results.best.score)}
                       </li>
                       <li>
                         Range of outcomes: {fmt$(results.worst.summary.endingHeirValue)} to{' '}

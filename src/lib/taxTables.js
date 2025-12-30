@@ -185,16 +185,16 @@ export function inflateIRMAA(brackets, inflationRate, years) {
 // =============================================================================
 export const DEFAULT_PARAMS = {
   // Timeline
-  startYear: 2026,
-  endYear: 2055,
-  birthYear: 1955, // Ira's birth year for age calculations
+  startYear: 2025,
+  endYear: 2054,
+  birthYear: 1960, // Age 65 in 2025
   taxYear: 2025, // Base year for tax brackets (updated to current year)
 
   // Starting Account Balances
-  afterTaxStart: 474000,
-  iraStart: 6121000,
-  rothStart: 2612000,
-  afterTaxCostBasis: 119000, // For capital gains calculations
+  afterTaxStart: 1500000,
+  iraStart: 3000000,
+  rothStart: 2000000,
+  afterTaxCostBasis: 500000, // For capital gains calculations
 
   // Return Assumptions
   returnMode: 'blended', // 'account' or 'blended' (risk-based)
@@ -203,18 +203,18 @@ export const DEFAULT_PARAMS = {
   rothReturn: 0.08, // Used in 'account' mode
 
   // Risk-Based Returns (used in 'blended' mode)
-  lowRiskTarget: 3500000, // First $3.5M at low risk
-  modRiskTarget: 3000000, // Next $3M at moderate risk
+  lowRiskTarget: 2500000, // First $2.5M at low risk
+  modRiskTarget: 2500000, // Next $2.5M at moderate risk
   lowRiskReturn: 0.04, // Bonds, CDs, money market
   modRiskReturn: 0.06, // Balanced funds
   highRiskReturn: 0.08, // Stocks, growth funds
 
   // Social Security
-  socialSecurityMonthly: 5800, // Combined monthly in 2026
+  socialSecurityMonthly: 4000, // Combined monthly
   ssCOLA: 0.025, // Annual cost-of-living adjustment
 
   // Expenses
-  annualExpenses: 180000, // Starting annual expenses
+  annualExpenses: 120000, // Starting annual expenses
   expenseInflation: 0.03, // Annual expense growth
   expenseOverrides: {}, // Year-specific expense overrides (year -> amount)
 
@@ -225,32 +225,26 @@ export const DEFAULT_PARAMS = {
   exemptSSFromTax: false, // Trump's proposal: exempt Social Security from federal taxation
 
   // Roth Conversions (year -> amount)
-  rothConversions: {
-    2026: 700000,
-    2027: 700000,
-  },
+  rothConversions: {},
 
   // AT Harvest Overrides (year -> amount) - extra AT liquidation for capital gains harvesting
   atHarvestOverrides: {},
 
   // MAGI History (for IRMAA 2-year lookback)
-  magi2024: 600000,
-  magi2025: 600000,
+  magi2024: 0,
+  magi2025: 0,
 
   // Survivor Scenario
-  survivorDeathYear: null, // Year Ira dies (null = no death modeled)
-  survivorSSPercent: 0.72, // Carol gets 72% of combined SS
+  survivorDeathYear: null, // Year primary dies (null = no death modeled)
+  survivorSSPercent: 0.67, // Survivor gets 67% of combined SS
   survivorExpensePercent: 0.7, // Expenses drop to 70%
 
   // Heir Parameters (legacy - kept for backward compatibility)
-  heirFedRate: 0.37, // Heirs' federal marginal rate on inherited IRA
+  heirFedRate: 0.32, // Heirs' federal marginal rate on inherited IRA
   heirStateRate: 0.0495, // Heirs' state rate
 
   // Heir Configuration (multi-heir with per-heir settings)
-  heirs: [
-    { name: 'Heir 1', state: 'IL', agi: 200000, splitPercent: 50, taxableRoR: 0.06 },
-    { name: 'Heir 2', state: 'IL', agi: 200000, splitPercent: 50, taxableRoR: 0.06 },
-  ],
+  heirs: [],
   heirDistributionStrategy: 'even', // 'even' (spread over 10 years) or 'year10' (lump sum in year 10)
   heirNormalizationYears: 10, // Years to project forward for normalized comparison
 

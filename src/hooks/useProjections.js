@@ -21,14 +21,14 @@ const DEFAULT_OPTIONS = { iterativeTax: true, maxIterations: 5 };
 // for direct access in InputPanel
 const DEFAULT_SETTINGS = {
   // User Profile
-  primaryName: 'Ira',
-  primaryBirthYear: 1955, // 2/17/55
-  spouseName: 'Carol',
-  spouseBirthYear: 1954, // 7/17/54
+  primaryName: 'Primary',
+  primaryBirthYear: 1960,
+  spouseName: 'Spouse',
+  spouseBirthYear: 1962,
 
   // Tax Settings
   taxYear: 2025, // Updated to current year
-  ssExemptionMode: 'through2028', // 'disabled' | 'through2028' | 'permanent' - Trump proposal default
+  ssExemptionMode: 'disabled', // 'disabled' | 'through2028' | 'permanent'
 
   // Display Preferences
   defaultPV: true,
@@ -195,10 +195,15 @@ export function useProjections(initialParams = {}) {
 
   // Update Roth conversion for a specific year
   const updateRothConversion = useCallback((year, amount) => {
-    setParams(prev => ({
-      ...prev,
-      rothConversions: { ...prev.rothConversions, [year]: amount },
-    }));
+    setParams(prev => {
+      const newConversions = { ...prev.rothConversions };
+      if (amount === null || amount === 0) {
+        delete newConversions[year]; // Remove conversion if cleared
+      } else {
+        newConversions[year] = amount;
+      }
+      return { ...prev, rothConversions: newConversions };
+    });
   }, []);
 
   // Update expense override for a specific year

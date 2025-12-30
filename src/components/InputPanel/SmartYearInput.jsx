@@ -15,11 +15,12 @@
 
 import { useState, useEffect } from 'react';
 
-import { detectAgeOrYear, yearToAge, VALIDATION } from '../../lib/validation';
+import { detectAgeOrYear, yearToAge } from '../../lib/validation';
 
 export function SmartYearInput({
   value, // year value (always stored as year internally)
   onChange,
+  onValidationError, // NEW: callback for validation errors
   birthYear = 1955, // default birth year
   min = 2024,
   max = 2100,
@@ -29,34 +30,51 @@ export function SmartYearInput({
   const [inputValue, setInputValue] = useState(value?.toString() || '');
   const [mode, setMode] = useState('year'); // 'year' or 'age'
   const [isFocused, setIsFocused] = useState(false);
+  const [validationError, setValidationError] = useState(null);
 
   // Sync inputValue with external value changes
   useEffect(() => {
     if (!isFocused && value) {
       setInputValue(value.toString());
+      setValidationError(null);
     }
   }, [value, isFocused]);
 
   const handleChange = e => {
     const raw = e.target.value;
     setInputValue(raw);
+    setValidationError(null);
 
     // Only process if there's actual input
     if (!raw.trim()) {
+      onChange(null);
       return;
     }
 
     const detected = detectAgeOrYear(raw, birthYear);
-    if (detected.type === 'year') {
-      setMode('year');
-      if (detected.value >= min && detected.value <= max) {
-        onChange(detected.value);
+
+    if (detected.type === 'year' || detected.type === 'age') {
+      setMode(detected.type);
+
+      // Validate the resulting year
+      if (detected.value < min) {
+        const error = `Year ${detected.value} is before ${min}`;
+        setValidationError(error);
+        onValidationError?.(error);
+        return;
       }
-    } else if (detected.type === 'age') {
-      setMode('age');
-      if (detected.value >= min && detected.value <= max) {
-        onChange(detected.value);
+      if (detected.value > max) {
+        const error = `Year ${detected.value} is after ${max}`;
+        setValidationError(error);
+        onValidationError?.(error);
+        return;
       }
+
+      // Valid - call onChange
+      onChange(detected.value);
+    } else if (detected.type === 'ambiguous' || detected.type === null) {
+      const error = 'Enter a year (2024-2100) or age (50-125)';
+      setValidationError(error);
     }
   };
 
@@ -78,25 +96,9 @@ export function SmartYearInput({
     }
   };
 
-  // Calculate age and validation state
+  // Calculate age for display
   const age = value ? yearToAge(value, birthYear) : null;
-  const isValidYear = value && value >= min && value <= max;
-  const isValidAge = age !== null && age >= VALIDATION.age.min && age <= VALIDATION.age.max;
-  const isValid = isValidYear && isValidAge;
-
-  // Determine error message
-  let errorMessage = null;
-  if (inputValue.trim() && !isValid) {
-    if (age !== null && age > VALIDATION.age.max) {
-      errorMessage = `Age exceeds ${VALIDATION.age.max}`;
-    } else if (value && value < min) {
-      errorMessage = `Year must be ${min} or later`;
-    } else if (value && value > max) {
-      errorMessage = `Year must be ${max} or earlier`;
-    } else if (inputValue.trim() && !value) {
-      errorMessage = 'Invalid year or age';
-    }
-  }
+  const isValid = value && value >= min && value <= max && !validationError;
 
   return (
     <div className={`relative ${className}`}>
@@ -110,7 +112,7 @@ export function SmartYearInput({
         placeholder={placeholder}
         className={`w-full bg-slate-800 border rounded px-2 py-1 text-xs text-slate-200
           focus:outline-none focus:border-blue-500
-          ${isValid || !inputValue.trim() ? 'border-slate-700' : 'border-rose-500'}`}
+          ${!validationError ? 'border-slate-700' : 'border-rose-500'}`}
       />
       {/* Show converted value indicator */}
       {value && isValid && !isFocused && (
@@ -119,7 +121,7 @@ export function SmartYearInput({
         </div>
       )}
       {/* Error message */}
-      {errorMessage && <div className="text-rose-400 text-xs mt-0.5">{errorMessage}</div>}
+      {validationError && <div className="text-rose-400 text-xs mt-0.5">{validationError}</div>}
     </div>
   );
 }

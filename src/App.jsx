@@ -19,6 +19,7 @@ import {
   FolderOpen,
   GitCompare,
   LineChart,
+  MessageCircle,
   RefreshCw,
   RotateCcw,
   Save,
@@ -33,6 +34,7 @@ import {
 } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { Chat } from './components/Chat';
 import { InputPanel } from './components/InputPanel';
 import { LazyErrorBoundary } from './components/LazyErrorBoundary';
 import { LazyLoadingFallback } from './components/LazyLoadingFallback';
@@ -93,6 +95,7 @@ const TABS = [
   { id: 'heir', icon: Users, label: 'Heir Analysis' },
   { id: 'scenarios', icon: GitCompare, label: 'Scenarios' },
   { id: 'optimize', icon: Zap, label: 'Optimize' },
+  { id: 'chat', icon: MessageCircle, label: 'AI Chat' },
   { id: 'settings', icon: Settings, label: 'Settings' },
 ];
 
@@ -105,6 +108,7 @@ export default function App() {
   const [showLoadMenu, setShowLoadMenu] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [showPV, setShowPV] = useState(true); // Global Present Value toggle
+  const [pendingScenario, setPendingScenario] = useState(null);
   const fileInputRef = useRef(null);
   const exportMenuRef = useRef(null);
   const loadMenuRef = useRef(null);
@@ -210,6 +214,19 @@ export default function App() {
     },
     [projections, summary, params]
   );
+
+  // Handle creating scenario from optimizer results
+  const handleCreateScenarioFromOptimizer = useCallback((conversions, strategyName) => {
+    // Store the scenario data
+    setPendingScenario({
+      name: `Optimizer: ${strategyName}`,
+      description: `Generated from optimization - ${strategyName}`,
+      overrides: { rothConversions: conversions },
+      createdAt: Date.now(),
+    });
+    // Switch to scenarios tab
+    setActiveTab('scenarios');
+  }, []);
 
   // Split panel view configurations - use render functions for lazy loading
   const splitPanelViews = useMemo(
@@ -418,12 +435,16 @@ export default function App() {
           </div>
 
           <button
-            onClick={resetToDefaults}
+            onClick={() => {
+              if (window.confirm('Start a new session? This will clear all current data.')) {
+                resetToDefaults();
+              }
+            }}
             className="px-2 py-1 bg-amber-600 text-white rounded text-xs flex items-center gap-1 hover:bg-amber-500"
-            title="Start fresh with defaults"
+            title="Start a new session with default values"
           >
             <RotateCcw className="w-3 h-3" />
-            Fresh
+            New
           </button>
 
           <div className="relative" ref={exportMenuRef}>
@@ -579,6 +600,8 @@ export default function App() {
                       projections={projections}
                       summary={summary}
                       showPV={showPV}
+                      pendingScenario={pendingScenario}
+                      onPendingScenarioConsumed={() => setPendingScenario(null)}
                     />
                   )}
 
@@ -588,6 +611,17 @@ export default function App() {
                       projections={projections}
                       summary={summary}
                       updateParams={updateParams}
+                      onCreateScenario={handleCreateScenarioFromOptimizer}
+                    />
+                  )}
+
+                  {activeTab === 'chat' && (
+                    <Chat
+                      params={params}
+                      projections={projections}
+                      summary={summary}
+                      onCreateScenario={handleCreateScenarioFromOptimizer}
+                      onUpdateParams={updateParams}
                     />
                   )}
 
