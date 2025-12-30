@@ -33,18 +33,9 @@ import {
   TOOL_UI_CONFIG,
   getToolCapabilities,
   loadAIConfig,
+  DEFAULT_AI_CONFIG,
+  AI_CONFIG_CHANGED_EVENT,
 } from '../../lib/aiService';
-
-// Default API key for Gemini
-const DEFAULT_GEMINI_API_KEY = 'AIzaSyB1qt6ZBrhh64lslHGmDXv26FUahxWHQ70';
-
-// Get default AI config
-const getDefaultAIConfig = () => ({
-  provider: 'google',
-  apiKey: DEFAULT_GEMINI_API_KEY,
-  model: 'gemini-2.5-flash',
-  customBaseUrl: '',
-});
 import { fmt$ } from '../../lib/formatters';
 
 // Storage key for chat history
@@ -173,7 +164,7 @@ export function Chat({
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [aiConfig, setAIConfig] = useState(() => loadAIConfig() || getDefaultAIConfig());
+  const [aiConfig, setAIConfig] = useState(() => loadAIConfig() || DEFAULT_AI_CONFIG);
   const [activeToolCalls, setActiveToolCalls] = useState([]);
   const [recentAction, setRecentAction] = useState(null);
   const [streamingContent, setStreamingContent] = useState('');
@@ -184,16 +175,32 @@ export function Chat({
 
   // Reload AI config when it might have changed (e.g., user configured in Settings)
   useEffect(() => {
-    const handleStorageChange = () => {
-      setAIConfig(loadAIConfig() || getDefaultAIConfig());
+    const reloadConfig = () => {
+      setAIConfig(loadAIConfig() || DEFAULT_AI_CONFIG);
     };
-    window.addEventListener('storage', handleStorageChange);
-    // Also check on focus in case user changed settings in same tab
-    const handleFocus = () => setAIConfig(loadAIConfig() || getDefaultAIConfig());
-    window.addEventListener('focus', handleFocus);
+
+    // Cross-tab storage changes
+    window.addEventListener('storage', reloadConfig);
+
+    // Window focus (covers browser tab switches)
+    window.addEventListener('focus', reloadConfig);
+
+    // Same-tab config changes (from Settings panel via custom event)
+    window.addEventListener(AI_CONFIG_CHANGED_EVENT, reloadConfig);
+
+    // Visibility change (covers internal tab switches within the app)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        reloadConfig();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', reloadConfig);
+      window.removeEventListener('focus', reloadConfig);
+      window.removeEventListener(AI_CONFIG_CHANGED_EVENT, reloadConfig);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
@@ -212,7 +219,7 @@ export function Chat({
 
   // Execute tool calls
   const executeToolCall = useCallback(
-    toolCall => {
+    async toolCall => {
       const { name, arguments: args } = toolCall;
 
       switch (name) {
@@ -265,13 +272,15 @@ export function Chat({
 
         case 'create_scenario': {
           if (onCreateScenario) {
+            // Create scenario but DON'T trigger navigation - stay in chat
             onCreateScenario(args.overrides || {}, args.name);
-            // Set recent action for navigation hint
-            const actionConfig = TOOL_UI_CONFIG.create_scenario?.action;
-            if (actionConfig) {
-              setRecentAction({ ...actionConfig, name: args.name });
-            }
-            return `Created scenario "${args.name}"`;
+            // Show inline notification with optional navigation link
+            setRecentAction({
+              type: 'scenario_created',
+              name: args.name,
+              // No navigateTo - stay in chat, user can click to navigate if desired
+            });
+            return `Created scenario "${args.name}". You can view it in the Scenarios tab when ready.`;
           }
           return 'Scenario creation not available';
         }
@@ -290,17 +299,46 @@ export function Chat({
         case 'apply_scenario_to_base': {
           if (onUpdateParams) {
             onUpdateParams(args.overrides || {});
-            // Set recent action for navigation hint
-            const actionConfig = TOOL_UI_CONFIG.apply_scenario_to_base?.action;
-            if (actionConfig) {
-              setRecentAction({
-                ...actionConfig,
-                description: args.description || 'Parameters updated',
-              });
-            }
-            return `Applied changes to base case: ${args.description || 'Parameters updated'}`;
+            // Show inline notification with optional navigation link - stay in chat
+            setRecentAction({
+              type: 'params_updated',
+              description: args.description || 'Parameters updated',
+              // No navigateTo - stay in chat, user can click to navigate if desired
+            });
+            return `Applied changes to base case: ${args.description || 'Parameters updated'}. You can view updated projections in the Projections tab.`;
           }
           return 'Parameter update not available';
+        }
+
+        case 'read_source_code': {
+          const { getSourceCode } = await import('../../lib/sourceCodeProvider');
+          const source = getSourceCode(args.target);
+          return JSON.stringify(source, null, 2);
+        }
+
+        case 'grep_codebase': {
+          const { grepCodebase } = await import('../../lib/sourceCodeProvider');
+          const results = grepCodebase(args.pattern, args.context);
+          return JSON.stringify(results, null, 2);
+        }
+
+        case 'capture_snapshot': {
+          const { captureTableAsMarkdown, captureSummaryAsMarkdown, captureYearRange } =
+            await import('../../lib/snapshotCapture');
+
+          if (args.type === 'summary') {
+            return captureSummaryAsMarkdown(summary);
+          }
+
+          if (args.type === 'projections') {
+            return captureTableAsMarkdown(projections, args.columns);
+          }
+
+          if (args.type === 'year_range') {
+            return captureYearRange(projections, args.startYear, args.endYear, args.columns);
+          }
+
+          return 'Unknown snapshot type';
         }
 
         default:
@@ -390,7 +428,7 @@ export function Chat({
         const toolResults = [];
 
         for (const toolCall of response.toolCalls) {
-          const result = executeToolCall(toolCall);
+          const result = await executeToolCall(toolCall);
 
           // Update status to complete
           setActiveToolCalls(prev =>

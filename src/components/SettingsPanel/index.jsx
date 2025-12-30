@@ -26,7 +26,13 @@ import { useState } from 'react';
 
 import { IRMAAEditor } from './IRMAAEditor';
 import { TaxBracketEditor } from './TaxBracketEditor';
-import { PROVIDERS, AIService, saveAIConfig, loadAIConfig } from '../../lib/aiService';
+import {
+  PROVIDERS,
+  AIService,
+  saveAIConfig,
+  loadAIConfig,
+  DEFAULT_AI_CONFIG,
+} from '../../lib/aiService';
 
 // Collapsible section wrapper
 function SettingsSection({ title, icon: Icon, expanded, onToggle, color, children }) {
@@ -83,15 +89,7 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
   const [expanded, setExpanded] = useState(['tax']);
 
   // AI Configuration state
-  const [aiConfig, setAiConfig] = useState(
-    () =>
-      loadAIConfig() || {
-        provider: 'anthropic',
-        apiKey: '',
-        model: 'claude-sonnet-4-20250514',
-        customBaseUrl: '',
-      }
-  );
+  const [aiConfig, setAiConfig] = useState(() => loadAIConfig() || DEFAULT_AI_CONFIG);
   const [showApiKey, setShowApiKey] = useState(false);
   const [testStatus, setTestStatus] = useState(null);
   const [testMessage, setTestMessage] = useState('');

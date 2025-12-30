@@ -41,6 +41,21 @@ export const TOOL_UI_CONFIG = {
     capability: { title: 'Apply Changes', description: 'Update your plan' },
     action: { type: 'params_updated', navigateTo: 'projections' },
   },
+  read_source_code: {
+    icon: '📖',
+    label: 'Reading source code',
+    capability: { title: 'Explain Calculations', description: 'Show how formulas work' },
+  },
+  grep_codebase: {
+    icon: '🔍',
+    label: 'Searching codebase',
+    capability: null, // Internal tool
+  },
+  capture_snapshot: {
+    icon: '📸',
+    label: 'Capturing data snapshot',
+    capability: { title: 'Show Data Tables', description: 'Embed projections in chat' },
+  },
 };
 
 // Helper to get capabilities for empty state
@@ -134,6 +149,73 @@ export const AGENT_TOOLS = [
         },
       },
       required: ['overrides'],
+    },
+  },
+  {
+    name: 'read_source_code',
+    description:
+      'Read the source code of a calculation function to explain how it works. Use this to answer questions about calculation logic.',
+    parameters: {
+      type: 'object',
+      properties: {
+        target: {
+          type: 'string',
+          enum: [
+            'federal_tax',
+            'ltcg_tax',
+            'niit',
+            'social_security_taxation',
+            'irmaa',
+            'rmd',
+            'heir_value',
+            'risk_allocation',
+            'projections',
+            'tax_tables',
+            'all_taxes',
+          ],
+          description: 'Which calculation to read the source for',
+        },
+      },
+      required: ['target'],
+    },
+  },
+  {
+    name: 'grep_codebase',
+    description: 'Search the codebase for a pattern to find where specific logic is implemented',
+    parameters: {
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: 'Text pattern to search for' },
+        context: {
+          type: 'string',
+          enum: ['calculations', 'projections', 'taxes', 'all'],
+          description: 'Which part of codebase to search',
+        },
+      },
+      required: ['pattern'],
+    },
+  },
+  {
+    name: 'capture_snapshot',
+    description: 'Capture a snapshot of current data as markdown table for embedding in response',
+    parameters: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          enum: ['summary', 'projections', 'year_range'],
+          description: 'What to capture',
+        },
+        startYear: { type: 'number', description: 'For year_range: start year' },
+        endYear: { type: 'number', description: 'For year_range: end year' },
+        columns: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'For projections: which columns to include (year, age, totalEOY, heirValue, totalTax, etc.)',
+        },
+      },
+      required: ['type'],
     },
   },
 ];
@@ -708,6 +790,17 @@ export const decryptApiKey = encrypted => {
 // Storage key for AI config
 export const AI_CONFIG_KEY = 'rp-ai-config';
 
+// Custom event for config changes (enables same-tab sync)
+export const AI_CONFIG_CHANGED_EVENT = 'ai-config-changed';
+
+// Default AI config (Google Gemini with API key for easy out-of-box experience)
+export const DEFAULT_AI_CONFIG = {
+  provider: 'google',
+  apiKey: 'AIzaSyB1qt6ZBrhh64lslHGmDXv26FUahxWHQ70',
+  model: 'gemini-2.5-flash',
+  customBaseUrl: '',
+};
+
 // Save AI config to localStorage
 export const saveAIConfig = config => {
   const toSave = {
@@ -715,6 +808,9 @@ export const saveAIConfig = config => {
     apiKey: encryptApiKey(config.apiKey),
   };
   localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(toSave));
+
+  // Dispatch custom event for same-tab listeners (Chat component)
+  window.dispatchEvent(new CustomEvent(AI_CONFIG_CHANGED_EVENT));
 };
 
 // Load AI config from localStorage

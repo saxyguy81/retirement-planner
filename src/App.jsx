@@ -105,12 +105,15 @@ export default function App() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [splitView, setSplitView] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showSaveMenu, setShowSaveMenu] = useState(false);
   const [showLoadMenu, setShowLoadMenu] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [showPV, setShowPV] = useState(true); // Global Present Value toggle
   const [pendingScenario, setPendingScenario] = useState(null);
   const fileInputRef = useRef(null);
+  const configFileInputRef = useRef(null);
   const exportMenuRef = useRef(null);
+  const saveMenuRef = useRef(null);
   const loadMenuRef = useRef(null);
 
   // Close menus when clicking outside
@@ -118,6 +121,9 @@ export default function App() {
     const handleClickOutside = e => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
         setShowExportMenu(false);
+      }
+      if (saveMenuRef.current && !saveMenuRef.current.contains(e.target)) {
+        setShowSaveMenu(false);
       }
       if (loadMenuRef.current && !loadMenuRef.current.contains(e.target)) {
         setShowLoadMenu(false);
@@ -215,7 +221,120 @@ export default function App() {
     [projections, summary, params]
   );
 
-  // Handle creating scenario from optimizer results
+  // Save configuration to JSON file
+  const handleSaveToFile = useCallback(async () => {
+    const saveData = {
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      type: 'retirement-planner-config',
+      params: { ...params },
+      options: { ...options },
+    };
+
+    // Try native File System Access API first
+    if ('showSaveFilePicker' in window) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: `retirement-config-${new Date().toISOString().slice(0, 10)}.json`,
+          types: [
+            {
+              description: 'JSON Configuration',
+              accept: { 'application/json': ['.json'] },
+            },
+          ],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(JSON.stringify(saveData, null, 2));
+        await writable.close();
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return; // User cancelled
+        console.warn('File System Access API failed, falling back to download');
+      }
+    }
+
+    // Fallback: standard download
+    const blob = new Blob([JSON.stringify(saveData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `retirement-config-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [params, options]);
+
+  // Load configuration from JSON file
+  const handleLoadFromFile = useCallback(async () => {
+    // Try native File System Access API
+    if ('showOpenFilePicker' in window) {
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          types: [
+            {
+              description: 'JSON Configuration',
+              accept: { 'application/json': ['.json'] },
+            },
+          ],
+        });
+        const file = await handle.getFile();
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        if (data.type !== 'retirement-planner-config') {
+          // Might be an export file, try to load params anyway
+          if (data.params) {
+            updateParams(data.params);
+            if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
+          } else {
+            alert('Invalid configuration file');
+          }
+          return;
+        }
+
+        updateParams(data.params);
+        if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.warn('File System Access API failed, falling back to input');
+      }
+    }
+
+    // Fallback: use file input
+    configFileInputRef.current?.click();
+  }, [updateParams, setOptions]);
+
+  // Handle config file input (fallback for browsers without File System Access API)
+  const handleConfigImport = useCallback(
+    async e => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        if (data.type !== 'retirement-planner-config') {
+          if (data.params) {
+            updateParams(data.params);
+            if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
+          } else {
+            alert('Invalid configuration file');
+          }
+        } else {
+          updateParams(data.params);
+          if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
+        }
+      } catch (err) {
+        alert('Failed to load configuration: ' + err.message);
+      }
+
+      e.target.value = '';
+    },
+    [updateParams, setOptions]
+  );
+
+  // Handle creating scenario from optimizer results (navigates to scenarios tab)
   const handleCreateScenarioFromOptimizer = useCallback((conversions, strategyName) => {
     // Store the scenario data
     setPendingScenario({
@@ -226,6 +345,18 @@ export default function App() {
     });
     // Switch to scenarios tab
     setActiveTab('scenarios');
+  }, []);
+
+  // Handle creating scenario from chat (does NOT navigate - stays in chat)
+  const handleCreateScenarioFromChat = useCallback((overrides, scenarioName) => {
+    // Store the scenario data without navigating
+    setPendingScenario({
+      name: scenarioName || 'AI Scenario',
+      description: 'Created by AI Assistant',
+      overrides: overrides || {},
+      createdAt: Date.now(),
+    });
+    // DO NOT navigate - let user stay in chat
   }, []);
 
   // Split panel view configurations - use render functions for lazy loading
@@ -369,6 +500,13 @@ export default function App() {
             onChange={handleImport}
             className="hidden"
           />
+          <input
+            ref={configFileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleConfigImport}
+            className="hidden"
+          />
           <button
             onClick={() => fileInputRef.current?.click()}
             className="ml-4 px-2 py-1 bg-slate-700 text-white rounded text-xs flex items-center gap-1 hover:bg-slate-600"
@@ -377,15 +515,42 @@ export default function App() {
             Import
           </button>
 
-          {/* State Management Buttons */}
-          <button
-            onClick={() => setShowSaveDialog(true)}
-            className="px-2 py-1 bg-slate-700 text-white rounded text-xs flex items-center gap-1 hover:bg-slate-600"
-            title="Save current state"
-          >
-            <Save className="w-3 h-3" />
-            Save
-          </button>
+          {/* State Management Buttons - Save Dropdown */}
+          <div className="relative" ref={saveMenuRef}>
+            <button
+              onClick={() => setShowSaveMenu(!showSaveMenu)}
+              className="px-2 py-1 bg-slate-700 text-white rounded text-xs flex items-center gap-1 hover:bg-slate-600"
+              title="Save current state"
+            >
+              <Save className="w-3 h-3" />
+              Save
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {showSaveMenu && (
+              <div className="absolute right-0 mt-1 w-40 bg-slate-800 border border-slate-700 rounded shadow-lg z-50">
+                <button
+                  onClick={() => {
+                    setShowSaveDialog(true);
+                    setShowSaveMenu(false);
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 flex items-center gap-2"
+                >
+                  <span className="text-blue-400">Browser</span>
+                  <span className="text-slate-400">localStorage</span>
+                </button>
+                <button
+                  onClick={() => {
+                    handleSaveToFile();
+                    setShowSaveMenu(false);
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 flex items-center gap-2"
+                >
+                  <span className="text-emerald-400">JSON File</span>
+                  <span className="text-slate-400">download</span>
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="relative" ref={loadMenuRef}>
             <button
@@ -398,9 +563,27 @@ export default function App() {
               <ChevronDown className="w-3 h-3" />
             </button>
             {showLoadMenu && (
-              <div className="absolute right-0 mt-1 w-64 bg-slate-800 border border-slate-700 rounded shadow-lg z-50 max-h-64 overflow-y-auto">
+              <div className="absolute right-0 mt-1 w-64 bg-slate-800 border border-slate-700 rounded shadow-lg z-50 max-h-80 overflow-y-auto">
+                {/* JSON File option */}
+                <button
+                  onClick={() => {
+                    handleLoadFromFile();
+                    setShowLoadMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs hover:bg-slate-700 border-b border-slate-700 flex items-center gap-2"
+                >
+                  <span className="text-emerald-400">JSON File</span>
+                  <span className="text-slate-400">from disk</span>
+                </button>
+                {/* Browser localStorage section */}
+                <div className="px-3 py-1.5 text-slate-500 text-xs bg-slate-900/50 flex items-center gap-2">
+                  <span className="text-blue-400">Browser</span>
+                  <span>saved states</span>
+                </div>
                 {savedStates.length === 0 ? (
-                  <div className="px-3 py-2 text-slate-400 text-xs">No saved states</div>
+                  <div className="px-3 py-2 text-slate-500 text-xs italic">
+                    No saved states in browser
+                  </div>
                 ) : (
                   savedStates.map(state => (
                     <div
@@ -621,7 +804,7 @@ export default function App() {
                       params={params}
                       projections={projections}
                       summary={summary}
-                      onCreateScenario={handleCreateScenarioFromOptimizer}
+                      onCreateScenario={handleCreateScenarioFromChat}
                       onUpdateParams={updateParams}
                       onNavigate={tab => setActiveTab(tab)}
                     />
