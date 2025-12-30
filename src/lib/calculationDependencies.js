@@ -279,6 +279,19 @@ export const CELL_DEPENDENCIES = {
   ],
 
   // =============================================================================
+  // PROPERTY TAX & SALT
+  // =============================================================================
+
+  // Property tax is an input, but deductible is capped by SALT
+  propertyTax: () => [], // Input field, no dependencies
+
+  // Deductible property tax depends on property tax and SALT cap
+  deductiblePropertyTax: year => [
+    { year, field: 'propertyTax' },
+    { year, field: 'saltCap' },
+  ],
+
+  // =============================================================================
   // IRMAA MAGI (computed income, not just lookback reference)
   // =============================================================================
 
@@ -289,6 +302,28 @@ export const CELL_DEPENDENCIES = {
     { year, field: 'capitalGains' },
     { year, field: 'rothConversion' },
   ],
+
+  // =============================================================================
+  // INPUT FIELDS (no dependencies - come from params)
+  // =============================================================================
+
+  // Social Security annual is an input value
+  ssAnnual: () => [], // Input field, no dependencies
+
+  // Annual expenses is an input value (base expenses x inflation)
+  expenses: () => [], // Input field, no dependencies
+
+  // Standard deduction is calculated from params (filing status, age)
+  standardDeduction: () => [], // Derived from params, no dependencies
+
+  // Age and year are basic fields
+  age: () => [], // Calculated from year and birthYear param
+  year: () => [], // The projection year itself
+
+  // Effective returns are calculated from params (risk allocation)
+  effectiveAtReturn: () => [],
+  effectiveIraReturn: () => [],
+  effectiveRothReturn: () => [],
 
   // =============================================================================
   // CUMULATIVE TRACKING
@@ -367,6 +402,16 @@ export const DEPENDENCY_SIGNS = {
   expenses: '+',
   rmdRequired: '+',
   irmaaMAGI: '+',
+
+  // Property tax
+  propertyTax: '+',
+  deductiblePropertyTax: '+',
+  saltCap: '+',
+
+  // Basic fields
+  age: '+',
+  year: '+',
+  standardDeduction: '-', // Subtracts from ordinary income
 };
 
 /**

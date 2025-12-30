@@ -24,6 +24,7 @@ import {
   IL_TAX_RATE,
   inflateBrackets,
   inflateIRMAA,
+  getBeneficiarySLEFactor,
 } from './taxTables.js';
 
 // =============================================================================
@@ -160,11 +161,22 @@ export function calculateIRMAA(
   // Convert monthly to annual and multiply by number of people
   const annualTotal = (partB + partD) * 12 * numPeople;
 
+  // Calculate base premium vs surcharges for display clarity
+  // Base Part B is the first bracket level (no IRMAA surcharge)
+  // Part D base is $0 - all Part D costs are IRMAA surcharges
+  const basePremiumB = brackets[0].partB;
+  const surchargeB = partB - basePremiumB;
+  const surchargeD = partD; // Part D is all surcharge
+
   return {
     partB: Math.round(partB * 12 * numPeople),
     partD: Math.round(partD * 12 * numPeople),
     total: Math.round(annualTotal),
     bracket: brackets.findIndex(b => magi <= b.threshold) || brackets.length - 1,
+    // Breakdown for display (annual amounts per person × numPeople)
+    basePremiumB: Math.round(basePremiumB * 12 * numPeople),
+    surchargeB: Math.round(surchargeB * 12 * numPeople),
+    surchargeD: Math.round(surchargeD * 12 * numPeople),
   };
 }
 
@@ -469,31 +481,55 @@ export function calculateMultiHeirValue(atBalance, iraBalance, rothBalance, heir
 // HEIR VALUE WITH 10-YEAR DISTRIBUTION STRATEGY
 // =============================================================================
 /**
- * Calculate heir value with 10-year distribution strategy
+ * Calculate heir value with distribution strategy (SECURE Act 2.0 compliant)
  *
  * Traditional IRA: Must distribute over 10 years, taxed as ordinary income
- * Roth IRA: Must distribute over 10 years, but tax-free
+ *   - If owner died at 73+ (after RBD): Annual RMDs required using heir's SLE
+ *   - If owner died before 73: No annual RMDs, can defer to year 10
+ * Roth IRA: Must distribute over 10 years, but tax-free (always "before RBD")
  * After-Tax: Step-up in basis, no tax
  *
- * Per-heir taxable RoR enables fair comparison by projecting what
- * each heir's inheritance becomes after N years of investing in
- * their own taxable account. This normalizes across:
- * - Different tax-advantaged distributions (Roth tax-free vs IRA taxed)
- * - Different heir investment strategies
+ * Strategies:
+ * - 'rmd_based': Auto-determines RMD requirement from owner death age
+ * - 'lump_sum_year0': Immediate full distribution at inheritance
+ * - 'even': Legacy - spread evenly over 10 years (backward compatibility)
+ * - 'year10': Legacy - lump sum in year 10 (backward compatibility)
+ *
+ * @param {number} atBalance - After-tax account balance
+ * @param {number} iraBalance - Traditional IRA balance
+ * @param {number} rothBalance - Roth IRA balance
+ * @param {object} heir - Heir configuration with birthYear, splitPercent, state, agi, taxableRoR
+ * @param {string} strategy - 'rmd_based', 'lump_sum_year0', 'even', or 'year10'
+ * @param {number} discountRate - Discount rate for PV calculation
+ * @param {number} normalizationYears - Years to project forward
+ * @param {number} ownerDeathYear - Year owner dies (determines inheritance timing)
+ * @param {number} ownerBirthYear - Owner's birth year (to calculate death age)
  */
 export function calculateHeirValueWithStrategy(
   atBalance,
   iraBalance,
   rothBalance,
   heir,
-  strategy = 'even', // 'even' or 'year10'
+  strategy = 'rmd_based',
   discountRate = 0.03,
-  normalizationYears = 10
+  normalizationYears = 10,
+  ownerDeathYear = null,
+  ownerBirthYear = null
 ) {
   const rates = calculateHeirTaxRates(heir);
   const splitFraction = (heir.splitPercent || 100) / 100;
   const taxableRoR = heir.taxableRoR || 0.06; // Per-heir taxable return rate
   const iraGrowthRate = 0.06; // IRA growth rate while in tax-advantaged wrapper
+
+  // Calculate heir age at inheritance from birth year
+  const currentYear = new Date().getFullYear();
+  const heirBirthYear = heir.birthYear || currentYear - 45; // Default to 45 years old
+  const inheritanceYear = ownerDeathYear || currentYear;
+  const heirAgeAtInheritance = inheritanceYear - heirBirthYear;
+
+  // Determine if owner died after RBD (age 73+)
+  const ownerDeathAge = ownerDeathYear && ownerBirthYear ? ownerDeathYear - ownerBirthYear : 75; // Default assumes after RBD
+  const ownerDiedAfterRBD = ownerDeathAge >= 73;
 
   const heirAt = atBalance * splitFraction;
   const heirIra = iraBalance * splitFraction;
@@ -501,57 +537,90 @@ export function calculateHeirValueWithStrategy(
 
   // After-Tax: Step-up in basis, 100% value received immediately
   // Heir invests in taxable account at their taxable RoR
-  const atValue = heirAt;
   const atFV = heirAt * Math.pow(1 + taxableRoR, normalizationYears);
   const atNormalized = atFV / Math.pow(1 + discountRate, normalizationYears);
 
-  // Roth: Tax-free, but must distribute within 10 years
-  // Assume heir takes distribution at year 10 for maximum tax-free growth
-  const rothGrowthYears = Math.min(10, normalizationYears);
-  const rothFV = heirRoth * Math.pow(1 + iraGrowthRate, rothGrowthYears); // Grows tax-free at IRA rate
-  // After distribution, heir invests remaining years at taxable RoR
-  const remainingYearsAfterRoth = Math.max(0, normalizationYears - 10);
-  const rothAfterDistribution = rothFV * Math.pow(1 + taxableRoR, remainingYearsAfterRoth);
-  const rothNormalized = rothAfterDistribution / Math.pow(1 + discountRate, normalizationYears);
+  // Roth: Tax-free, no RMDs required (owner always deemed "before RBD" for Roth)
+  // Optimal: defer until year 10 for maximum tax-free growth
+  const rothFV = heirRoth * Math.pow(1 + iraGrowthRate, 10);
+  const rothAfterDist = rothFV * Math.pow(1 + taxableRoR, Math.max(0, normalizationYears - 10));
+  const rothNormalized = rothAfterDist / Math.pow(1 + discountRate, normalizationYears);
 
-  // Traditional IRA: Depends on strategy
   let iraNormalized;
   let iraDetails;
 
+  // Handle legacy strategies (backward compatibility)
+  if (strategy === 'even') {
+    strategy = 'rmd_based'; // Map 'even' to rmd_based
+  }
   if (strategy === 'year10') {
-    // Lump sum in year 10 - higher tax bracket hit
-    const iraFV = heirIra * Math.pow(1 + iraGrowthRate, 10);
-    // Assume higher effective rate due to bracket creep (add 3-5%)
-    const effectiveRate = Math.min(rates.combined + 0.04, 0.5);
-    const afterTax = iraFV * (1 - effectiveRate);
-    // After distribution, heir invests at their taxable RoR
-    const remainingYearsAfterIra = Math.max(0, normalizationYears - 10);
-    const iraAfterDistribution = afterTax * Math.pow(1 + taxableRoR, remainingYearsAfterIra);
-    iraNormalized = iraAfterDistribution / Math.pow(1 + discountRate, normalizationYears);
+    strategy = 'rmd_based'; // Map 'year10' to rmd_based (auto-determines if no RMD needed)
+  }
+
+  if (strategy === 'lump_sum_year0') {
+    // ═══════════════════════════════════════════════════════════════════════
+    // LUMP SUM YEAR 0: Immediate full distribution at inheritance
+    // ═══════════════════════════════════════════════════════════════════════
+    const afterTax = heirIra * (1 - rates.combined);
+    const iraFV = afterTax * Math.pow(1 + taxableRoR, normalizationYears);
+    iraNormalized = iraFV / Math.pow(1 + discountRate, normalizationYears);
     iraDetails = {
-      strategy: 'year10',
-      futureValue: Math.round(iraFV),
-      taxRate: effectiveRate,
+      strategy: 'lump_sum_year0',
+      description: 'Immediate full distribution at inheritance',
+      grossAmount: Math.round(heirIra),
+      taxRate: rates.combined,
       afterTax: Math.round(afterTax),
       normalized: Math.round(iraNormalized),
-      taxableRoR: taxableRoR,
+    };
+  } else if (!ownerDiedAfterRBD) {
+    // ═══════════════════════════════════════════════════════════════════════
+    // RMD_BASED + OWNER DIED BEFORE RBD: No annual RMDs required
+    // Optimal: Defer to year 10 for maximum tax-deferred growth
+    // ═══════════════════════════════════════════════════════════════════════
+    const iraFV = heirIra * Math.pow(1 + iraGrowthRate, 10);
+    const afterTax = iraFV * (1 - rates.combined);
+    const finalFV = afterTax * Math.pow(1 + taxableRoR, Math.max(0, normalizationYears - 10));
+    iraNormalized = finalFV / Math.pow(1 + discountRate, normalizationYears);
+    iraDetails = {
+      strategy: 'rmd_based',
+      rmdRequired: false,
+      description: `Owner died at ${ownerDeathAge} (before RBD) - no annual RMDs, defer to year 10`,
+      ownerDeathAge,
+      heirAgeAtInheritance,
+      grossAmount: Math.round(heirIra),
+      futureValue: Math.round(iraFV),
+      taxRate: rates.combined,
+      afterTax: Math.round(afterTax),
+      normalized: Math.round(iraNormalized),
+      distributions: [
+        { year: 10, distribution: Math.round(iraFV), tax: Math.round(iraFV * rates.combined) },
+      ],
     };
   } else {
-    // Spread evenly over 10 years
+    // ═══════════════════════════════════════════════════════════════════════
+    // RMD_BASED + OWNER DIED AFTER RBD: Annual RMDs REQUIRED
+    // Based on heir's age using Single Life Expectancy table
+    // ═══════════════════════════════════════════════════════════════════════
     let totalNormalized = 0;
     let remaining = heirIra;
     const distributions = [];
 
-    for (let year = 1; year <= 10; year++) {
-      remaining = remaining * (1 + iraGrowthRate);
-      const distribution = remaining / (10 - year + 1);
-      remaining -= distribution;
+    const initialSLEFactor = getBeneficiarySLEFactor(heirAgeAtInheritance);
 
-      // Tax at heir's rate (spreading keeps them in lower brackets)
+    for (let year = 1; year <= 10 && remaining > 0; year++) {
+      remaining = remaining * (1 + iraGrowthRate);
+
+      // SLE factor decreases by 1 each year
+      const sleFactor = Math.max(1, initialSLEFactor - (year - 1));
+      const rmdAmount = remaining / sleFactor;
+
+      // Year 10: must distribute entire remaining balance
+      const distribution = year === 10 ? remaining : rmdAmount;
+      remaining = Math.max(0, remaining - distribution);
+
       const tax = distribution * rates.combined;
       const afterTax = distribution - tax;
 
-      // Heir invests after-tax amount at taxable RoR for remaining years
       const yearsToGrow = normalizationYears - year;
       const fv = afterTax * Math.pow(1 + taxableRoR, Math.max(0, yearsToGrow));
       const normalized = fv / Math.pow(1 + discountRate, normalizationYears);
@@ -559,6 +628,8 @@ export function calculateHeirValueWithStrategy(
       totalNormalized += normalized;
       distributions.push({
         year,
+        heirAge: heirAgeAtInheritance + year - 1,
+        sleFactor: sleFactor.toFixed(1),
         distribution: Math.round(distribution),
         tax: Math.round(tax),
         afterTax: Math.round(afterTax),
@@ -568,24 +639,29 @@ export function calculateHeirValueWithStrategy(
 
     iraNormalized = totalNormalized;
     iraDetails = {
-      strategy: 'even',
+      strategy: 'rmd_based',
+      rmdRequired: true,
+      description: `Owner died at ${ownerDeathAge} (after RBD) - annual RMDs required`,
+      ownerDeathAge,
+      heirAgeAtInheritance,
+      initialSLEFactor: initialSLEFactor.toFixed(1),
       distributions,
       taxRate: rates.combined,
       normalized: Math.round(totalNormalized),
-      taxableRoR: taxableRoR,
     };
   }
-
-  // Total normalized value - what each account type becomes at horizon
-  const totalValue = atNormalized + rothNormalized + iraNormalized;
 
   return {
     name: heir.name,
     split: splitFraction,
     rates,
-    taxableRoR: taxableRoR,
+    taxableRoR,
+    heirBirthYear,
+    heirAgeAtInheritance,
+    ownerDeathAge,
+    ownerDiedAfterRBD,
     // Immediate values (what heir receives)
-    atValue: Math.round(atValue),
+    atValue: Math.round(heirAt),
     rothGross: Math.round(heirRoth),
     iraGross: Math.round(heirIra),
     grossInheritance: Math.round(heirAt + heirIra + heirRoth),
@@ -593,7 +669,7 @@ export function calculateHeirValueWithStrategy(
     atNormalized: Math.round(atNormalized),
     rothNormalized: Math.round(rothNormalized),
     iraNormalized: Math.round(iraNormalized),
-    netNormalized: Math.round(totalValue),
+    netNormalized: Math.round(atNormalized + rothNormalized + iraNormalized),
     iraDetails,
     normalizationYears,
   };
@@ -604,15 +680,26 @@ export function calculateHeirValueWithStrategy(
 // =============================================================================
 /**
  * Calculate multi-heir value with distribution strategy
+ * @param {number} atBalance - After-tax account balance
+ * @param {number} iraBalance - Traditional IRA balance
+ * @param {number} rothBalance - Roth IRA balance
+ * @param {Array} heirs - Array of heir configurations
+ * @param {string} strategy - 'rmd_based' or 'lump_sum_year0'
+ * @param {number} discountRate - Discount rate for PV calculation
+ * @param {number} normalizationYears - Years to project forward
+ * @param {number} ownerDeathYear - Year owner dies (determines inheritance timing)
+ * @param {number} ownerBirthYear - Owner's birth year (to calculate death age)
  */
 export function calculateMultiHeirValueWithStrategy(
   atBalance,
   iraBalance,
   rothBalance,
   heirs,
-  strategy = 'even',
+  strategy = 'rmd_based',
   discountRate = 0.03,
-  normalizationYears = 10
+  normalizationYears = 10,
+  ownerDeathYear = null,
+  ownerBirthYear = null
 ) {
   if (!heirs || heirs.length === 0) {
     // Fallback to default heir configuration
@@ -622,6 +709,7 @@ export function calculateMultiHeirValueWithStrategy(
       state: 'IL',
       agi: 200000,
       taxableRoR: 0.06,
+      birthYear: 1980,
     };
     const result = calculateHeirValueWithStrategy(
       atBalance,
@@ -630,7 +718,9 @@ export function calculateMultiHeirValueWithStrategy(
       defaultHeir,
       strategy,
       discountRate,
-      normalizationYears
+      normalizationYears,
+      ownerDeathYear,
+      ownerBirthYear
     );
     return {
       grossTotal: result.grossInheritance,
@@ -638,6 +728,8 @@ export function calculateMultiHeirValueWithStrategy(
       details: [result],
       strategy,
       normalizationYears,
+      ownerDeathYear,
+      ownerBirthYear,
     };
   }
 
@@ -653,7 +745,9 @@ export function calculateMultiHeirValueWithStrategy(
       heir,
       strategy,
       discountRate,
-      normalizationYears
+      normalizationYears,
+      ownerDeathYear,
+      ownerBirthYear
     );
     totalGross += result.grossInheritance;
     totalNormalized += result.netNormalized;
@@ -666,5 +760,7 @@ export function calculateMultiHeirValueWithStrategy(
     details: heirDetails,
     strategy,
     normalizationYears,
+    ownerDeathYear,
+    ownerBirthYear,
   };
 }

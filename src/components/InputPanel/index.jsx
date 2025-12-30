@@ -34,6 +34,7 @@ import {
   Calendar,
   Calculator,
   Trash2,
+  Home,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -752,6 +753,25 @@ export function InputPanel({
           </div>
         </InputSection>
 
+        {/* Property Taxes */}
+        <InputSection
+          title="Property Taxes"
+          icon={Home}
+          expanded={expanded.includes('propertyTax')}
+          onToggle={() => toggle('propertyTax')}
+          color="orange"
+        >
+          <ParamInput
+            label="Annual Property Tax"
+            value={params.annualPropertyTax || 0}
+            onChange={v => updateParam('annualPropertyTax', v)}
+          />
+          <div className="text-slate-500 text-[10px] mt-1">
+            Subject to SALT cap (${(params.saltCapMarried || 10000).toLocaleString()} MFJ / $
+            {(params.saltCapSingle || 10000).toLocaleString()} single)
+          </div>
+        </InputSection>
+
         {/* Calculation Options */}
         <InputSection
           title="Calculation Options"
@@ -905,6 +925,18 @@ export function InputPanel({
                       </select>
                     </div>
                     <div>
+                      <label className="block text-slate-500 text-[10px] mb-0.5">Birth Year</label>
+                      <input
+                        type="number"
+                        value={heir.birthYear || 1980}
+                        onChange={e =>
+                          updateHeir(index, { birthYear: parseInt(e.target.value) || 1980 })
+                        }
+                        className="w-full bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 text-[10px] text-slate-200"
+                        placeholder="e.g., 1980"
+                      />
+                    </div>
+                    <div>
                       <label className="block text-slate-500 text-[10px] mb-0.5">Split %</label>
                       <input
                         type="number"
@@ -976,32 +1008,39 @@ export function InputPanel({
             {/* Distribution Strategy */}
             <div className="mt-2 pt-2 border-t border-slate-700">
               <label className="block text-slate-400 text-xs mb-1">IRA Distribution Strategy</label>
-              <div className="flex gap-1">
+              <div className="text-slate-500 text-[10px] mb-2">
+                RMD requirements auto-determined from owner death age (SECURE Act 2.0)
+              </div>
+              <div className="space-y-1">
                 <button
-                  onClick={() => updateParam('heirDistributionStrategy', 'even')}
-                  className={`flex-1 px-2 py-1 rounded text-[10px] ${
-                    (params.heirDistributionStrategy || 'even') === 'even'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-                >
-                  Even (10yr)
-                </button>
-                <button
-                  onClick={() => updateParam('heirDistributionStrategy', 'year10')}
-                  className={`flex-1 px-2 py-1 rounded text-[10px] ${
+                  onClick={() => updateParam('heirDistributionStrategy', 'rmd_based')}
+                  className={`w-full px-2 py-1.5 rounded text-left text-[10px] ${
+                    (params.heirDistributionStrategy || 'rmd_based') === 'rmd_based' ||
+                    params.heirDistributionStrategy === 'even' ||
                     params.heirDistributionStrategy === 'year10'
                       ? 'bg-blue-600 text-white'
                       : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                   }`}
                 >
-                  Lump Sum Yr 10
+                  <div className="font-medium">RMD-Based Distribution</div>
+                  <div className="opacity-70 mt-0.5">
+                    Owner dies &ge;73: Annual RMDs (heir&apos;s SLE) | Owner dies &lt;73: Defer to
+                    yr 10
+                  </div>
                 </button>
-              </div>
-              <div className="text-slate-500 text-[10px] mt-1">
-                {(params.heirDistributionStrategy || 'even') === 'even'
-                  ? 'Spread IRA over 10 years (lower tax bracket)'
-                  : 'Wait until year 10 for max growth (higher tax)'}
+                <button
+                  onClick={() => updateParam('heirDistributionStrategy', 'lump_sum_year0')}
+                  className={`w-full px-2 py-1.5 rounded text-left text-[10px] ${
+                    params.heirDistributionStrategy === 'lump_sum_year0'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  <div className="font-medium">Lump Sum Year 0</div>
+                  <div className="opacity-70 mt-0.5">
+                    Immediate full distribution at inheritance
+                  </div>
+                </button>
               </div>
             </div>
 

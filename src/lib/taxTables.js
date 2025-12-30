@@ -139,6 +139,108 @@ export const RMD_TABLE = {
 export const RMD_START_AGE = 73;
 
 // =============================================================================
+// BENEFICIARY SINGLE LIFE EXPECTANCY TABLE (IRS Publication 590-B)
+// Used for inherited IRA RMDs when owner died AFTER RBD (age 73+).
+// Key: Age of beneficiary, Value: Life expectancy divisor
+// Each subsequent year, subtract 1 from the initial factor.
+// =============================================================================
+export const BENEFICIARY_SLE_TABLE = {
+  20: 63.0,
+  21: 62.1,
+  22: 61.1,
+  23: 60.1,
+  24: 59.2,
+  25: 58.2,
+  26: 57.2,
+  27: 56.3,
+  28: 55.3,
+  29: 54.3,
+  30: 53.3,
+  31: 52.4,
+  32: 51.4,
+  33: 50.4,
+  34: 49.4,
+  35: 48.5,
+  36: 47.5,
+  37: 46.5,
+  38: 45.6,
+  39: 44.6,
+  40: 43.6,
+  41: 42.7,
+  42: 41.7,
+  43: 40.7,
+  44: 39.8,
+  45: 38.8,
+  46: 37.9,
+  47: 36.9,
+  48: 35.9,
+  49: 35.0,
+  50: 34.0,
+  51: 33.1,
+  52: 32.1,
+  53: 31.2,
+  54: 30.2,
+  55: 29.3,
+  56: 28.3,
+  57: 27.4,
+  58: 26.5,
+  59: 25.5,
+  60: 24.6,
+  61: 23.7,
+  62: 22.8,
+  63: 21.8,
+  64: 20.9,
+  65: 20.0,
+  66: 19.1,
+  67: 18.2,
+  68: 17.4,
+  69: 16.5,
+  70: 15.6,
+  71: 14.8,
+  72: 13.9,
+  73: 13.1,
+  74: 12.3,
+  75: 11.5,
+  76: 10.7,
+  77: 9.9,
+  78: 9.2,
+  79: 8.4,
+  80: 7.7,
+  81: 7.0,
+  82: 6.3,
+  83: 5.7,
+  84: 5.1,
+  85: 4.5,
+  86: 4.0,
+  87: 3.5,
+  88: 3.0,
+  89: 2.6,
+  90: 2.2,
+};
+
+/**
+ * Get the Single Life Expectancy factor for a beneficiary
+ * @param {number} age - Beneficiary's age
+ * @returns {number} SLE factor (divisor for RMD calculation)
+ */
+export function getBeneficiarySLEFactor(age) {
+  if (age < 20) return BENEFICIARY_SLE_TABLE[20];
+  if (age > 90) return BENEFICIARY_SLE_TABLE[90];
+  return BENEFICIARY_SLE_TABLE[age] || BENEFICIARY_SLE_TABLE[90];
+}
+
+/**
+ * Determine if owner died after Required Beginning Date (RBD = age 73)
+ * @param {number} ownerDeathYear - Year of owner's death
+ * @param {number} ownerBirthYear - Owner's birth year
+ * @returns {boolean} True if owner died at age 73 or older
+ */
+export function ownerDiedAfterRBD(ownerDeathYear, ownerBirthYear) {
+  const deathAge = ownerDeathYear - ownerBirthYear;
+  return deathAge >= 73;
+}
+
+// =============================================================================
 // SOCIAL SECURITY TAXATION THRESHOLDS (Combined Income method)
 // These are NOT indexed for inflation
 // =============================================================================
@@ -245,8 +347,13 @@ export const DEFAULT_PARAMS = {
 
   // Heir Configuration (multi-heir with per-heir settings)
   heirs: [],
-  heirDistributionStrategy: 'even', // 'even' (spread over 10 years) or 'year10' (lump sum in year 10)
+  heirDistributionStrategy: 'rmd_based', // 'rmd_based' (auto-determine from owner death age) or 'lump_sum_year0' (immediate)
   heirNormalizationYears: 10, // Years to project forward for normalized comparison
+
+  // Property Taxes & SALT
+  annualPropertyTax: 0, // Annual property tax (user enters $, default disabled)
+  saltCapMarried: 10000, // SALT cap for MFJ (2024 law)
+  saltCapSingle: 10000, // SALT cap for single filers (2024 law)
 
   // Calculation Options
   iterativeTax: true, // Use iterative tax calculation

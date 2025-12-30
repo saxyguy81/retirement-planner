@@ -80,6 +80,9 @@ export const FORMULA_COLORS = {
   taxableSS: { color: '#0072B2', label: 'Taxable SS', key: 'taxableSS' }, // Okabe-Ito Blue
   expenses: { color: '#F0E442', label: 'Expenses', key: 'expenses' }, // Okabe-Ito Yellow
   irmaaTotal: { color: '#F0E442', label: 'IRMAA', key: 'irmaaTotal' }, // Okabe-Ito Yellow
+  propertyTax: { color: '#F0E442', label: 'Property Tax', key: 'propertyTax' }, // Okabe-Ito Yellow
+  deductiblePropertyTax: { color: '#F0E442', label: 'SALT Ded', key: 'deductiblePropertyTax' }, // Okabe-Ito Yellow
+  saltCap: { color: '#94a3b8', label: 'SALT Cap', key: 'saltCap' }, // Slate
 
   // RMD
   rmdRequired: { color: '#E69F00', label: 'RMD', key: 'rmdRequired' }, // Okabe-Ito Orange
@@ -118,6 +121,9 @@ export const ROW_SEMANTICS = {
   expenses: 'negative',
   pvExpenses: 'negative',
   rothConversion: 'neutral',
+  propertyTax: 'negative',
+  deductiblePropertyTax: 'dim',
+  saltCap: 'dim',
 
   // RMD
   rmdFactor: 'dim',

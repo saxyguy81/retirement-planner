@@ -20,11 +20,31 @@ import {
   AlertCircle,
   Bot,
   User,
+  Check,
+  Square,
+  Copy,
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 
 import { generateProjections, calculateSummary } from '../../lib';
-import { AIService, AGENT_TOOLS, loadAIConfig } from '../../lib/aiService';
+import {
+  AIService,
+  AGENT_TOOLS,
+  TOOL_UI_CONFIG,
+  getToolCapabilities,
+  loadAIConfig,
+} from '../../lib/aiService';
+
+// Default API key for Gemini
+const DEFAULT_GEMINI_API_KEY = 'AIzaSyB1qt6ZBrhh64lslHGmDXv26FUahxWHQ70';
+
+// Get default AI config
+const getDefaultAIConfig = () => ({
+  provider: 'google',
+  apiKey: DEFAULT_GEMINI_API_KEY,
+  model: 'gemini-2.5-flash',
+  customBaseUrl: '',
+});
 import { fmt$ } from '../../lib/formatters';
 
 // Storage key for chat history
@@ -69,28 +89,107 @@ const calculateContextUsage = messages => {
   };
 };
 
+// Tool call indicator bubble component
+function ToolCallBubble({ name, status }) {
+  const config = TOOL_UI_CONFIG[name] || { icon: '🔧', label: name };
+
+  return (
+    <div
+      className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/50 rounded px-2 py-1"
+      data-testid="tool-call-indicator"
+    >
+      <span>{config.icon}</span>
+      <span>{config.label}</span>
+      {status === 'running' && <Loader2 className="w-3 h-3 animate-spin" />}
+      {status === 'complete' && <Check className="w-3 h-3 text-emerald-400" />}
+    </div>
+  );
+}
+
+// Navigation hint component for after scenario creation or parameter updates
+function ActionHint({ action, onNavigate, onDismiss }) {
+  if (!action) return null;
+
+  if (action.type === 'scenario_created') {
+    return (
+      <div
+        className="flex items-center gap-2 text-xs bg-emerald-900/30 border border-emerald-800 rounded-lg px-3 py-2 mx-4 mb-2"
+        data-testid="action-hint"
+      >
+        <span className="text-emerald-300">✓ Scenario &quot;{action.name}&quot; created</span>
+        <button
+          onClick={() => onNavigate('scenarios')}
+          className="text-emerald-400 hover:text-emerald-300 underline"
+        >
+          View in Scenarios →
+        </button>
+        <button
+          onClick={onDismiss}
+          className="text-slate-500 hover:text-slate-300 ml-auto"
+          aria-label="Dismiss"
+        >
+          ×
+        </button>
+      </div>
+    );
+  }
+
+  if (action.type === 'params_updated') {
+    return (
+      <div
+        className="flex items-center gap-2 text-xs bg-blue-900/30 border border-blue-800 rounded-lg px-3 py-2 mx-4 mb-2"
+        data-testid="action-hint"
+      >
+        <span className="text-blue-300">✓ {action.description || 'Base case updated'}</span>
+        <button
+          onClick={() => onNavigate('projections')}
+          className="text-blue-400 hover:text-blue-300 underline"
+        >
+          View Projections →
+        </button>
+        <button
+          onClick={onDismiss}
+          className="text-slate-500 hover:text-slate-300 ml-auto"
+          aria-label="Dismiss"
+        >
+          ×
+        </button>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export function Chat({
   params,
   projections,
   summary,
   onCreateScenario,
-  onUpdateParams: _onUpdateParams,
+  onUpdateParams,
+  onNavigate,
 }) {
   const [messages, setMessages] = useState(() => loadChatHistory());
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [aiConfig, setAIConfig] = useState(() => loadAIConfig());
+  const [aiConfig, setAIConfig] = useState(() => loadAIConfig() || getDefaultAIConfig());
+  const [activeToolCalls, setActiveToolCalls] = useState([]);
+  const [recentAction, setRecentAction] = useState(null);
+  const [streamingContent, setStreamingContent] = useState('');
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [sessionTokens, setSessionTokens] = useState({ input: 0, output: 0 });
   const messagesEndRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   // Reload AI config when it might have changed (e.g., user configured in Settings)
   useEffect(() => {
     const handleStorageChange = () => {
-      setAIConfig(loadAIConfig());
+      setAIConfig(loadAIConfig() || getDefaultAIConfig());
     };
     window.addEventListener('storage', handleStorageChange);
     // Also check on focus in case user changed settings in same tab
-    const handleFocus = () => setAIConfig(loadAIConfig());
+    const handleFocus = () => setAIConfig(loadAIConfig() || getDefaultAIConfig());
     window.addEventListener('focus', handleFocus);
     return () => {
       window.removeEventListener('storage', handleStorageChange);
@@ -106,10 +205,10 @@ export function Chat({
     saveChatHistory(messages);
   }, [messages]);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive or streaming content updates
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, streamingContent]);
 
   // Execute tool calls
   const executeToolCall = useCallback(
@@ -167,6 +266,11 @@ export function Chat({
         case 'create_scenario': {
           if (onCreateScenario) {
             onCreateScenario(args.overrides || {}, args.name);
+            // Set recent action for navigation hint
+            const actionConfig = TOOL_UI_CONFIG.create_scenario?.action;
+            if (actionConfig) {
+              setRecentAction({ ...actionConfig, name: args.name });
+            }
             return `Created scenario "${args.name}"`;
           }
           return 'Scenario creation not available';
@@ -183,12 +287,63 @@ export function Chat({
           }
         }
 
+        case 'apply_scenario_to_base': {
+          if (onUpdateParams) {
+            onUpdateParams(args.overrides || {});
+            // Set recent action for navigation hint
+            const actionConfig = TOOL_UI_CONFIG.apply_scenario_to_base?.action;
+            if (actionConfig) {
+              setRecentAction({
+                ...actionConfig,
+                description: args.description || 'Parameters updated',
+              });
+            }
+            return `Applied changes to base case: ${args.description || 'Parameters updated'}`;
+          }
+          return 'Parameter update not available';
+        }
+
         default:
           return `Unknown tool: ${name}`;
       }
     },
-    [params, projections, summary, onCreateScenario]
+    [params, projections, summary, onCreateScenario, onUpdateParams]
   );
+
+  // Cancel the current request
+  const cancelRequest = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+    setStreamingContent('');
+    setActiveToolCalls([]);
+  }, []);
+
+  // Global Escape key handler for cancellation
+  useEffect(() => {
+    const handleKeyDown = e => {
+      if (e.key === 'Escape' && isLoading) {
+        e.preventDefault();
+        cancelRequest();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isLoading, cancelRequest]);
+
+  // Copy to clipboard
+  const copyToClipboard = useCallback(async (text, messageId) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMessageId(messageId);
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  }, []);
 
   // Send message to AI
   const sendMessage = useCallback(async () => {
@@ -203,21 +358,45 @@ export function Chat({
     setInput('');
     setIsLoading(true);
     setError(null);
+    setRecentAction(null); // Clear any previous action hints
+    setStreamingContent('');
+
+    // Create abort controller for cancellation
+    abortControllerRef.current = new AbortController();
 
     try {
       const service = new AIService(aiConfig);
       const allMessages = [...messages, userMessage];
 
-      // Keep looping while we get tool calls
-      let response = await service.sendMessage(allMessages, AGENT_TOOLS, null);
-      let assistantContent = response.content;
+      // Use streaming for initial response
+      let response = await service.sendMessageStreaming(
+        allMessages,
+        AGENT_TOOLS,
+        (chunk, full) => setStreamingContent(full),
+        toolCall => {
+          setActiveToolCalls(prev => [
+            ...prev,
+            { id: toolCall.id, name: toolCall.name, status: 'running' },
+          ]);
+        },
+        abortControllerRef.current.signal
+      );
 
-      // Handle tool calls
+      let assistantContent = response.content;
+      setStreamingContent(''); // Clear streaming content
+
+      // Handle tool calls (non-streaming for tool loop)
       while (response.toolCalls && response.toolCalls.length > 0) {
         const toolResults = [];
 
         for (const toolCall of response.toolCalls) {
           const result = executeToolCall(toolCall);
+
+          // Update status to complete
+          setActiveToolCalls(prev =>
+            prev.map(tc => (tc.id === toolCall.id ? { ...tc, status: 'complete' } : tc))
+          );
+
           toolResults.push({
             id: toolCall.id,
             name: toolCall.name,
@@ -231,6 +410,7 @@ export function Chat({
           content: toolResults.map(t => `Tool ${t.name} result: ${t.result}`).join('\n'),
         };
 
+        // Use non-streaming for tool result follow-up
         response = await service.sendMessage(
           [...allMessages, { role: 'assistant', content: assistantContent }, toolResultMessage],
           AGENT_TOOLS,
@@ -242,12 +422,30 @@ export function Chat({
         }
       }
 
-      // Add final assistant message
-      setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
+      // Add final assistant message with usage data
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: assistantContent, usage: response.usage },
+      ]);
+
+      // Update session token counts
+      if (response.usage) {
+        setSessionTokens(prev => ({
+          input: prev.input + (response.usage.inputTokens || 0),
+          output: prev.output + (response.usage.outputTokens || 0),
+        }));
+      }
     } catch (err) {
+      // Don't show error for user-initiated cancellation
+      if (err.name === 'AbortError') {
+        return;
+      }
       setError(err.message);
     } finally {
       setIsLoading(false);
+      setActiveToolCalls([]); // Clear tool call indicators
+      setStreamingContent('');
+      abortControllerRef.current = null;
     }
   }, [input, messages, isLoading, aiConfig, executeToolCall]);
 
@@ -263,6 +461,7 @@ export function Chat({
   const clearHistory = () => {
     setMessages([]);
     setError(null);
+    setSessionTokens({ input: 0, output: 0 }); // Reset token counts
   };
 
   return (
@@ -273,6 +472,16 @@ export function Chat({
           <MessageCircle className="w-4 h-4 text-purple-400" />
           <span className="text-slate-200 font-medium">AI Assistant</span>
           <span className="text-slate-500">({messages.length} messages)</span>
+          {/* Token usage indicator */}
+          {(sessionTokens.input > 0 || sessionTokens.output > 0) && (
+            <div
+              className="text-slate-500 text-xs"
+              title={`Input: ${sessionTokens.input.toLocaleString()} | Output: ${sessionTokens.output.toLocaleString()}`}
+              data-testid="token-usage"
+            >
+              {((sessionTokens.input + sessionTokens.output) / 1000).toFixed(1)}K tokens
+            </div>
+          )}
           {/* Context usage indicator */}
           {contextUsage.isWarning && (
             <div
@@ -293,6 +502,7 @@ export function Chat({
             onClick={clearHistory}
             className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 hover:bg-slate-600"
             title="Start a new chat session (clears history)"
+            data-testid="new-chat-button"
           >
             <Trash2 className="w-3 h-3" />
             New Chat
@@ -303,16 +513,40 @@ export function Chat({
       <div className="flex-1 flex overflow-hidden">
         {/* Messages Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4" data-testid="chat-messages">
             {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-slate-400">
+              <div
+                className="flex flex-col items-center justify-center h-full text-slate-400 px-4"
+                data-testid="empty-state"
+              >
                 <Bot className="w-12 h-12 mb-3 opacity-50" />
                 <div className="text-lg mb-2">AI Assistant</div>
-                <div className="text-sm text-center max-w-md">
-                  Ask me about your retirement projections, compare strategies, or get help
-                  understanding tax implications.
+                <div className="text-sm text-center max-w-md mb-4">
+                  I can help you with your retirement planning. Here&apos;s what I can do:
                 </div>
-                <div className="mt-4 space-y-2 text-xs">
+
+                {/* Capabilities */}
+                <div className="grid grid-cols-2 gap-2 text-xs mb-4 max-w-md">
+                  {getToolCapabilities().map((cap, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-slate-800/50 rounded p-2"
+                      data-testid="capability-card"
+                    >
+                      <span className="text-purple-400">{cap.title}</span>
+                      <div className="text-slate-500 mt-1">{cap.description}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Quick tip about base case */}
+                <div className="text-xs text-slate-500 bg-slate-800/30 rounded p-2 max-w-md mb-4">
+                  <strong>Tip:</strong> Your &quot;Base Case&quot; is your current plan in the
+                  Projections tab. Scenarios I create are alternatives to compare against it.
+                </div>
+
+                {/* Example prompts */}
+                <div className="space-y-2 text-xs">
                   <div className="text-slate-500">Try asking:</div>
                   <button
                     onClick={() => setInput("What's my current projected heir value?")}
@@ -344,18 +578,36 @@ export function Chat({
               <div
                 key={idx}
                 className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                data-testid={msg.role === 'user' ? 'message-user' : 'message-assistant'}
               >
                 {msg.role === 'assistant' && (
                   <div className="w-8 h-8 rounded-full bg-purple-600/20 flex items-center justify-center shrink-0">
                     <Bot className="w-4 h-4 text-purple-400" />
                   </div>
                 )}
-                <div
-                  className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                    msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-200'
-                  }`}
-                >
-                  <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
+                <div className="relative group max-w-[80%]">
+                  <div
+                    className={`rounded-lg px-4 py-2 ${
+                      msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-200'
+                    }`}
+                  >
+                    <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
+                  </div>
+                  {/* Copy button - appears on hover for assistant messages */}
+                  {msg.role === 'assistant' && (
+                    <button
+                      onClick={() => copyToClipboard(msg.content, idx)}
+                      className="absolute top-1 right-1 p-1 rounded bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Copy to clipboard"
+                      data-testid="copy-button"
+                    >
+                      {copiedMessageId === idx ? (
+                        <Check className="w-3 h-3 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3 h-3 text-slate-400" />
+                      )}
+                    </button>
+                  )}
                 </div>
                 {msg.role === 'user' && (
                   <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center shrink-0">
@@ -365,7 +617,34 @@ export function Chat({
               </div>
             ))}
 
-            {isLoading && (
+            {/* Active tool calls */}
+            {activeToolCalls.length > 0 && (
+              <div className="flex flex-wrap gap-2 ml-11" data-testid="tool-call-indicators">
+                {activeToolCalls.map(tc => (
+                  <ToolCallBubble key={tc.id} name={tc.name} status={tc.status} />
+                ))}
+              </div>
+            )}
+
+            {/* Streaming content display */}
+            {streamingContent && (
+              <div className="flex gap-3 justify-start" data-testid="streaming-content">
+                <div className="w-8 h-8 rounded-full bg-purple-600/20 flex items-center justify-center shrink-0">
+                  <Bot className="w-4 h-4 text-purple-400" />
+                </div>
+                <div className="bg-slate-800 rounded-lg px-4 py-2 max-w-[80%]">
+                  <div className="whitespace-pre-wrap text-sm text-slate-200">
+                    {streamingContent}
+                    <span
+                      className="inline-block w-2 h-4 bg-purple-400 animate-pulse ml-1"
+                      data-testid="streaming-cursor"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isLoading && !streamingContent && activeToolCalls.length === 0 && (
               <div className="flex gap-3 justify-start">
                 <div className="w-8 h-8 rounded-full bg-purple-600/20 flex items-center justify-center shrink-0">
                   <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
@@ -377,11 +656,23 @@ export function Chat({
             )}
 
             {error && (
-              <div className="flex items-center gap-2 text-rose-400 bg-rose-900/20 border border-rose-800 rounded-lg px-4 py-2">
+              <div
+                className="flex items-center gap-2 text-rose-400 bg-rose-900/20 border border-rose-800 rounded-lg px-4 py-2"
+                role="alert"
+              >
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span className="text-sm">{error}</span>
               </div>
             )}
+
+            {/* Navigation hint after scenario creation */}
+            <ActionHint
+              action={recentAction}
+              onNavigate={tab => {
+                if (onNavigate) onNavigate(tab);
+              }}
+              onDismiss={() => setRecentAction(null)}
+            />
 
             <div ref={messagesEndRef} />
           </div>
@@ -393,17 +684,33 @@ export function Chat({
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about your retirement plan..."
+                placeholder={isLoading ? 'AI is thinking...' : 'Ask about your retirement plan...'}
                 rows={2}
-                className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-sm resize-none focus:border-purple-500 focus:outline-none"
+                disabled={isLoading}
+                data-testid="chat-input"
+                className={`flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-sm resize-none focus:border-purple-500 focus:outline-none ${
+                  isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
               />
-              <button
-                onClick={sendMessage}
-                disabled={isLoading || !input.trim()}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send className="w-4 h-4" />
-              </button>
+              {isLoading ? (
+                <button
+                  onClick={cancelRequest}
+                  data-testid="cancel-button"
+                  className="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-500"
+                  title="Cancel (Esc)"
+                >
+                  <Square className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  onClick={sendMessage}
+                  disabled={!input.trim()}
+                  data-testid="send-button"
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              )}
             </div>
             {!aiConfig?.apiKey && aiConfig?.provider !== 'custom' && (
               <div className="text-amber-400 text-xs mt-2">

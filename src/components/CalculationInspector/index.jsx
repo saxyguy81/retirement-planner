@@ -422,18 +422,54 @@ const CALCULATIONS = {
   ltcgTax: {
     name: 'Long-Term Capital Gains Tax',
     concept:
-      'Tax on gains from selling investments held over 1 year. Rate depends on total income: 0% for lower incomes, 15% for middle, 20% for high. Gains "stack" on top of ordinary income to determine which bracket applies.',
+      'Tax on gains from selling investments held over 1 year. LTCG brackets "stack" on top of ordinary income - your capital gains are added after your taxable ordinary income to determine which rate applies to each portion of gains.',
     formula:
-      'ltcgTax = capitalGains x Rate\n\nRate = 0% if total income < $89K (MFJ)\nRate = 15% if total income < $553K\nRate = 20% if total income >= $553K\n\nGains stack on top of ordinary income.',
-    backOfEnvelope: 'capitalGains x 15% (most common)',
+      'ltcgTax = Sum of (gains in each bracket × rate)\n\n' +
+      'Ordinary Income fills brackets first:\n' +
+      '  taxableOrdinary → fills 0%, 15%, 20% brackets\n\n' +
+      'Capital Gains stack on top:\n' +
+      '  Gains in 0% bracket: up to $94K total\n' +
+      '  Gains in 15% bracket: $94K - $584K total\n' +
+      '  Gains in 20% bracket: above $584K total',
+    backOfEnvelope: 'capitalGains × 15% (most common)',
     compute: data => {
       const { capitalGains, ltcgTax, taxableOrdinary } = data;
-      const rate = capitalGains > 0 ? ((ltcgTax / capitalGains) * 100).toFixed(1) : 0;
+
+      // Calculate bracket breakdown
+      const bracket0Max = 94050;
+      const bracket15Max = 583750;
+
+      // How much room in each bracket after ordinary income
+      const roomIn0 = Math.max(0, bracket0Max - taxableOrdinary);
+      const roomIn15 =
+        taxableOrdinary < bracket15Max ? bracket15Max - Math.max(taxableOrdinary, bracket0Max) : 0;
+
+      // How gains fill each bracket
+      const gainsIn0 = Math.min(capitalGains, roomIn0);
+      const gainsIn15 = Math.min(Math.max(0, capitalGains - gainsIn0), roomIn15);
+      const gainsIn20 = Math.max(0, capitalGains - gainsIn0 - gainsIn15);
+
+      // Calculate tax from each bracket (0% bracket contributes $0)
+      const taxFrom15 = gainsIn15 * 0.15;
+      const taxFrom20 = gainsIn20 * 0.2;
+
+      let bracketBreakdown = '';
+      if (gainsIn0 > 0) bracketBreakdown += `  0% bracket: ${fK(gainsIn0)} × 0% = $0\n`;
+      if (gainsIn15 > 0)
+        bracketBreakdown += `  15% bracket: ${fK(gainsIn15)} × 15% = ${fK(taxFrom15)}\n`;
+      if (gainsIn20 > 0)
+        bracketBreakdown += `  20% bracket: ${fK(gainsIn20)} × 20% = ${fK(taxFrom20)}`;
+
+      const effectiveRate = capitalGains > 0 ? ((ltcgTax / capitalGains) * 100).toFixed(1) : 0;
+
       return {
-        formula: `LTCG stacks on ${fK(taxableOrdinary)} ordinary income`,
-        values: `ltcgTax = ${fK(capitalGains)} x ${rate}%`,
-        result: `LTCG Tax = ${fK(ltcgTax)}`,
-        simple: `${fK(capitalGains)} x 15% = ${fK(capitalGains * 0.15)}`,
+        formula: `Ordinary income (${fK(taxableOrdinary)}) fills brackets first\nCapital gains (${fK(capitalGains)}) stack on top:`,
+        values: bracketBreakdown || 'No capital gains',
+        result: `LTCG Tax = ${fK(ltcgTax)} (${effectiveRate}% effective)`,
+        simple:
+          capitalGains > 0
+            ? `${fK(capitalGains)} × ${effectiveRate}% = ${fK(ltcgTax)}`
+            : '$0 (no gains)',
       };
     },
   },
@@ -492,6 +528,52 @@ const CALCULATIONS = {
   },
 
   // =============================================================================
+  // PROPERTY TAX & SALT
+  // =============================================================================
+
+  propertyTax: {
+    name: 'Property Tax',
+    concept:
+      'Annual property tax on your primary residence. This is a fixed annual expense that does not inflate with the general expense inflation. Subject to the SALT (State and Local Tax) deduction cap for itemized deductions.',
+    formula:
+      'propertyTax = Annual Property Tax (input)\n\nFor federal itemization:\nDeductible = min(propertyTax, SALT Cap)\n\nSALT Cap (2024):\nMFJ: $10,000\nSingle: $10,000',
+    backOfEnvelope: 'Fixed annual amount, max $10K SALT deduction',
+    compute: data => {
+      const { propertyTax, deductiblePropertyTax, saltCap } = data;
+      const cappedAmt = Math.min(propertyTax || 0, saltCap || 10000);
+      const overCap = (propertyTax || 0) - cappedAmt;
+      return {
+        formula: `Property Tax = ${fK(propertyTax || 0)}/year`,
+        values:
+          overCap > 0
+            ? `SALT Cap = ${fK(saltCap || 10000)}\nDeductible = ${fK(cappedAmt)}\nOver cap = ${fK(overCap)} (not deductible)`
+            : `Fully deductible (under SALT cap)`,
+        result: `Deductible Property Tax = ${fK(deductiblePropertyTax || cappedAmt)}`,
+        simple: propertyTax > 0 ? fK(propertyTax) : '$0 property tax',
+      };
+    },
+  },
+
+  deductiblePropertyTax: {
+    name: 'Deductible Property Tax (SALT)',
+    concept:
+      'The portion of property tax that can be deducted for federal itemized deductions. Limited by the SALT cap ($10,000 for both MFJ and single filers under current law).',
+    formula:
+      'deductiblePropertyTax = min(propertyTax, saltCap)\n\nSALT Cap limits:\n- MFJ: $10,000\n- Single: $10,000\n\nNote: IL residents using standard deduction get no property tax benefit.',
+    backOfEnvelope: 'Lesser of property tax or $10K',
+    compute: data => {
+      const { propertyTax, deductiblePropertyTax, saltCap } = data;
+      const overCap = (propertyTax || 0) - (deductiblePropertyTax || 0);
+      return {
+        formula: `min(propertyTax, saltCap)`,
+        values: `min(${fK(propertyTax || 0)}, ${fK(saltCap || 10000)})`,
+        result: `Deductible = ${fK(deductiblePropertyTax || 0)}${overCap > 0 ? ` (${fK(overCap)} over cap)` : ''}`,
+        simple: fK(deductiblePropertyTax || 0),
+      };
+    },
+  },
+
+  // =============================================================================
   // TAXABLE SOCIAL SECURITY
   // =============================================================================
 
@@ -520,24 +602,39 @@ const CALCULATIONS = {
   // =============================================================================
 
   irmaaTotal: {
-    name: 'IRMAA Medicare Surcharge',
+    name: 'Total Medicare Premium',
     concept:
-      'Income-Related Monthly Adjustment Amount - extra Medicare premium if MAGI from 2 years ago exceeds thresholds. Applies to both Part B (medical) and Part D (drugs). Tiers range from $0 to $12K+/year per couple.',
+      'Total Medicare cost including base Part B premium plus any IRMAA surcharges. IRMAA (Income-Related Monthly Adjustment Amount) is an extra premium if MAGI from 2 years ago exceeds thresholds.',
     formula:
-      'irmaaTotal = (Part B + Part D surcharge) x 12 months x people\n\nBased on MAGI from 2 years prior:\n< $206K: $0 (MFJ)\n$206K-$258K: ~$2K/year\n$258K-$322K: ~$5K/year\n... up to $12K+/year',
-    backOfEnvelope: '$0 if prior MAGI < $206K, else $2K-$12K depending on tier',
+      'irmaaTotal = Base Part B + Part B Surcharge + Part D Surcharge\n\n' +
+      'Base Part B (2024): $174.70/mo per person\n' +
+      'Surcharges apply if MAGI (2 years prior) exceeds:\n' +
+      '  > $206K (MFJ): +$70/mo Part B, +$13/mo Part D\n' +
+      '  > $258K: +$175/mo Part B, +$33/mo Part D\n' +
+      '  ... up to +$419/mo Part B, +$81/mo Part D',
+    backOfEnvelope: '$4,200/yr base for couple, more if MAGI > $206K',
     compute: data => {
       const { irmaaMAGI, irmaaPartB, irmaaPartD, irmaaTotal } = data;
-      const monthlyB = irmaaPartB / 24; // per person per month
-      const monthlyD = irmaaPartD / 24;
+      // Base Part B premium for couple: $174.70 × 12 × 2 = $4,192.80
+      const baseAnnual = Math.round(174.7 * 12 * 2);
+      const surchargeB = Math.max(0, irmaaPartB - baseAnnual);
+      const surchargeD = irmaaPartD || 0;
+
+      let values;
+      if (surchargeB > 0 || surchargeD > 0) {
+        values = `Base Part B: ${fK(baseAnnual)}\nPart B Surcharge: +${fK(surchargeB)}\nPart D Surcharge: +${fK(surchargeD)}`;
+      } else {
+        values = `Base Part B: ${fK(baseAnnual)}\nNo IRMAA surcharges (MAGI below $206K)`;
+      }
+
       return {
         formula: `Based on ${data.year - 2} MAGI = ${fK(irmaaMAGI)}`,
-        values:
-          irmaaTotal > 0
-            ? `irmaaTotal = ($${monthlyB.toFixed(0)}/mo + $${monthlyD.toFixed(0)}/mo) x 12 x 2`
-            : `MAGI below $206K threshold`,
-        result: `Annual IRMAA = ${fK(irmaaTotal)}`,
-        simple: irmaaTotal === 0 ? '$0 (below threshold)' : `~${fK(irmaaTotal)}/year`,
+        values,
+        result: `Total Medicare = ${fK(irmaaTotal)}`,
+        simple:
+          surchargeB > 0 || surchargeD > 0
+            ? `${fK(baseAnnual)} base + ${fK(surchargeB + surchargeD)} surcharge`
+            : `${fK(irmaaTotal)} (base only)`,
       };
     },
   },
@@ -1384,21 +1481,31 @@ const CALCULATIONS = {
   },
 
   irmaaPartB: {
-    name: 'IRMAA Part B Surcharge',
+    name: 'Medicare Part B (Total)',
     concept:
-      'Income-related surcharge on Medicare Part B (medical insurance). Added to base premium when MAGI exceeds thresholds. Per person, per year.',
+      'Total Medicare Part B premium including base premium and any IRMAA surcharge. Base premium is $174.70/mo/person (2024). IRMAA surcharge applies if MAGI from 2 years prior exceeds thresholds.',
     formula:
-      'Part B Surcharge (per person annually):\nTier 1 ($206K-$258K): ~$1,000\nTier 2 ($258K-$322K): ~$2,500\nTier 3 ($322K-$386K): ~$4,000\netc.',
-    backOfEnvelope: 'Doubles your Part B premium at higher tiers',
+      'Part B = Base + Surcharge\n\n' +
+      'Base: $174.70/mo/person ($4,193/yr for couple)\n' +
+      'Surcharge tiers (per person/year):\n' +
+      '  Tier 1 ($206K-$258K): +$840/yr\n' +
+      '  Tier 2 ($258K-$322K): +$2,100/yr\n' +
+      '  Tier 3+: Higher surcharges',
+    backOfEnvelope: '$4.2K base for couple, +$2K-$10K with surcharges',
     compute: data => {
-      const { irmaaPartB } = data;
+      const { irmaaPartB, irmaaMAGI } = data;
       const perPerson = irmaaPartB / 2;
       const monthly = perPerson / 12;
+      const baseAnnual = Math.round(174.7 * 12 * 2); // Base for couple
+      const surcharge = Math.max(0, irmaaPartB - baseAnnual);
       return {
-        formula: `Part B surcharge x 2 people x 12 months`,
-        values: `${f$(monthly)}/person/month`,
+        formula: `Base + Surcharge x 2 people x 12 months`,
+        values:
+          surcharge > 0
+            ? `Base: ${fK(baseAnnual)} + Surcharge: ${fK(surcharge)}\n${f$(monthly)}/person/month total`
+            : `Base only: ${f$(monthly)}/person/month (MAGI ${fK(irmaaMAGI)} below threshold)`,
         result: `Annual Part B = ${fK(irmaaPartB)}`,
-        simple: fK(irmaaPartB),
+        simple: surcharge > 0 ? `${fK(baseAnnual)} + ${fK(surcharge)} surcharge` : fK(irmaaPartB),
       };
     },
   },
@@ -1419,6 +1526,42 @@ const CALCULATIONS = {
         values: `${f$(perPerson)}/person/year`,
         result: `Annual Part D = ${fK(irmaaPartD)} (${pctOfB}% of Part B)`,
         simple: fK(irmaaPartD),
+      };
+    },
+  },
+
+  // =============================================================================
+  // BASIC FIELDS (age, year)
+  // =============================================================================
+
+  age: {
+    name: 'Age',
+    concept:
+      'Your age in this projection year, calculated from birth year. Key milestones: age 62 (early SS), 65 (Medicare), 67 (full SS), 70 (max SS), 73 (RMD starts).',
+    formula: 'age = year - birthYear',
+    backOfEnvelope: 'Current year minus birth year',
+    compute: (data, params) => {
+      return {
+        formula: `${data.year} - ${params?.birthYear || 1960}`,
+        values: `Year ${data.year}`,
+        result: `Age ${data.age}`,
+        simple: `${data.age}`,
+      };
+    },
+  },
+
+  year: {
+    name: 'Projection Year',
+    concept:
+      'The calendar year for this row of projections. Projections run from start year through end year (typically survivor death year).',
+    formula: 'Sequential year from start to end of projection period',
+    backOfEnvelope: 'Each row is one year',
+    compute: data => {
+      return {
+        formula: `Projection year ${(data.yearsFromStart || 0) + 1} of the model`,
+        values: `Started in ${data.year - (data.yearsFromStart || 0)}`,
+        result: `Year ${data.year}`,
+        simple: `${data.year}`,
       };
     },
   },

@@ -121,71 +121,60 @@ export function HeirAnalysis({ projections, params, showPV = true }) {
           </div>
         </div>
 
-        {/* Strategy Comparison Card */}
+        {/* Strategy Info Card */}
         {hasStrategyDetails && (
           <div className="bg-slate-900 rounded border border-slate-800 p-4 mb-4">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4 text-blue-400" />
-              <div className="text-slate-300 font-medium">Distribution Strategy Comparison</div>
+              <div className="text-slate-300 font-medium">Distribution Strategy</div>
               <span className="text-slate-500 text-xs ml-auto">
                 Normalized over {normalizationYears} years
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              {/* Even Strategy */}
-              <div
-                className={`p-3 rounded border ${
-                  currentStrategy === 'even'
-                    ? 'border-emerald-500 bg-emerald-900/20'
-                    : 'border-slate-700 bg-slate-800/50'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-slate-200 font-medium">Spread Evenly</span>
-                  {currentStrategy === 'even' && (
-                    <span className="px-1.5 py-0.5 bg-emerald-600 rounded text-xs text-white">
-                      Current
-                    </span>
-                  )}
+            {/* RMD-Based Strategy Display */}
+            {(currentStrategy === 'rmd_based' ||
+              currentStrategy === 'even' ||
+              currentStrategy === 'year10') && (
+              <div className="p-3 rounded border border-blue-500 bg-blue-900/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-slate-200 font-medium">RMD-Based Distribution</span>
+                  <span className="px-1.5 py-0.5 bg-blue-600 rounded text-xs text-white">
+                    SECURE Act 2.0
+                  </span>
                 </div>
-                <div className="text-2xl font-bold text-emerald-400">{fmt$(evenValue)}</div>
-                <div className="text-slate-500 text-xs mt-1">Lower tax bracket impact</div>
-              </div>
-
-              {/* Year 10 Strategy */}
-              <div
-                className={`p-3 rounded border ${
-                  currentStrategy === 'year10'
-                    ? 'border-blue-500 bg-blue-900/20'
-                    : 'border-slate-700 bg-slate-800/50'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-slate-200 font-medium">Lump Sum Year 10</span>
-                  {currentStrategy === 'year10' && (
-                    <span className="px-1.5 py-0.5 bg-blue-600 rounded text-xs text-white">
-                      Current
-                    </span>
-                  )}
+                <div className="text-2xl font-bold text-blue-400">{fmt$(currentStrategyValue)}</div>
+                <div className="text-slate-500 text-xs mt-2">
+                  <p className="mb-1">
+                    <span className="text-amber-400">If owner dies ≥ 73 (after RBD):</span> Annual
+                    RMDs required using heir&apos;s Single Life Expectancy
+                  </p>
+                  <p>
+                    <span className="text-emerald-400">If owner dies &lt; 73 (before RBD):</span> No
+                    annual RMDs, can defer to year 10 for max growth
+                  </p>
                 </div>
-                <div className="text-2xl font-bold text-blue-400">{fmt$(year10Value)}</div>
-                <div className="text-slate-500 text-xs mt-1">Maximum growth, higher tax hit</div>
               </div>
-            </div>
+            )}
 
-            <div className="mt-3 pt-3 border-t border-slate-700 flex items-center justify-between">
-              <div className="text-xs text-slate-400">
-                Difference:{' '}
-                <span className={evenBetter ? 'text-emerald-400' : 'text-blue-400'}>
-                  {fmt$(strategyDifference)}
-                </span>{' '}
-                in favor of {evenBetter ? 'even distribution' : 'lump sum'}
+            {/* Lump Sum Year 0 Strategy Display */}
+            {currentStrategy === 'lump_sum_year0' && (
+              <div className="p-3 rounded border border-amber-500 bg-amber-900/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-slate-200 font-medium">Lump Sum Year 0</span>
+                  <span className="px-1.5 py-0.5 bg-amber-600 rounded text-xs text-white">
+                    Immediate
+                  </span>
+                </div>
+                <div className="text-2xl font-bold text-amber-400">
+                  {fmt$(currentStrategyValue)}
+                </div>
+                <div className="text-slate-500 text-xs mt-2">
+                  Immediate full distribution at inheritance. Higher tax hit but no 10-year rule
+                  constraints.
+                </div>
               </div>
-              <div className="text-xs text-slate-500">
-                {fmtPct(strategyDifference / Math.max(evenValue, year10Value))} difference
-              </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -314,12 +303,31 @@ export function HeirAnalysis({ projections, params, showPV = true }) {
                         <ArrowRight className="w-3 h-3 text-slate-500" />
                         <span className="text-xs text-slate-400">
                           IRA Distribution (
-                          {heir.iraDetails.strategy === 'even'
-                            ? '10-year spread'
-                            : 'Year 10 lump sum'}
+                          {heir.iraDetails.strategy === 'lump_sum_year0'
+                            ? 'Immediate lump sum'
+                            : heir.iraDetails.rmdRequired
+                              ? 'RMD-based (annual required)'
+                              : 'RMD-based (defer to yr 10)'}
                           )
                         </span>
+                        {heir.heirAgeAtInheritance !== undefined && (
+                          <span className="text-xs text-slate-500 ml-auto">
+                            Age {heir.heirAgeAtInheritance} at inheritance
+                          </span>
+                        )}
                       </div>
+
+                      {/* RMD requirement explanation */}
+                      {heir.iraDetails.description && (
+                        <div className="text-xs text-slate-500 mb-2 bg-slate-900/50 rounded px-2 py-1">
+                          {heir.iraDetails.description}
+                          {heir.iraDetails.initialSLEFactor && (
+                            <span className="text-blue-400 ml-2">
+                              (SLE: {heir.iraDetails.initialSLEFactor})
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-4 gap-2 text-xs">
                         <div>
@@ -344,7 +352,43 @@ export function HeirAnalysis({ projections, params, showPV = true }) {
                         </div>
                       </div>
 
-                      {/* Show distribution schedule for even strategy */}
+                      {/* Show RMD distribution schedule with SLE factors */}
+                      {heir.iraDetails.strategy === 'rmd_based' &&
+                        heir.iraDetails.rmdRequired &&
+                        heir.iraDetails.distributions && (
+                          <details className="mt-2">
+                            <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400">
+                              View 10-year RMD schedule
+                            </summary>
+                            <div className="mt-2 bg-slate-900 rounded p-2 text-xs overflow-x-auto">
+                              <div className="grid grid-cols-7 gap-1 text-slate-500 mb-1 pb-1 border-b border-slate-700 min-w-max">
+                                <span>Year</span>
+                                <span>Age</span>
+                                <span>SLE</span>
+                                <span>RMD</span>
+                                <span>Tax</span>
+                                <span>After-Tax</span>
+                                <span>Norm.</span>
+                              </div>
+                              {heir.iraDetails.distributions.map((d, i) => (
+                                <div
+                                  key={i}
+                                  className="grid grid-cols-7 gap-1 text-slate-400 min-w-max"
+                                >
+                                  <span>Yr {d.year}</span>
+                                  <span className="text-slate-500">{d.heirAge}</span>
+                                  <span className="text-blue-400">{d.sleFactor}</span>
+                                  <span>{fmt$(d.distribution)}</span>
+                                  <span className="text-rose-400">{fmt$(d.tax)}</span>
+                                  <span>{fmt$(d.afterTax)}</span>
+                                  <span className="text-emerald-400">{fmt$(d.normalized)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        )}
+
+                      {/* Show distribution schedule for even strategy (legacy support) */}
                       {heir.iraDetails.strategy === 'even' && heir.iraDetails.distributions && (
                         <details className="mt-2">
                           <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400">
@@ -371,7 +415,26 @@ export function HeirAnalysis({ projections, params, showPV = true }) {
                         </details>
                       )}
 
-                      {/* Show lump sum details for year10 strategy */}
+                      {/* Show defer details for rmd_based without RMD requirement */}
+                      {heir.iraDetails.strategy === 'rmd_based' &&
+                        !heir.iraDetails.rmdRequired &&
+                        heir.iraDetails.futureValue && (
+                          <div className="mt-2 text-xs text-slate-500">
+                            Deferred to Year 10: {fmt$(heir.iraGross)} → FV{' '}
+                            {fmt$(heir.iraDetails.futureValue)} → After Tax{' '}
+                            {fmt$(heir.iraDetails.afterTax)}
+                          </div>
+                        )}
+
+                      {/* Show lump sum details for lump_sum_year0 strategy */}
+                      {heir.iraDetails.strategy === 'lump_sum_year0' && (
+                        <div className="mt-2 text-xs text-slate-500">
+                          Immediate distribution: {fmt$(heir.iraDetails.grossAmount)} → After Tax{' '}
+                          {fmt$(heir.iraDetails.afterTax)}
+                        </div>
+                      )}
+
+                      {/* Show lump sum details for year10 strategy (legacy) */}
                       {heir.iraDetails.strategy === 'year10' && (
                         <div className="mt-2 text-xs text-slate-500">
                           Future Value at Year 10: {fmt$(heir.iraDetails.futureValue)} → After Tax:{' '}

@@ -27,7 +27,7 @@ export default defineConfig({
     timeout: DEFAULT_TIMEOUT,
   },
   use: {
-    baseURL: 'http://localhost:5173/retirement-planner/',
+    baseURL: 'http://localhost:5174/retirement-planner/',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'on-first-retry',
@@ -47,9 +47,11 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173/retirement-planner/',
+    command: 'npm run dev -- --port 5174',
+    url: 'http://localhost:5174/retirement-planner/',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
+    stdout: 'pipe',
+    stderr: 'pipe',
   },
 });

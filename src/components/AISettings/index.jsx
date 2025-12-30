@@ -10,13 +10,16 @@ import { useState, useEffect } from 'react';
 
 import { PROVIDERS, AIService, saveAIConfig, loadAIConfig } from '../../lib/aiService';
 
+// Default API key for Gemini (can be overridden by user)
+const DEFAULT_GEMINI_API_KEY = 'AIzaSyB1qt6ZBrhh64lslHGmDXv26FUahxWHQ70';
+
 export function AISettings({ onConfigChange }) {
   const [config, setConfig] = useState(
     () =>
       loadAIConfig() || {
-        provider: 'anthropic',
-        apiKey: '',
-        model: 'claude-sonnet-4-20250514',
+        provider: 'google',
+        apiKey: DEFAULT_GEMINI_API_KEY,
+        model: 'gemini-2.5-flash',
         customBaseUrl: '',
       }
   );

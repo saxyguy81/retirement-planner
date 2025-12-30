@@ -283,6 +283,7 @@ export default function App() {
     <div
       className="h-screen w-full bg-slate-950 text-slate-100 flex flex-col overflow-hidden"
       style={{ fontFamily: 'ui-monospace, SFMono-Regular, Monaco, Consolas, monospace' }}
+      data-testid="app-loaded"
     >
       {/* Header */}
       <header className="h-11 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-3 shrink-0">
@@ -622,6 +623,7 @@ export default function App() {
                       summary={summary}
                       onCreateScenario={handleCreateScenarioFromOptimizer}
                       onUpdateParams={updateParams}
+                      onNavigate={tab => setActiveTab(tab)}
                     />
                   )}
 

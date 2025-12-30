@@ -196,12 +196,12 @@ export { expect };
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Playwright installs correctly: `npx playwright install chromium`
-- [ ] Test directory structure exists: `ls -la e2e/`
-- [ ] Config file is valid: `npx playwright test --list`
+- [x] Playwright installs correctly: `npx playwright install chromium`
+- [x] Test directory structure exists: `ls -la e2e/`
+- [x] Config file is valid: `npx playwright test --list`
 
 #### Manual Verification:
-- [ ] Can run empty test suite without errors
+- [x] Can run empty test suite without errors
 
 ---
 
@@ -408,13 +408,13 @@ test.describe('Scenarios', () => {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] CI tests pass: `npx playwright test e2e/ci/`
-- [ ] Tests run in under 60 seconds
-- [ ] All tests are independent (can run in any order)
+- [x] CI tests pass: `npx playwright test e2e/ci/`
+- [x] Tests run in under 60 seconds
+- [x] All tests are independent (can run in any order)
 
 #### Manual Verification:
-- [ ] Tests produce clear error messages on failure
-- [ ] HTML report is generated and readable
+- [x] Tests produce clear error messages on failure
+- [x] HTML report is generated and readable
 
 ---
 
@@ -694,14 +694,14 @@ test.describe('AI Tool Execution', () => {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Local AI tests pass when ccproxy is running: `npx playwright test e2e/local/`
-- [ ] Tests skip gracefully when ccproxy is not available
-- [ ] Tests complete in under 5 minutes
+- [x] Local AI tests pass when ccproxy is running: `npx playwright test e2e/local/`
+- [x] Tests skip gracefully when ccproxy is not available
+- [x] Tests complete in under 5 minutes
 
 #### Manual Verification:
-- [ ] AI responses are coherent and relevant
-- [ ] Tool execution produces correct results
-- [ ] No console errors during AI interactions
+- [x] AI responses are coherent and relevant
+- [x] Tool execution produces correct results
+- [x] No console errors during AI interactions
 
 ---
 
@@ -994,15 +994,15 @@ npm run hooks:install
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Pre-push hook executes correctly: `./scripts/hooks/pre-push`
-- [ ] Hook skips AI tests gracefully when ccproxy unavailable
-- [ ] Hook blocks push on any failure
-- [ ] All new npm scripts work correctly
+- [x] Pre-push hook executes correctly: `./scripts/hooks/pre-push`
+- [x] Hook skips AI tests gracefully when ccproxy unavailable
+- [x] Hook blocks push on any failure
+- [x] All new npm scripts work correctly
 
 #### Manual Verification:
-- [ ] `git push` triggers all tests
-- [ ] Clear output showing which tests ran
-- [ ] Helpful message when ccproxy not available
+- [x] `git push` triggers all tests
+- [x] Clear output showing which tests ran
+- [x] Helpful message when ccproxy not available
 
 ---
 
@@ -1164,14 +1164,14 @@ test.describe('Complete AI Journey', () => {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] User journey test passes: `npx playwright test e2e/ci/user-journey.spec.js`
-- [ ] AI journey test passes with ccproxy: `npx playwright test e2e/local/ai-journey.spec.js`
-- [ ] All tests complete in under 3 minutes
+- [x] User journey test passes: `npx playwright test e2e/ci/user-journey.spec.js`
+- [x] AI journey test passes with ccproxy: `npx playwright test e2e/local/ai-journey.spec.js`
+- [x] All tests complete in under 3 minutes
 
 #### Manual Verification:
-- [ ] Tests cover the most common user flows
-- [ ] Error states are properly tested
-- [ ] Tests are readable and maintainable
+- [x] Tests cover the most common user flows
+- [x] Error states are properly tested
+- [x] Tests are readable and maintainable
 
 ---
 

@@ -7,6 +7,48 @@
  * - Custom endpoints (LM Studio, Ollama, etc.)
  */
 
+// UI configuration for each tool - single source of truth
+export const TOOL_UI_CONFIG = {
+  create_scenario: {
+    icon: '📊',
+    label: 'Creating scenario',
+    capability: { title: 'Create Scenarios', description: 'Test different strategies' },
+    action: { type: 'scenario_created', navigateTo: 'scenarios' },
+  },
+  run_projection: {
+    icon: '📈',
+    label: 'Running projection',
+    capability: { title: 'Run Projections', description: 'See future outcomes' },
+  },
+  get_current_state: {
+    icon: '📋',
+    label: 'Reading your plan',
+    capability: null, // Not shown as a capability (internal tool)
+  },
+  calculate: {
+    icon: '🔢',
+    label: 'Calculating',
+    capability: { title: 'Calculate', description: 'Tax & financial math' },
+  },
+  compare_scenarios: {
+    icon: '⚖️',
+    label: 'Comparing scenarios',
+    capability: { title: 'Compare Options', description: 'Analyze trade-offs' },
+  },
+  apply_scenario_to_base: {
+    icon: '✅',
+    label: 'Applying to base case',
+    capability: { title: 'Apply Changes', description: 'Update your plan' },
+    action: { type: 'params_updated', navigateTo: 'projections' },
+  },
+};
+
+// Helper to get capabilities for empty state
+export const getToolCapabilities = () =>
+  Object.values(TOOL_UI_CONFIG)
+    .filter(t => t.capability)
+    .map(t => t.capability);
+
 // Tool definitions for the AI agent
 export const AGENT_TOOLS = [
   {
@@ -74,6 +116,26 @@ export const AGENT_TOOLS = [
       },
     },
   },
+  {
+    name: 'apply_scenario_to_base',
+    description:
+      'Apply parameter changes to the base case (main plan). Use this when the user wants to update their actual retirement plan with new settings.',
+    parameters: {
+      type: 'object',
+      properties: {
+        overrides: {
+          type: 'object',
+          description:
+            'Parameter overrides to apply (rothConversions, expenses, etc.). These will be merged into the current base case.',
+        },
+        description: {
+          type: 'string',
+          description: 'Brief description of what changes are being applied',
+        },
+      },
+      required: ['overrides'],
+    },
+  },
 ];
 
 // Provider configurations
@@ -94,6 +156,14 @@ export const PROVIDERS = {
     models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
     headers: apiKey => ({
       Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    }),
+  },
+  google: {
+    name: 'Google (Gemini)',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
+    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+    headers: () => ({
       'Content-Type': 'application/json',
     }),
   },
@@ -205,7 +275,9 @@ export class AIService {
       return this.customFormat || 'openai';
     }
     // Native providers use their specific format
-    return this.provider === 'anthropic' ? 'anthropic' : 'openai';
+    if (this.provider === 'anthropic') return 'anthropic';
+    if (this.provider === 'google') return 'google';
+    return 'openai';
   }
 
   formatRequest(messages, tools) {
@@ -230,6 +302,39 @@ export class AIService {
           input_schema: t.parameters,
         })),
       };
+    } else if (format === 'google') {
+      // Google Gemini API format
+      const contents = messages
+        .filter(m => m.role !== 'system')
+        .map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content || ' ' }],
+        }));
+
+      const request = {
+        contents,
+        systemInstruction: {
+          parts: [{ text: SYSTEM_PROMPT }],
+        },
+        generationConfig: {
+          maxOutputTokens: 4096,
+        },
+      };
+
+      // Add tools if provided
+      if (tools && tools.length > 0) {
+        request.tools = [
+          {
+            functionDeclarations: tools.map(t => ({
+              name: t.name,
+              description: t.description,
+              parameters: t.parameters,
+            })),
+          },
+        ];
+      }
+
+      return request;
     } else {
       // OpenAI / OpenRouter format
       return {
@@ -279,6 +384,32 @@ export class AIService {
         })),
         stopReason: data.stop_reason,
       };
+    } else if (format === 'google') {
+      // Google Gemini response format
+      const candidate = data.candidates?.[0];
+      const parts = candidate?.content?.parts || [];
+
+      const textParts = parts.filter(p => p.text);
+      const functionCallParts = parts.filter(p => p.functionCall);
+
+      // Handle tool calls
+      const toolCalls = functionCallParts.map((p, idx) => ({
+        id: `gemini-tool-${idx}-${Date.now()}`,
+        name: p.functionCall.name,
+        arguments: p.functionCall.args || {},
+      }));
+
+      if (toolCalls.length > 0 && onToolCall) {
+        for (const tool of toolCalls) {
+          onToolCall(tool);
+        }
+      }
+
+      return {
+        content: textParts.map(p => p.text).join('\n'),
+        toolCalls,
+        stopReason: candidate?.finishReason,
+      };
     } else {
       // OpenAI / OpenRouter response format
       const choice = data.choices?.[0];
@@ -305,6 +436,245 @@ export class AIService {
         })),
         stopReason: choice?.finish_reason,
       };
+    }
+  }
+
+  /**
+   * Get headers for the current provider/format
+   */
+  getHeaders() {
+    const providerConfig = PROVIDERS[this.provider];
+    if (this.provider === 'custom' && this.customFormat === 'anthropic') {
+      return {
+        'x-api-key': this.apiKey || '',
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      };
+    }
+    return providerConfig.headers(this.apiKey);
+  }
+
+  /**
+   * Get base URL for the current provider
+   */
+  getBaseUrl(streaming = false) {
+    const providerConfig = PROVIDERS[this.provider];
+
+    // Google Gemini uses model name and API key in the URL
+    if (this.provider === 'google') {
+      const action = streaming ? 'streamGenerateContent' : 'generateContent';
+      return `${providerConfig.baseUrl}/${this.model}:${action}?key=${this.apiKey}`;
+    }
+
+    return this.customBaseUrl || providerConfig.baseUrl;
+  }
+
+  /**
+   * Send message with streaming response
+   */
+  async sendMessageStreaming(messages, tools, onChunk, onToolCall, signal) {
+    const format = this.getApiFormat();
+    const request = this.formatRequest(messages, tools);
+
+    // Gemini uses alt=sse for streaming, others use stream: true
+    if (format !== 'google') {
+      request.stream = true;
+    }
+
+    // Get the appropriate URL (streaming URL for Gemini)
+    let url = this.getBaseUrl(true);
+    if (format === 'google') {
+      url += '&alt=sse';
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(request),
+      signal,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error?.message || `API request failed: ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullContent = '';
+    const toolCalls = [];
+    let usage = null;
+
+    // For accumulating OpenAI tool call chunks
+    const toolCallAccumulator = {};
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(data);
+          const chunk = this.parseStreamChunk(parsed, format, toolCallAccumulator);
+
+          if (chunk.text) {
+            fullContent += chunk.text;
+            onChunk?.(chunk.text, fullContent);
+          }
+
+          if (chunk.toolCall) {
+            toolCalls.push(chunk.toolCall);
+            onToolCall?.(chunk.toolCall);
+          }
+
+          if (chunk.usage) {
+            usage = chunk.usage;
+          }
+        } catch {
+          // Skip unparseable chunks
+        }
+      }
+    }
+
+    return { content: fullContent, toolCalls, usage };
+  }
+
+  /**
+   * Parse a streaming chunk based on format
+   */
+  parseStreamChunk(data, format, toolCallAccumulator = {}) {
+    if (format === 'anthropic') {
+      // Anthropic streaming format
+      if (data.type === 'content_block_delta' && data.delta?.type === 'text_delta') {
+        return { text: data.delta.text || '' };
+      }
+
+      if (data.type === 'content_block_start' && data.content_block?.type === 'tool_use') {
+        const tool = data.content_block;
+        return {
+          toolCall: {
+            id: tool.id,
+            name: tool.name,
+            arguments: tool.input || {},
+          },
+        };
+      }
+
+      if (data.type === 'message_delta' && data.usage) {
+        return {
+          usage: {
+            inputTokens: data.usage.input_tokens || 0,
+            outputTokens: data.usage.output_tokens || 0,
+            cacheCreation: data.usage.cache_creation_input_tokens || 0,
+            cacheRead: data.usage.cache_read_input_tokens || 0,
+          },
+        };
+      }
+
+      return {};
+    } else if (format === 'google') {
+      // Google Gemini streaming format
+      const candidate = data.candidates?.[0];
+      const parts = candidate?.content?.parts || [];
+
+      // Handle text parts
+      const textPart = parts.find(p => p.text);
+      if (textPart) {
+        return { text: textPart.text };
+      }
+
+      // Handle function call parts
+      const functionCallPart = parts.find(p => p.functionCall);
+      if (functionCallPart) {
+        return {
+          toolCall: {
+            id: `gemini-tool-${Date.now()}`,
+            name: functionCallPart.functionCall.name,
+            arguments: functionCallPart.functionCall.args || {},
+          },
+        };
+      }
+
+      // Handle usage metadata
+      if (data.usageMetadata) {
+        return {
+          usage: {
+            inputTokens: data.usageMetadata.promptTokenCount || 0,
+            outputTokens: data.usageMetadata.candidatesTokenCount || 0,
+            cacheCreation: 0,
+            cacheRead: 0,
+          },
+        };
+      }
+
+      return {};
+    } else {
+      // OpenAI streaming format
+      const delta = data.choices?.[0]?.delta;
+      if (delta?.content) {
+        return { text: delta.content };
+      }
+
+      // Tool calls come in chunks for OpenAI - accumulate them
+      if (delta?.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const idx = tc.index;
+          if (!toolCallAccumulator[idx]) {
+            toolCallAccumulator[idx] = {
+              id: tc.id || '',
+              name: tc.function?.name || '',
+              arguments: '',
+            };
+          }
+          if (tc.function?.name) {
+            toolCallAccumulator[idx].name = tc.function.name;
+          }
+          if (tc.function?.arguments) {
+            toolCallAccumulator[idx].arguments += tc.function.arguments;
+          }
+          if (tc.id) {
+            toolCallAccumulator[idx].id = tc.id;
+          }
+        }
+      }
+
+      // Check if we have a complete tool call (finish_reason: tool_calls)
+      const finishReason = data.choices?.[0]?.finish_reason;
+      if (finishReason === 'tool_calls') {
+        const completedToolCalls = Object.values(toolCallAccumulator).map(tc => ({
+          id: tc.id,
+          name: tc.name,
+          arguments: JSON.parse(tc.arguments || '{}'),
+        }));
+        // Clear accumulator
+        Object.keys(toolCallAccumulator).forEach(k => delete toolCallAccumulator[k]);
+        if (completedToolCalls.length > 0) {
+          return { toolCall: completedToolCalls[0] }; // Return first, others will be handled
+        }
+      }
+
+      // Usage info from OpenAI
+      if (data.usage) {
+        return {
+          usage: {
+            inputTokens: data.usage.prompt_tokens || 0,
+            outputTokens: data.usage.completion_tokens || 0,
+            cacheCreation: 0,
+            cacheRead: 0,
+          },
+        };
+      }
+
+      return {};
     }
   }
 

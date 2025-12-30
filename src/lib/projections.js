@@ -274,6 +274,11 @@ export function generateProjections(params = {}) {
     // RMD calculation
     const rmd = calculateRMD(iraBOY, age);
 
+    // Property Tax and SALT calculation
+    const propertyTax = p.annualPropertyTax || 0;
+    const saltCap = isSingle ? p.saltCapSingle || 10000 : p.saltCapMarried || 10000;
+    const deductiblePropertyTax = Math.min(propertyTax, saltCap);
+
     // Roth conversion for this year - cap to available IRA after RMD
     const requestedRothConversion = p.rothConversions[year] || 0;
     const maxConversion = Math.max(0, iraBOY - rmd.required);
@@ -471,6 +476,11 @@ export function generateProjections(params = {}) {
 
       // Standard deduction used
       standardDeduction,
+
+      // Property Tax & SALT
+      propertyTax,
+      deductiblePropertyTax,
+      saltCap,
 
       // End of year
       atEOY: Math.round(atEOY),
