@@ -7,9 +7,10 @@
  * - Custom endpoints (LM Studio, Ollama, etc.)
  */
 
-// Tavily API configuration for web search
+// Tavily API configuration for web search and extraction
 const TAVILY_API_KEY = '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';
 const TAVILY_SEARCH_URL = 'https://api.tavily.com/search';
+const TAVILY_EXTRACT_URL = 'https://api.tavily.com/extract';
 
 // UI configuration for each tool - single source of truth
 export const TOOL_UI_CONFIG = {
@@ -64,6 +65,11 @@ export const TOOL_UI_CONFIG = {
     icon: '🌐',
     label: 'Searching the web',
     capability: { title: 'Web Research', description: 'Look up current tax rules & rates' },
+  },
+  fetch_page: {
+    icon: '📄',
+    label: 'Reading web page',
+    capability: null, // Internal tool, works with web_search
   },
 };
 
@@ -243,6 +249,21 @@ export const AGENT_TOOLS = [
       required: ['query'],
     },
   },
+  {
+    name: 'fetch_page',
+    description:
+      'Fetch and extract the main content from a web page URL. Use this after web_search to read the full content of a promising result when the search snippet is not enough.',
+    parameters: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          description: 'The URL to fetch (must be https)',
+        },
+      },
+      required: ['url'],
+    },
+  },
 ];
 
 /**
@@ -295,6 +316,59 @@ export async function webSearch(query) {
   } catch (error) {
     console.error('Web search error:', error);
     return `Web search failed: ${error.message}`;
+  }
+}
+
+/**
+ * Fetch and extract content from a web page using Tavily Extract API
+ * @param {string} url - URL to fetch
+ * @returns {Promise<string>} - Extracted page content
+ */
+export async function fetchPage(url) {
+  try {
+    // Validate URL
+    if (!url.startsWith('https://')) {
+      return 'Error: Only HTTPS URLs are supported for security.';
+    }
+
+    const response = await fetch(TAVILY_EXTRACT_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        api_key: TAVILY_API_KEY,
+        urls: [url],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Tavily Extract API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    if (data.results && data.results.length > 0) {
+      const result = data.results[0];
+      let content = '';
+
+      if (result.raw_content) {
+        // Truncate if too long (keep first ~8000 chars for context limits)
+        const maxLength = 8000;
+        content = result.raw_content.slice(0, maxLength);
+        if (result.raw_content.length > maxLength) {
+          content += '\n\n[Content truncated...]';
+        }
+      }
+
+      return `**Source:** ${url}\n\n${content || 'No content extracted.'}`;
+    }
+
+    return 'No content could be extracted from this page.';
+  } catch (error) {
+    console.error('Fetch page error:', error);
+    return `Failed to fetch page: ${error.message}`;
   }
 }
 

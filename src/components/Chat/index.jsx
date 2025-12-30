@@ -333,6 +333,12 @@ export function Chat({
           return results;
         }
 
+        case 'fetch_page': {
+          const { fetchPage } = await import('../../lib/aiService');
+          const content = await fetchPage(args.url);
+          return content;
+        }
+
         default:
           return `Unknown tool: ${name}`;
       }
