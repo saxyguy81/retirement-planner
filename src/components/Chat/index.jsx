@@ -16,7 +16,6 @@ import {
   MessageCircle,
   Send,
   Trash2,
-  Loader2,
   AlertCircle,
   Bot,
   User,
@@ -26,11 +25,14 @@ import {
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 
+import MarkdownMessage from './MarkdownMessage';
+import ThinkingIndicator from './ThinkingIndicator';
+import ToolCallProgress from './ToolCallProgress';
+
 import { generateProjections, calculateSummary } from '../../lib';
 import {
   AIService,
   AGENT_TOOLS,
-  TOOL_UI_CONFIG,
   getToolCapabilities,
   loadAIConfig,
   DEFAULT_AI_CONFIG,
@@ -79,23 +81,6 @@ const calculateContextUsage = messages => {
     isCritical: totalChars / CONTEXT_CHAR_LIMIT >= 0.9,
   };
 };
-
-// Tool call indicator bubble component
-function ToolCallBubble({ name, status }) {
-  const config = TOOL_UI_CONFIG[name] || { icon: '🔧', label: name };
-
-  return (
-    <div
-      className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/50 rounded px-2 py-1"
-      data-testid="tool-call-indicator"
-    >
-      <span>{config.icon}</span>
-      <span>{config.label}</span>
-      {status === 'running' && <Loader2 className="w-3 h-3 animate-spin" />}
-      {status === 'complete' && <Check className="w-3 h-3 text-emerald-400" />}
-    </div>
-  );
-}
 
 // Navigation hint component for after scenario creation or parameter updates
 function ActionHint({ action, onNavigate, onDismiss }) {
@@ -170,6 +155,7 @@ export function Chat({
   const [streamingContent, setStreamingContent] = useState('');
   const [copiedMessageId, setCopiedMessageId] = useState(null);
   const [sessionTokens, setSessionTokens] = useState({ input: 0, output: 0 });
+  const [loadingStartTime, setLoadingStartTime] = useState(null);
   const messagesEndRef = useRef(null);
   const abortControllerRef = useRef(null);
 
@@ -395,6 +381,7 @@ export function Chat({
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    setLoadingStartTime(Date.now());
     setError(null);
     setRecentAction(null); // Clear any previous action hints
     setStreamingContent('');
@@ -481,6 +468,7 @@ export function Chat({
       setError(err.message);
     } finally {
       setIsLoading(false);
+      setLoadingStartTime(null);
       setActiveToolCalls([]); // Clear tool call indicators
       setStreamingContent('');
       abortControllerRef.current = null;
@@ -629,7 +617,11 @@ export function Chat({
                       msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-200'
                     }`}
                   >
-                    <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
+                    {msg.role === 'assistant' ? (
+                      <MarkdownMessage content={msg.content} onNavigate={onNavigate} />
+                    ) : (
+                      <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
+                    )}
                   </div>
                   {/* Copy button - appears on hover for assistant messages */}
                   {msg.role === 'assistant' && (
@@ -656,13 +648,7 @@ export function Chat({
             ))}
 
             {/* Active tool calls */}
-            {activeToolCalls.length > 0 && (
-              <div className="flex flex-wrap gap-2 ml-11" data-testid="tool-call-indicators">
-                {activeToolCalls.map(tc => (
-                  <ToolCallBubble key={tc.id} name={tc.name} status={tc.status} />
-                ))}
-              </div>
-            )}
+            {activeToolCalls.length > 0 && <ToolCallProgress toolCalls={activeToolCalls} />}
 
             {/* Streaming content display */}
             {streamingContent && (
@@ -671,8 +657,8 @@ export function Chat({
                   <Bot className="w-4 h-4 text-purple-400" />
                 </div>
                 <div className="bg-slate-800 rounded-lg px-4 py-2 max-w-[80%]">
-                  <div className="whitespace-pre-wrap text-sm text-slate-200">
-                    {streamingContent}
+                  <div className="text-sm text-slate-200">
+                    <MarkdownMessage content={streamingContent} onNavigate={onNavigate} />
                     <span
                       className="inline-block w-2 h-4 bg-purple-400 animate-pulse ml-1"
                       data-testid="streaming-cursor"
@@ -683,14 +669,7 @@ export function Chat({
             )}
 
             {isLoading && !streamingContent && activeToolCalls.length === 0 && (
-              <div className="flex gap-3 justify-start">
-                <div className="w-8 h-8 rounded-full bg-purple-600/20 flex items-center justify-center shrink-0">
-                  <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
-                </div>
-                <div className="bg-slate-800 rounded-lg px-4 py-2">
-                  <div className="text-slate-400 text-sm">Thinking...</div>
-                </div>
-              </div>
+              <ThinkingIndicator startTime={loadingStartTime} />
             )}
 
             {error && (
