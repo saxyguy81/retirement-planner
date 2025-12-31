@@ -307,6 +307,8 @@ export const AGENT_TOOLS = [
  * @returns {Promise<string>} - Formatted search results
  */
 export async function webSearch(query) {
+  console.log('[webSearch] Starting search for:', query);
+  console.log('[webSearch] API key present:', !!TAVILY_API_KEY, 'length:', TAVILY_API_KEY?.length);
   try {
     const response = await fetch(TAVILY_SEARCH_URL, {
       method: 'POST',
@@ -322,6 +324,8 @@ export async function webSearch(query) {
         max_results: 5,
       }),
     });
+
+    console.log('[webSearch] Response status:', response.status, response.ok ? 'OK' : 'FAILED');
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -365,14 +369,15 @@ export async function webSearch(query) {
 
     return result || 'No results found.';
   } catch (error) {
-    console.error('Web search error:', error);
+    console.error('[webSearch] Exception caught:', error.name, error.message);
+    console.error('[webSearch] Stack:', error.stack);
 
     // Provide user-friendly error message
     if (error.message.includes('fetch')) {
       return 'Web search failed due to a network error. Please check your connection and try again.';
     }
 
-    return `Web search encountered a technical error. I can try to answer based on my training data instead. (Error: ${error.message})`;
+    return `Web search encountered a technical error. I can try to answer based on my training data instead. (Error: ${error.name}: ${error.message})`;
   }
 }
 
