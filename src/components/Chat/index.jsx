@@ -462,11 +462,21 @@ export function Chat({
           toolResults, // Preserve for Anthropic tool_result blocks
         };
 
-        // Use non-streaming for tool result follow-up
-        response = await service.sendMessage(
+        // Clear previous streaming content before new streaming phase
+        setStreamingContent('');
+
+        // Use streaming for tool result follow-up (enables cancellation + shows progress)
+        response = await service.sendMessageStreaming(
           [...allMessages, assistantMessage, toolResultMessage],
           AGENT_TOOLS,
-          null
+          (chunk, full) => setStreamingContent(full),
+          toolCall => {
+            setActiveToolCalls(prev => [
+              ...prev,
+              { id: toolCall.id, name: toolCall.name, status: 'running' },
+            ]);
+          },
+          abortControllerRef.current.signal
         );
 
         // Update assistant content for next iteration
