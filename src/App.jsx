@@ -28,7 +28,6 @@ import {
   Square,
   Table,
   Trash2,
-  Upload,
   Users,
   Zap,
 } from 'lucide-react';
@@ -79,13 +78,7 @@ const preloadMap = {
   settings: preloadSettings,
 };
 import { useProjections } from './hooks/useProjections';
-import {
-  exportToExcel,
-  exportToJSON,
-  exportToPDF,
-  importFromJSON,
-  importFromExcel,
-} from './lib/excelExport';
+import { exportToExcel, exportToJSON, exportToPDF } from './lib/excelExport';
 import { setGlobalPrecision } from './lib/formatters';
 import { loadAIConfig, saveAIConfig } from './lib/aiService';
 
@@ -111,7 +104,6 @@ export default function App() {
   const [saveName, setSaveName] = useState('');
   const [showPV, setShowPV] = useState(true); // Global Present Value toggle
   const [pendingScenario, setPendingScenario] = useState(null);
-  const fileInputRef = useRef(null);
   const configFileInputRef = useRef(null);
   const exportMenuRef = useRef(null);
   const saveMenuRef = useRef(null);
@@ -168,33 +160,6 @@ export default function App() {
     setSaveName('');
     setShowSaveDialog(false);
   }, [saveState, saveName]);
-
-  // Import handler
-  const handleImport = useCallback(
-    async e => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      try {
-        let importedParams;
-        if (file.name.endsWith('.json')) {
-          importedParams = await importFromJSON(file);
-        } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-          importedParams = await importFromExcel(file);
-        } else {
-          alert('Please select a .json or .xlsx file');
-          return;
-        }
-        updateParams(importedParams);
-      } catch (err) {
-        alert('Import failed: ' + err.message);
-      }
-
-      // Reset file input
-      e.target.value = '';
-    },
-    [updateParams]
-  );
 
   // Export handlers
   const handleExport = useCallback(
@@ -498,14 +463,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Import/Export buttons */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,.xlsx,.xls"
-            onChange={handleImport}
-            className="hidden"
-          />
+          {/* Hidden file input for Load fallback */}
           <input
             ref={configFileInputRef}
             type="file"
@@ -513,13 +471,6 @@ export default function App() {
             onChange={handleConfigImport}
             className="hidden"
           />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="ml-4 px-2 py-1 bg-slate-700 text-white rounded text-xs flex items-center gap-1 hover:bg-slate-600"
-          >
-            <Upload className="w-3 h-3" />
-            Import
-          </button>
 
           {/* State Management Buttons - Save Dropdown */}
           <div className="relative" ref={saveMenuRef}>
