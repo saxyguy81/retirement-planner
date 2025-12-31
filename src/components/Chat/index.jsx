@@ -449,14 +449,22 @@ export function Chat({
         }
 
         // Add tool results to messages and continue
+        // Include toolCalls in assistant message for proper Anthropic formatting
+        const assistantMessage = {
+          role: 'assistant',
+          content: assistantContent,
+          toolCalls: response.toolCalls, // Preserve for Anthropic tool_use blocks
+        };
+
         const toolResultMessage = {
           role: 'user',
           content: toolResults.map(t => `Tool ${t.name} result: ${t.result}`).join('\n\n'),
+          toolResults, // Preserve for Anthropic tool_result blocks
         };
 
         // Use non-streaming for tool result follow-up
         response = await service.sendMessage(
-          [...allMessages, { role: 'assistant', content: assistantContent }, toolResultMessage],
+          [...allMessages, assistantMessage, toolResultMessage],
           AGENT_TOOLS,
           null
         );

@@ -596,14 +596,45 @@ export class AIService {
 
     if (format === 'anthropic') {
       // Anthropic Messages API format
-      // Filter out messages with empty/whitespace content - Anthropic requires non-whitespace text
+      // Need to properly format tool_use and tool_result blocks
       const filteredMessages = messages
         .filter(m => m.role !== 'system')
-        .filter(m => m.content && m.content.trim().length > 0)
-        .map(m => ({
-          role: m.role === 'assistant' ? 'assistant' : 'user',
-          content: m.content,
-        }));
+        .filter(m => {
+          // Keep messages with content, toolCalls, or toolResults
+          return (m.content && m.content.trim().length > 0) || m.toolCalls || m.toolResults;
+        })
+        .map(m => {
+          if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
+            // Assistant message with tool_use blocks
+            const content = [];
+            if (m.content && m.content.trim()) {
+              content.push({ type: 'text', text: m.content });
+            }
+            for (const tc of m.toolCalls) {
+              content.push({
+                type: 'tool_use',
+                id: tc.id,
+                name: tc.name,
+                input: tc.arguments || {},
+              });
+            }
+            return { role: 'assistant', content };
+          } else if (m.role === 'user' && m.toolResults && m.toolResults.length > 0) {
+            // User message with tool_result blocks
+            const content = m.toolResults.map(tr => ({
+              type: 'tool_result',
+              tool_use_id: tr.id,
+              content: tr.result,
+            }));
+            return { role: 'user', content };
+          } else {
+            // Regular message
+            return {
+              role: m.role === 'assistant' ? 'assistant' : 'user',
+              content: m.content,
+            };
+          }
+        });
 
       return {
         model: this.model,
