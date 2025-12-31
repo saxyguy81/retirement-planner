@@ -560,27 +560,15 @@ export class AIService {
   }
 
   async sendMessage(messages, tools, onToolCall) {
-    const providerConfig = PROVIDERS[this.provider];
-    const baseUrl = this.customBaseUrl || providerConfig.baseUrl;
-
     // Format request based on provider/format
     const request = this.formatRequest(messages, tools);
 
-    // Determine headers - custom endpoints use format-specific headers
-    let headers;
-    if (this.provider === 'custom' && this.customFormat === 'anthropic') {
-      headers = {
-        'x-api-key': this.apiKey || '',
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      };
-    } else {
-      headers = providerConfig.headers(this.apiKey);
-    }
+    // Use getBaseUrl to properly construct URL (esp. for Google which needs model/key in URL)
+    const url = this.getBaseUrl(false);
 
-    const response = await fetch(baseUrl, {
+    const response = await fetch(url, {
       method: 'POST',
-      headers,
+      headers: this.getHeaders(),
       body: JSON.stringify(request),
     });
 
