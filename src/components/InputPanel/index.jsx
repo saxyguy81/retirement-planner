@@ -483,14 +483,23 @@ export function InputPanel({
                     <span className="text-slate-400 text-xs w-10">{year}</span>
                     <input
                       type="text"
-                      value={`$${amount.toLocaleString()}`}
-                      onFocus={e => (e.target.value = amount.toString())}
-                      onBlur={e => {
-                        const parsed = parseFloat(e.target.value.replace(/[,$]/g, ''));
+                      value={
+                        editingInput.key === `expense-${year}`
+                          ? editingInput.value
+                          : `$${amount.toLocaleString()}`
+                      }
+                      onFocus={() =>
+                        setEditingInput({ key: `expense-${year}`, value: amount.toString() })
+                      }
+                      onChange={e =>
+                        setEditingInput({ key: `expense-${year}`, value: e.target.value })
+                      }
+                      onBlur={() => {
+                        const parsed = parseFloat(editingInput.value.replace(/[,$]/g, ''));
                         if (!isNaN(parsed) && parsed > 0) {
                           updateExpenseOverride(Number(year), parsed);
                         }
-                        e.target.value = `$${(parsed || amount).toLocaleString()}`;
+                        setEditingInput({ key: null, value: '' });
                       }}
                       onKeyDown={e => e.key === 'Enter' && e.target.blur()}
                       className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
