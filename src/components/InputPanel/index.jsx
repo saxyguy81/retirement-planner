@@ -218,6 +218,8 @@ export function InputPanel({
   const [newExpenseYear, setNewExpenseYear] = useState('');
   const [newHarvestYear, setNewHarvestYear] = useState('');
   const [newConversionYear, setNewConversionYear] = useState('');
+  // Track which dollar input is being edited and its current value
+  const [editingInput, setEditingInput] = useState({ key: null, value: '' });
 
   // Get birthYear from settings or params for SmartYearInput
   const birthYear = settings?.primaryBirthYear || params?.birthYear || 1955;
@@ -639,14 +641,23 @@ export function InputPanel({
                     <span className="text-slate-400 text-xs w-10">{year}</span>
                     <input
                       type="text"
-                      value={`$${amount.toLocaleString()}`}
-                      onFocus={e => (e.target.value = amount.toString())}
-                      onBlur={e => {
-                        const parsed = parseFloat(e.target.value.replace(/[,$]/g, ''));
+                      value={
+                        editingInput.key === `roth-${year}`
+                          ? editingInput.value
+                          : `$${amount.toLocaleString()}`
+                      }
+                      onFocus={() =>
+                        setEditingInput({ key: `roth-${year}`, value: amount.toString() })
+                      }
+                      onChange={e =>
+                        setEditingInput({ key: `roth-${year}`, value: e.target.value })
+                      }
+                      onBlur={() => {
+                        const parsed = parseFloat(editingInput.value.replace(/[,$]/g, ''));
                         if (!isNaN(parsed) && parsed >= 0) {
                           updateRothConversion(Number(year), parsed);
                         }
-                        e.target.value = `$${(parsed || amount).toLocaleString()}`;
+                        setEditingInput({ key: null, value: '' });
                       }}
                       onKeyDown={e => e.key === 'Enter' && e.target.blur()}
                       className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
@@ -711,14 +722,23 @@ export function InputPanel({
                     <span className="text-slate-400 text-xs w-10">{year}</span>
                     <input
                       type="text"
-                      value={`$${amount.toLocaleString()}`}
-                      onFocus={e => (e.target.value = amount.toString())}
-                      onBlur={e => {
-                        const parsed = parseFloat(e.target.value.replace(/[,$]/g, ''));
+                      value={
+                        editingInput.key === `harvest-${year}`
+                          ? editingInput.value
+                          : `$${amount.toLocaleString()}`
+                      }
+                      onFocus={() =>
+                        setEditingInput({ key: `harvest-${year}`, value: amount.toString() })
+                      }
+                      onChange={e =>
+                        setEditingInput({ key: `harvest-${year}`, value: e.target.value })
+                      }
+                      onBlur={() => {
+                        const parsed = parseFloat(editingInput.value.replace(/[,$]/g, ''));
                         if (!isNaN(parsed) && parsed > 0) {
                           updateATHarvest(Number(year), parsed);
                         }
-                        e.target.value = `$${(parsed || amount).toLocaleString()}`;
+                        setEditingInput({ key: null, value: '' });
                       }}
                       onKeyDown={e => e.key === 'Enter' && e.target.blur()}
                       className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"

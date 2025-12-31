@@ -317,17 +317,18 @@ export const CALCULATIONS = {
   taxableSS: {
     name: 'Taxable Social Security',
     concept:
-      'Up to 85% of Social Security may be taxable, based on "combined income" = AGI + 50% of SS. Below $32K (MFJ): 0% taxable. $32K-$44K: up to 50%. Above $44K: up to 85%.',
+      'Up to 85% of Social Security may be taxable, based on "combined income" (IRS Publication 915). Combined Income = AGI (excluding SS) + Tax-Exempt Interest + 50% of SS. Below $32K (MFJ): 0% taxable. $32K-$44K: up to 50%. Above $44K: up to 85%.',
     formula:
-      'Combined Income = Other Income + 0.5 x ssAnnual\n\nIf Combined <= $32K: 0% taxable\nIf Combined <= $44K: up to 50% taxable\nIf Combined > $44K: up to 85% taxable',
+      'Combined Income = (IRA Withdrawal + Roth Conversion + Capital Gains) + 0.5 x SS\n\nIf Combined <= $32K (MFJ): 0% taxable\nIf Combined <= $44K (MFJ): up to 50% taxable\nIf Combined > $44K (MFJ): up to 85% taxable\n\nSingle thresholds: $25K / $34K',
     backOfEnvelope: '85% x ssAnnual (for most retirees with other income)',
     compute: data => {
-      const { ssAnnual, taxableSS, ordinaryIncome } = data;
-      const combined = ordinaryIncome + 0.5 * ssAnnual;
+      const { ssAnnual, taxableSS, iraWithdrawal, rothConversion, capitalGains } = data;
+      const otherIncome = (iraWithdrawal || 0) + (rothConversion || 0) + (capitalGains || 0);
+      const combined = otherIncome + 0.5 * ssAnnual;
       const pct = ssAnnual > 0 ? ((taxableSS / ssAnnual) * 100).toFixed(0) : 0;
       return {
-        formula: `Combined = ${fK(ordinaryIncome)} + 0.5 x ${fK(ssAnnual)}`,
-        values: `Combined Income = ${fK(combined)}`,
+        formula: `Combined = (IRA + Roth Conv + Cap Gains) + 0.5 x SS`,
+        values: `(${fK(iraWithdrawal || 0)} + ${fK(rothConversion || 0)} + ${fK(capitalGains || 0)}) + 0.5 x ${fK(ssAnnual)} = ${fK(combined)}`,
         result: `taxableSS = ${fK(taxableSS)} (${pct}% of SS)`,
         simple: `85% x ${fK(ssAnnual)} = ${fK(ssAnnual * 0.85)}`,
       };
