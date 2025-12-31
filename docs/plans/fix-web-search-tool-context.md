@@ -253,8 +253,8 @@ test.describe('Web Search Tool', () => {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `npx playwright test e2e/local/web-search.spec.js` passes locally
-- [ ] Test is skipped in CI (no API keys)
+- [ ] `npx playwright test e2e/local/web-search.spec.js` passes locally (requires ccproxy)
+- [x] Test is skipped in CI (no API keys) - uses isCCProxyAvailable() check
 
 #### Manual Verification:
 - [ ] Watch test execution to see tool calls happening
