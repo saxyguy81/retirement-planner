@@ -134,9 +134,9 @@ export const CALCULATIONS = {
   totalTax: {
     name: 'Total Annual Tax',
     concept:
-      'Sum of all taxes: Federal income tax on ordinary income, capital gains tax (LTCG), Net Investment Income Tax (NIIT), and Illinois state tax on investment income only.',
+      'Sum of all taxes: Federal income tax on ordinary income, capital gains tax (LTCG), Net Investment Income Tax (NIIT), and Illinois state tax on investment income (net of IL Property Tax Credit).',
     formula:
-      'totalTax = federalTax + ltcgTax + niit + stateTax\n\nFederal: Progressive brackets on ordinary income\nLTCG: 0%/15%/20% on capital gains (stacks on ordinary)\nNIIT: 3.8% on investment income above $250K MAGI\nIL State: 4.95% on investment income only',
+      'totalTax = federalTax + ltcgTax + niit + stateTax\n\nFederal: Progressive brackets on ordinary income\nLTCG: 0%/15%/20% on capital gains (stacks on ordinary)\nNIIT: 3.8% on investment income above $250K MAGI\nIL State: 4.95% on investment income - 5% property tax credit',
     backOfEnvelope: 'federalTax + (capitalGains x 18%)',
     compute: data => {
       const { federalTax, ltcgTax, niit, stateTax, totalTax, capitalGains } = data;
@@ -247,19 +247,53 @@ export const CALCULATIONS = {
   // =============================================================================
 
   stateTax: {
-    name: 'Illinois State Tax',
+    name: 'Illinois State Tax (Net)',
     concept:
-      'Illinois taxes investment income at 4.95% flat rate. Retirement income (Social Security, IRA/401k distributions) is EXEMPT from IL tax.',
+      'Illinois taxes investment income at 4.95% flat rate. Retirement income (Social Security, IRA/401k distributions) is EXEMPT from IL tax. A Property Tax Credit of 5% of property taxes paid may reduce this tax.',
     formula:
-      'stateTax = Investment Income x 4.95%\n\nTaxable: Capital gains, dividends, interest\nExempt: SS, IRA distributions, Roth, pensions',
-    backOfEnvelope: 'capitalGains x 5%',
+      'baseTax = Investment Income x 4.95%\npropertyTaxCredit = Property Tax x 5% (if AGI ≤ $500K MFJ / $250K Single)\nstateTax = baseTax - propertyTaxCredit\n\nTaxable: Capital gains, dividends, interest\nExempt: SS, IRA distributions, Roth, pensions',
+    backOfEnvelope: 'capitalGains x 5% - (propertyTax x 5%)',
     compute: data => {
-      const { capitalGains, stateTax } = data;
+      const { capitalGains, stateTax, ilBaseTax, ilPropertyTaxCredit, propertyTax } = data;
+      const baseTax = ilBaseTax || Math.round(capitalGains * 0.0495);
+      const credit = ilPropertyTaxCredit || 0;
+      if (credit > 0) {
+        return {
+          formula: `stateTax = baseTax - propertyTaxCredit`,
+          values: `baseTax = ${fK(capitalGains)} x 4.95% = ${fK(baseTax)}\nCredit = ${fK(propertyTax || 0)} x 5% = ${fK(credit)}`,
+          result: `State Tax = ${fK(baseTax)} - ${fK(credit)} = ${fK(stateTax)}`,
+          simple: `${fK(baseTax)} - ${fK(credit)} = ${fK(stateTax)}`,
+        };
+      }
       return {
         formula: `Only investment income is taxable in IL`,
         values: `stateTax = ${fK(capitalGains)} x 4.95%`,
         result: `State Tax = ${fK(stateTax)}`,
         simple: `${fK(capitalGains)} x 5% = ${fK(capitalGains * 0.05)}`,
+      };
+    },
+  },
+
+  ilPropertyTaxCredit: {
+    name: 'IL Property Tax Credit',
+    concept:
+      'Illinois Schedule ICR provides a 5% credit on property taxes paid, reducing your IL state tax liability. This credit is non-refundable (cannot reduce tax below $0) and only available if AGI is below the threshold.',
+    formula:
+      'Credit = Property Tax x 5%\n\nAGI Limits:\nMFJ: ≤ $500,000\nSingle: ≤ $250,000\n\nNon-refundable: Credit cannot exceed IL tax owed',
+    backOfEnvelope: 'propertyTax x 5% (max = IL tax owed)',
+    compute: data => {
+      const { propertyTax, ilPropertyTaxCredit, ilBaseTax, ordinaryIncome, capitalGains } = data;
+      const agi = (ordinaryIncome || 0) + (capitalGains || 0);
+      const potentialCredit = Math.round((propertyTax || 0) * 0.05);
+      const actualCredit = ilPropertyTaxCredit || 0;
+      const limited = actualCredit < potentialCredit;
+      return {
+        formula: `Credit = min(Property Tax x 5%, IL Tax Owed)`,
+        values: `Potential = ${fK(propertyTax || 0)} x 5% = ${fK(potentialCredit)}\nIL Base Tax = ${fK(ilBaseTax || 0)}\nAGI = ${fK(agi)}`,
+        result: limited
+          ? `Credit = ${fK(actualCredit)} (limited by ${actualCredit === 0 ? 'AGI threshold' : 'tax owed'})`
+          : `Credit = ${fK(actualCredit)}`,
+        simple: `${fK(propertyTax || 0)} x 5% = ${fK(actualCredit)}`,
       };
     },
   },
