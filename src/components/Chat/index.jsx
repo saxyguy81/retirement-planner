@@ -420,6 +420,13 @@ export function Chat({
       );
 
       let assistantContent = response.content;
+
+      // If assistant responded with tool calls but no text content,
+      // create a placeholder to preserve context (prevents message from being filtered out)
+      if (!assistantContent && response.toolCalls && response.toolCalls.length > 0) {
+        assistantContent = response.toolCalls.map(tc => `[Calling ${tc.name}...]`).join(' ');
+      }
+
       setStreamingContent(''); // Clear streaming content
 
       // Handle tool calls (non-streaming for tool loop)
@@ -444,7 +451,7 @@ export function Chat({
         // Add tool results to messages and continue
         const toolResultMessage = {
           role: 'user',
-          content: toolResults.map(t => `Tool ${t.name} result: ${t.result}`).join('\n'),
+          content: toolResults.map(t => `Tool ${t.name} result: ${t.result}`).join('\n\n'),
         };
 
         // Use non-streaming for tool result follow-up
@@ -454,8 +461,12 @@ export function Chat({
           null
         );
 
+        // Update assistant content for next iteration
         if (response.content) {
           assistantContent = response.content;
+        } else if (response.toolCalls && response.toolCalls.length > 0) {
+          // Another round of tool calls with no text - preserve context
+          assistantContent = response.toolCalls.map(tc => `[Calling ${tc.name}...]`).join(' ');
         }
       }
 
