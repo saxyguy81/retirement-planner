@@ -87,6 +87,7 @@ import {
   importFromExcel,
 } from './lib/excelExport';
 import { setGlobalPrecision } from './lib/formatters';
+import { loadAIConfig, saveAIConfig } from './lib/aiService';
 
 const TABS = [
   { id: 'projections', icon: Table, label: 'Projections' },
@@ -229,6 +230,7 @@ export default function App() {
       type: 'retirement-planner-config',
       params: { ...params },
       options: { ...options },
+      aiConfig: loadAIConfig(),
     };
 
     // Try native File System Access API first
@@ -285,6 +287,7 @@ export default function App() {
           if (data.params) {
             updateParams(data.params);
             if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
+            if (data.aiConfig) saveAIConfig(data.aiConfig);
           } else {
             alert('Invalid configuration file');
           }
@@ -293,6 +296,7 @@ export default function App() {
 
         updateParams(data.params);
         if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
+        if (data.aiConfig) saveAIConfig(data.aiConfig);
         return;
       } catch (err) {
         if (err.name === 'AbortError') return;
@@ -318,12 +322,14 @@ export default function App() {
           if (data.params) {
             updateParams(data.params);
             if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
+            if (data.aiConfig) saveAIConfig(data.aiConfig);
           } else {
             alert('Invalid configuration file');
           }
         } else {
           updateParams(data.params);
           if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
+          if (data.aiConfig) saveAIConfig(data.aiConfig);
         }
       } catch (err) {
         alert('Failed to load configuration: ' + err.message);
