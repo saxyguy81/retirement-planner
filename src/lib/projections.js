@@ -57,6 +57,7 @@ function calculateWithdrawals(inputs, taxParams, options) {
     rmdRequired,
     rothConversion,
     atHarvestOverride = 0,
+    propertyTax = 0,
   } = inputs;
 
   const {
@@ -137,16 +138,30 @@ function calculateWithdrawals(inputs, taxParams, options) {
     const magi = ordinaryIncome + capitalGains;
     const niit = calculateNIIT(capitalGains, magi, isSingle);
 
-    // State tax (IL only taxes investment income)
-    const stateTax = calculateIllinoisTax(capitalGains, stateTaxRate);
+    // State tax (IL only taxes investment income, with property tax credit)
+    // AGI for IL credit = ordinary income + capital gains
+    const agiForILCredit = ordinaryIncome + capitalGains;
+    const ilTaxResult = calculateIllinoisTax(
+      capitalGains,
+      stateTaxRate,
+      propertyTax,
+      agiForILCredit,
+      isSingle
+    );
+    const stateTax = ilTaxResult.netTax;
+    const ilPropertyTaxCredit = ilTaxResult.propertyTaxCredit;
 
     const totalTax = federalTax + ltcgTax + niit + stateTax;
 
+    const atWithdrawalRounded = Math.round(atW);
+    const iraWithdrawalRounded = Math.round(iraW);
+    const rothWithdrawalRounded = Math.round(rothW);
+
     result = {
-      atWithdrawal: Math.round(atW),
-      iraWithdrawal: Math.round(iraW),
-      rothWithdrawal: Math.round(rothW),
-      totalWithdrawal: Math.round(atW + iraW + rothW),
+      atWithdrawal: atWithdrawalRounded,
+      iraWithdrawal: iraWithdrawalRounded,
+      rothWithdrawal: rothWithdrawalRounded,
+      totalWithdrawal: atWithdrawalRounded + iraWithdrawalRounded + rothWithdrawalRounded,
       taxableSS: Math.round(taxableSS),
       ordinaryIncome: Math.round(ordinaryIncome),
       capitalGains: Math.round(capitalGains),
@@ -155,6 +170,8 @@ function calculateWithdrawals(inputs, taxParams, options) {
       ltcgTax,
       niit,
       stateTax,
+      ilPropertyTaxCredit,
+      ilBaseTax: ilTaxResult.baseTax,
       totalTax,
       shortfall: Math.round(need), // If positive, couldn't meet expenses
       iterations: iter + 1,
@@ -328,6 +345,7 @@ export function generateProjections(params = {}) {
         rmdRequired: rmd.required,
         rothConversion: actualRothConversion,
         atHarvestOverride,
+        propertyTax,
       },
       {
         fedBrackets,

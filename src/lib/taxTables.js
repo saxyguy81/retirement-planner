@@ -51,26 +51,31 @@ export const SENIOR_BONUS_MFJ_2024 = 3100; // Both 65+
 export const SENIOR_BONUS_SINGLE_2024 = 1950;
 
 // =============================================================================
-// IRMAA BRACKETS (2024) - Based on MAGI from 2 years prior
+// IRMAA BRACKETS (2026) - Based on MAGI from 2 years prior (2024 income)
 // Monthly amounts that get multiplied by 12 for annual
+// Source: CMS/SSA official 2026 IRMAA brackets
 // =============================================================================
-export const IRMAA_BRACKETS_MFJ_2024 = [
-  { threshold: 0, partB: 174.7, partD: 0 },
-  { threshold: 206000, partB: 244.6, partD: 12.9 },
-  { threshold: 258000, partB: 349.4, partD: 33.3 },
-  { threshold: 322000, partB: 454.2, partD: 53.8 },
-  { threshold: 386000, partB: 559.0, partD: 74.2 },
-  { threshold: 750000, partB: 594.0, partD: 81.0 },
+export const IRMAA_BRACKETS_MFJ_2026 = [
+  { threshold: 0, partB: 202.9, partD: 0 }, // Standard premium
+  { threshold: 218000, partB: 284.1, partD: 14.5 }, // 1.4x
+  { threshold: 274000, partB: 405.8, partD: 37.4 }, // 2.0x
+  { threshold: 342000, partB: 527.5, partD: 60.3 }, // 2.6x
+  { threshold: 410000, partB: 649.2, partD: 83.2 }, // 3.2x
+  { threshold: 750000, partB: 689.9, partD: 91.0 }, // 3.4x (frozen until 2028)
 ];
 
-export const IRMAA_BRACKETS_SINGLE_2024 = [
-  { threshold: 0, partB: 174.7, partD: 0 },
-  { threshold: 103000, partB: 244.6, partD: 12.9 },
-  { threshold: 129000, partB: 349.4, partD: 33.3 },
-  { threshold: 161000, partB: 454.2, partD: 53.8 },
-  { threshold: 193000, partB: 559.0, partD: 74.2 },
-  { threshold: 500000, partB: 594.0, partD: 81.0 },
+export const IRMAA_BRACKETS_SINGLE_2026 = [
+  { threshold: 0, partB: 202.9, partD: 0 }, // Standard premium
+  { threshold: 109000, partB: 284.1, partD: 14.5 }, // 1.4x
+  { threshold: 137000, partB: 405.8, partD: 37.4 }, // 2.0x
+  { threshold: 171000, partB: 527.5, partD: 60.3 }, // 2.6x
+  { threshold: 205000, partB: 649.2, partD: 83.2 }, // 3.2x
+  { threshold: 500000, partB: 689.9, partD: 91.0 }, // 3.4x (frozen until 2028)
 ];
+
+// Aliases for backwards compatibility
+export const IRMAA_BRACKETS_MFJ_2024 = IRMAA_BRACKETS_MFJ_2026;
+export const IRMAA_BRACKETS_SINGLE_2024 = IRMAA_BRACKETS_SINGLE_2026;
 
 // =============================================================================
 // NIIT (Net Investment Income Tax) Thresholds

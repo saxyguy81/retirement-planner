@@ -255,9 +255,11 @@ describe('generateProjections - cumulative values', () => {
 
   it('atLiquidationPercent increases or stays same', () => {
     const projections = generateProjections(TEST_PARAMS);
+    // Allow small floating-point tolerance (1e-6)
+    const epsilon = 1e-6;
 
     for (let i = 1; i < projections.length; i++) {
-      expect(projections[i].atLiquidationPercent).toBeGreaterThanOrEqual(
+      expect(projections[i].atLiquidationPercent + epsilon).toBeGreaterThanOrEqual(
         projections[i - 1].atLiquidationPercent
       );
     }

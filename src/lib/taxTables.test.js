@@ -130,8 +130,8 @@ describe('IRMAA Brackets', () => {
     expect(IRMAA_BRACKETS_MFJ_2024).toHaveLength(6);
   });
 
-  it('base Part B premium is $174.70', () => {
-    expect(IRMAA_BRACKETS_MFJ_2024[0].partB).toBe(174.7);
+  it('base Part B premium is $202.90 (2026)', () => {
+    expect(IRMAA_BRACKETS_MFJ_2024[0].partB).toBe(202.9);
   });
 
   it('base Part D has no surcharge', () => {
@@ -236,8 +236,8 @@ describe('inflateIRMAA', () => {
   it('inflates thresholds but keeps premiums fixed', () => {
     const inflated = inflateIRMAA(IRMAA_BRACKETS_MFJ_2024, 0.03, 1);
 
-    // Premiums should be unchanged
-    expect(inflated[0].partB).toBe(174.7);
+    // Premiums should be unchanged (2026 base: $202.90)
+    expect(inflated[0].partB).toBe(202.9);
     expect(inflated[0].partD).toBe(0);
 
     // Thresholds should be inflated (except 0)

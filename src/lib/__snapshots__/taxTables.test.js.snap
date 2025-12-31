@@ -118,33 +118,33 @@ exports[`Federal Tax Bracket Structure > Single Brackets > matches 2024 IRS brac
 exports[`IRMAA Brackets > matches 2024 CMS brackets > irmaa-mfj-2024 1`] = `
 [
   {
-    "partB": 174.7,
+    "partB": 202.9,
     "partD": 0,
     "threshold": 0,
   },
   {
-    "partB": 244.6,
-    "partD": 12.9,
-    "threshold": 206000,
+    "partB": 284.1,
+    "partD": 14.5,
+    "threshold": 218000,
   },
   {
-    "partB": 349.4,
-    "partD": 33.3,
-    "threshold": 258000,
+    "partB": 405.8,
+    "partD": 37.4,
+    "threshold": 274000,
   },
   {
-    "partB": 454.2,
-    "partD": 53.8,
-    "threshold": 322000,
+    "partB": 527.5,
+    "partD": 60.3,
+    "threshold": 342000,
   },
   {
-    "partB": 559,
-    "partD": 74.2,
-    "threshold": 386000,
+    "partB": 649.2,
+    "partD": 83.2,
+    "threshold": 410000,
   },
   {
-    "partB": 594,
-    "partD": 81,
+    "partB": 689.9,
+    "partD": 91,
     "threshold": 750000,
   },
 ]

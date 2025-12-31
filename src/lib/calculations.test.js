@@ -465,89 +465,92 @@ describe('calculateTaxableSocialSecurity', () => {
 // calculateIRMAA Tests
 // =============================================================================
 describe('calculateIRMAA', () => {
+  // 2026 IRMAA brackets (based on 2024 income)
   describe('MFJ brackets (no inflation)', () => {
     it('returns base premium below first threshold', () => {
       const result = calculateIRMAA(150000, 0, 0, false, 2);
-      // Base: Part B = $174.70/mo, Part D = $0/mo
-      expect(result.partB).toBeWithinDollars(174.7 * 12 * 2, 1);
+      // Base: Part B = $202.90/mo, Part D = $0/mo (2026)
+      expect(result.partB).toBeWithinDollars(202.9 * 12 * 2, 1);
       expect(result.partD).toBe(0);
     });
 
-    it('bracket 1: MAGI > $206,000', () => {
-      const result = calculateIRMAA(220000, 0, 0, false, 2);
-      // Part B = $244.60/mo, Part D = $12.90/mo
-      expect(result.partB).toBeWithinDollars(244.6 * 12 * 2, 1);
-      expect(result.partD).toBeWithinDollars(12.9 * 12 * 2, 1);
+    it('bracket 1: MAGI > $218,000', () => {
+      const result = calculateIRMAA(250000, 0, 0, false, 2);
+      // Part B = $284.10/mo, Part D = $14.50/mo (2026)
+      expect(result.partB).toBeWithinDollars(284.1 * 12 * 2, 1);
+      expect(result.partD).toBeWithinDollars(14.5 * 12 * 2, 1);
     });
 
-    it('bracket 2: MAGI > $258,000', () => {
-      const result = calculateIRMAA(280000, 0, 0, false, 2);
-      expect(result.partB).toBeWithinDollars(349.4 * 12 * 2, 1);
-      expect(result.partD).toBeWithinDollars(33.3 * 12 * 2, 1);
+    it('bracket 2: MAGI > $274,000', () => {
+      const result = calculateIRMAA(300000, 0, 0, false, 2);
+      expect(result.partB).toBeWithinDollars(405.8 * 12 * 2, 1);
+      expect(result.partD).toBeWithinDollars(37.4 * 12 * 2, 1);
     });
 
-    it('bracket 3: MAGI > $322,000', () => {
-      const result = calculateIRMAA(350000, 0, 0, false, 2);
-      expect(result.partB).toBeWithinDollars(454.2 * 12 * 2, 1);
-      expect(result.partD).toBeWithinDollars(53.8 * 12 * 2, 1);
+    it('bracket 3: MAGI > $342,000', () => {
+      const result = calculateIRMAA(380000, 0, 0, false, 2);
+      expect(result.partB).toBeWithinDollars(527.5 * 12 * 2, 1);
+      expect(result.partD).toBeWithinDollars(60.3 * 12 * 2, 1);
     });
 
-    it('bracket 4: MAGI > $386,000', () => {
+    it('bracket 4: MAGI > $410,000', () => {
       const result = calculateIRMAA(500000, 0, 0, false, 2);
-      expect(result.partB).toBeWithinDollars(559.0 * 12 * 2, 1);
-      expect(result.partD).toBeWithinDollars(74.2 * 12 * 2, 1);
+      expect(result.partB).toBeWithinDollars(649.2 * 12 * 2, 1);
+      expect(result.partD).toBeWithinDollars(83.2 * 12 * 2, 1);
     });
 
-    it('bracket 5 (top): MAGI > $750,000', () => {
+    it('bracket 5 (top): MAGI >= $750,000', () => {
       const result = calculateIRMAA(1000000, 0, 0, false, 2);
-      expect(result.partB).toBeWithinDollars(594.0 * 12 * 2, 1);
-      expect(result.partD).toBeWithinDollars(81.0 * 12 * 2, 1);
+      expect(result.partB).toBeWithinDollars(689.9 * 12 * 2, 1);
+      expect(result.partD).toBeWithinDollars(91.0 * 12 * 2, 1);
     });
 
     it('calculates total correctly', () => {
-      const result = calculateIRMAA(280000, 0, 0, false, 2);
+      const result = calculateIRMAA(300000, 0, 0, false, 2);
       expect(result.total).toBeWithinDollars(result.partB + result.partD, 1);
     });
 
     it('handles single person', () => {
-      const result = calculateIRMAA(280000, 0, 0, false, 1);
+      const result = calculateIRMAA(300000, 0, 0, false, 1);
       // Same bracket but for 1 person
-      expect(result.partB).toBeWithinDollars(349.4 * 12 * 1, 1);
-      expect(result.partD).toBeWithinDollars(33.3 * 12 * 1, 1);
+      expect(result.partB).toBeWithinDollars(405.8 * 12 * 1, 1);
+      expect(result.partD).toBeWithinDollars(37.4 * 12 * 1, 1);
     });
   });
 
   describe('Single brackets', () => {
     it('returns base premium below first threshold', () => {
       const result = calculateIRMAA(90000, 0, 0, true, 1);
-      expect(result.partB).toBeWithinDollars(174.7 * 12, 1);
+      expect(result.partB).toBeWithinDollars(202.9 * 12, 1);
       expect(result.partD).toBe(0);
     });
 
-    it('bracket 1: MAGI > $103,000', () => {
-      const result = calculateIRMAA(110000, 0, 0, true, 1);
-      expect(result.partB).toBeWithinDollars(244.6 * 12, 1);
+    it('bracket 1: MAGI > $109,000', () => {
+      const result = calculateIRMAA(120000, 0, 0, true, 1);
+      expect(result.partB).toBeWithinDollars(284.1 * 12, 1);
     });
 
-    it('bracket 2: MAGI > $129,000', () => {
+    it('bracket 2: MAGI > $137,000', () => {
       const result = calculateIRMAA(150000, 0, 0, true, 1);
-      expect(result.partB).toBeWithinDollars(349.4 * 12, 1);
+      expect(result.partB).toBeWithinDollars(405.8 * 12, 1);
     });
 
     it('top bracket: MAGI > $500,000', () => {
       const result = calculateIRMAA(600000, 0, 0, true, 1);
-      expect(result.partB).toBeWithinDollars(594.0 * 12, 1);
-      expect(result.partD).toBeWithinDollars(81.0 * 12, 1);
+      // 2026 values: Part B = $689.9/mo, Part D = $91.0/mo
+      expect(result.partB).toBeWithinDollars(689.9 * 12, 1);
+      expect(result.partD).toBeWithinDollars(91.0 * 12, 1);
     });
   });
 
   describe('inflation adjustment', () => {
     it('inflates thresholds correctly', () => {
-      // At 3% inflation for 5 years, $206k threshold becomes ~$239k
-      // MAGI of $220k would now be below the first threshold
-      const result = calculateIRMAA(220000, 0.03, 5, false, 2);
-      // $220k < $206k * 1.03^5 = $238,778, so should be base bracket
-      expect(result.partB).toBeWithinDollars(174.7 * 12 * 2, 1);
+      // At 3% inflation for 5 years, $218k threshold becomes ~$253k
+      // MAGI of $230k would now be below the inflated first threshold
+      const result = calculateIRMAA(230000, 0.03, 5, false, 2);
+      // $230k < $218k * 1.03^5 = $252,700, so should be base bracket
+      // 2026 base: Part B = $202.9/mo
+      expect(result.partB).toBeWithinDollars(202.9 * 12 * 2, 1);
     });
   });
 });
@@ -918,16 +921,84 @@ describe('calculateBlendedReturn', () => {
 // calculateIllinoisTax Tests
 // =============================================================================
 describe('calculateIllinoisTax', () => {
-  it('calculates 4.95% flat rate', () => {
-    expect(calculateIllinoisTax(100000)).toBeWithinDollars(4950, 1);
+  describe('base tax calculation', () => {
+    it('calculates 4.95% flat rate', () => {
+      const result = calculateIllinoisTax(100000);
+      expect(result.baseTax).toBeWithinDollars(4950, 1);
+      expect(result.netTax).toBeWithinDollars(4950, 1);
+    });
+
+    it('handles zero income', () => {
+      const result = calculateIllinoisTax(0);
+      expect(result.baseTax).toBe(0);
+      expect(result.netTax).toBe(0);
+    });
+
+    it('accepts custom rate', () => {
+      const result = calculateIllinoisTax(100000, 0.05);
+      expect(result.baseTax).toBeWithinDollars(5000, 1);
+      expect(result.netTax).toBeWithinDollars(5000, 1);
+    });
   });
 
-  it('handles zero income', () => {
-    expect(calculateIllinoisTax(0)).toBe(0);
-  });
+  describe('Property Tax Credit', () => {
+    it('applies 5% credit when AGI is below MFJ limit ($500k)', () => {
+      // $100k investment income, $20k property tax, $400k AGI
+      const result = calculateIllinoisTax(100000, 0.0495, 20000, 400000, false);
+      expect(result.baseTax).toBeWithinDollars(4950, 1);
+      expect(result.propertyTaxCredit).toBeWithinDollars(1000, 1); // 5% of $20k
+      expect(result.netTax).toBeWithinDollars(3950, 1);
+    });
 
-  it('accepts custom rate', () => {
-    expect(calculateIllinoisTax(100000, 0.05)).toBeWithinDollars(5000, 1);
+    it('applies 5% credit when AGI is below Single limit ($250k)', () => {
+      const result = calculateIllinoisTax(50000, 0.0495, 15000, 200000, true);
+      expect(result.baseTax).toBeWithinDollars(2475, 1);
+      expect(result.propertyTaxCredit).toBeWithinDollars(750, 1); // 5% of $15k
+      expect(result.netTax).toBeWithinDollars(1725, 1);
+    });
+
+    it('does not apply credit when AGI exceeds MFJ limit', () => {
+      const result = calculateIllinoisTax(100000, 0.0495, 20000, 600000, false);
+      expect(result.baseTax).toBeWithinDollars(4950, 1);
+      expect(result.propertyTaxCredit).toBe(0);
+      expect(result.netTax).toBeWithinDollars(4950, 1);
+      expect(result.creditLimitedByAGI).toBe(true);
+    });
+
+    it('does not apply credit when AGI exceeds Single limit', () => {
+      const result = calculateIllinoisTax(50000, 0.0495, 15000, 300000, true);
+      expect(result.baseTax).toBeWithinDollars(2475, 1);
+      expect(result.propertyTaxCredit).toBe(0);
+      expect(result.netTax).toBeWithinDollars(2475, 1);
+      expect(result.creditLimitedByAGI).toBe(true);
+    });
+
+    it('credit is non-refundable (cannot exceed tax owed)', () => {
+      // $10k investment income = $495 tax, $50k property tax = $2500 potential credit
+      const result = calculateIllinoisTax(10000, 0.0495, 50000, 100000, false);
+      expect(result.baseTax).toBeWithinDollars(495, 1);
+      expect(result.propertyTaxCredit).toBeWithinDollars(495, 1); // Limited to tax owed
+      expect(result.netTax).toBe(0);
+      expect(result.creditLimitedByTax).toBe(true);
+    });
+
+    it('returns zero credit when no property tax', () => {
+      const result = calculateIllinoisTax(100000, 0.0495, 0, 400000, false);
+      expect(result.propertyTaxCredit).toBe(0);
+      expect(result.netTax).toBeWithinDollars(4950, 1);
+    });
+
+    it('applies full credit when AGI is at exactly the limit', () => {
+      const result = calculateIllinoisTax(100000, 0.0495, 20000, 500000, false);
+      expect(result.propertyTaxCredit).toBeWithinDollars(1000, 1);
+      expect(result.netTax).toBeWithinDollars(3950, 1);
+    });
+
+    it('denies credit when AGI is $1 over the limit', () => {
+      const result = calculateIllinoisTax(100000, 0.0495, 20000, 500001, false);
+      expect(result.propertyTaxCredit).toBe(0);
+      expect(result.netTax).toBeWithinDollars(4950, 1);
+    });
   });
 });
 

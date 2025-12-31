@@ -113,9 +113,47 @@ export function calculateTaxableSocialSecurity(ssIncome, otherIncome, isSingle) 
 // ILLINOIS STATE TAX
 // IL exempts retirement income (SS, IRA, 401k distributions)
 // Only taxes investment income
+// Property Tax Credit: 5% of property tax, subject to AGI limits (Schedule ICR)
 // =============================================================================
-export function calculateIllinoisTax(investmentIncome, stateTaxRate = IL_TAX_RATE) {
-  return Math.round(investmentIncome * stateTaxRate);
+
+// IL Property Tax Credit AGI Limits (Schedule ICR)
+export const IL_PROPERTY_TAX_CREDIT_AGI_LIMIT_MFJ = 500000;
+export const IL_PROPERTY_TAX_CREDIT_AGI_LIMIT_SINGLE = 250000;
+export const IL_PROPERTY_TAX_CREDIT_RATE = 0.05;
+
+export function calculateIllinoisTax(
+  investmentIncome,
+  stateTaxRate = IL_TAX_RATE,
+  propertyTax = 0,
+  agi = 0,
+  isSingle = false
+) {
+  // Base IL tax on investment income
+  const baseTax = Math.round(investmentIncome * stateTaxRate);
+
+  // Property Tax Credit (5% of property tax, non-refundable)
+  // Only available if AGI is below threshold
+  const agiLimit = isSingle
+    ? IL_PROPERTY_TAX_CREDIT_AGI_LIMIT_SINGLE
+    : IL_PROPERTY_TAX_CREDIT_AGI_LIMIT_MFJ;
+
+  let propertyTaxCredit = 0;
+  if (agi <= agiLimit && propertyTax > 0) {
+    const potentialCredit = Math.round(propertyTax * IL_PROPERTY_TAX_CREDIT_RATE);
+    // Credit is non-refundable - can only reduce tax to zero
+    propertyTaxCredit = Math.min(potentialCredit, baseTax);
+  }
+
+  const netTax = baseTax - propertyTaxCredit;
+
+  return {
+    baseTax,
+    propertyTaxCredit,
+    netTax,
+    agiLimit,
+    creditLimitedByTax: propertyTax > 0 && propertyTaxCredit < Math.round(propertyTax * IL_PROPERTY_TAX_CREDIT_RATE),
+    creditLimitedByAGI: agi > agiLimit && propertyTax > 0,
+  };
 }
 
 // =============================================================================
@@ -270,6 +308,7 @@ export function calculateAllTaxes({
   isSingle,
   bracketInflation,
   yearsFromBase,
+  propertyTax = 0,
 }) {
   // Get inflated brackets
   const fedBrackets = inflateBrackets(
@@ -310,8 +349,10 @@ export function calculateAllTaxes({
   const magi = grossOrdinaryIncome + capitalGains; // Simplified MAGI
   const niit = calculateNIIT(capitalGains, magi, isSingle);
 
-  // Illinois tax (only on investment income)
-  const stateTax = calculateIllinoisTax(capitalGains);
+  // Illinois tax (only on investment income, with property tax credit)
+  const agi = grossOrdinaryIncome + capitalGains;
+  const ilTaxResult = calculateIllinoisTax(capitalGains, IL_TAX_RATE, propertyTax, agi, isSingle);
+  const stateTax = ilTaxResult.netTax;
 
   // Total
   const totalTax = federalOrdinaryTax + federalLTCGTax + niit + stateTax;
@@ -325,6 +366,8 @@ export function calculateAllTaxes({
     federalLTCGTax,
     niit,
     stateTax,
+    ilPropertyTaxCredit: ilTaxResult.propertyTaxCredit,
+    ilBaseTax: ilTaxResult.baseTax,
     totalTax,
     standardDeduction,
     effectiveRate:
