@@ -48,6 +48,10 @@ const CHAT_STORAGE_KEY = 'rp-chat-history';
 const CONTEXT_CHAR_LIMIT = 80000;
 const CONTEXT_WARNING_THRESHOLD = 0.75; // Warn at 75% usage
 
+// Maximum tool call iterations to prevent infinite loops
+// 25 iterations allows complex multi-step queries while preventing runaway loops
+const MAX_TOOL_ITERATIONS = 25;
+
 // Load chat history from localStorage
 const loadChatHistory = () => {
   try {
@@ -141,6 +145,7 @@ export function Chat({
   params,
   projections,
   summary,
+  scenarios,
   onCreateScenario,
   onUpdateParams,
   onNavigate,
@@ -212,6 +217,8 @@ export function Chat({
         case 'get_current_state': {
           const include = args.include || ['params', 'summary'];
           const result = {};
+
+          // Basic params
           if (include.includes('params')) {
             result.params = {
               startYear: params.startYear,
@@ -223,23 +230,92 @@ export function Chat({
               annualExpenses: params.annualExpenses,
               socialSecurityMonthly: params.socialSecurityMonthly,
               rothConversions: params.rothConversions,
+              riskAllocation: params.riskAllocation,
+              expectedReturn: params.expectedReturn,
             };
           }
+
+          // All params
+          if (include.includes('all_params')) {
+            result.allParams = { ...params };
+          }
+
+          // Summary
           if (include.includes('summary')) {
             result.summary = {
               endingPortfolio: summary.endingPortfolio,
               endingHeirValue: summary.endingHeirValue,
               totalTaxPaid: summary.totalTaxPaid,
               finalRothPercent: summary.finalRothPercent,
+              yearsProjected: projections.length,
+              startYear: projections[0]?.year,
+              endYear: projections[projections.length - 1]?.year,
             };
           }
+
+          // Projections with flexible range
           if (include.includes('projections')) {
-            result.projections = projections.slice(0, 5).map(p => ({
+            let projs = [...projections];
+
+            // Apply range filter
+            if (args.projectionRange === 'first5') {
+              projs = projs.slice(0, 5);
+            } else if (args.projectionRange === 'last5') {
+              projs = projs.slice(-5);
+            } else if (args.projectionRange === 'custom' && (args.startYear || args.endYear)) {
+              projs = projs.filter(p => {
+                if (args.startYear && p.year < args.startYear) return false;
+                if (args.endYear && p.year > args.endYear) return false;
+                return true;
+              });
+            }
+            // 'all' returns everything
+
+            // Select columns
+            const defaultCols = [
+              'year',
+              'age',
+              'totalEOY',
+              'heirValue',
+              'totalTax',
+              'rothConversion',
+            ];
+            const cols = args.columns || defaultCols;
+
+            result.projections = projs.map(p => {
+              const row = {};
+              cols.forEach(c => {
+                row[c] = p[c];
+              });
+              return row;
+            });
+          }
+
+          // IRMAA years detection
+          if (include.includes('irmaa_years')) {
+            result.irmaaYears = projections
+              .filter(p => p.irmaa && p.irmaa > 0)
+              .map(p => ({ year: p.year, irmaa: p.irmaa, magi: p.magi || p.agi }));
+          }
+
+          // Tax brackets hit
+          if (include.includes('tax_brackets')) {
+            result.taxBrackets = projections.map(p => ({
               year: p.year,
-              totalEOY: p.totalEOY,
-              heirValue: p.heirValue,
+              marginalRate: p.marginalRate,
+              effectiveRate: p.totalTax / (p.agi || 1),
+              agi: p.agi,
             }));
           }
+
+          // Scenarios
+          if (include.includes('scenarios') && scenarios) {
+            result.scenarios = scenarios.map(s => ({
+              name: s.name,
+              summary: s.summary,
+            }));
+          }
+
           return JSON.stringify(result, null, 2);
         }
 
@@ -296,6 +372,69 @@ export function Chat({
           return 'Parameter update not available';
         }
 
+        case 'compare_scenarios': {
+          const { scenarioNames, metrics } = args;
+
+          if (!scenarios || scenarios.length === 0) {
+            return 'No scenarios available yet. Use create_scenario to create some scenarios first, then I can compare them.';
+          }
+
+          // Include base case in comparison
+          const baseCase = {
+            name: 'Base Case (Current Plan)',
+            summary: {
+              endingPortfolio: summary.endingPortfolio,
+              endingHeirValue: summary.endingHeirValue,
+              totalTaxPaid: summary.totalTaxPaid,
+            },
+          };
+
+          let toCompare = [baseCase, ...scenarios];
+
+          // Filter by names if specified
+          if (scenarioNames && scenarioNames.length > 0) {
+            toCompare = toCompare.filter(s =>
+              scenarioNames.some(n => s.name.toLowerCase().includes(n.toLowerCase()))
+            );
+          }
+
+          if (toCompare.length === 0) {
+            const available = scenarios.map(s => s.name).join(', ');
+            return `No matching scenarios found. Available scenarios: ${available}`;
+          }
+
+          // Build comparison
+          const metricsToCompare = metrics || [
+            'endingPortfolio',
+            'endingHeirValue',
+            'totalTaxPaid',
+          ];
+
+          const comparison = toCompare.map(s => {
+            const row = { name: s.name };
+            metricsToCompare.forEach(m => {
+              row[m] = s.summary?.[m] ?? 'N/A';
+            });
+            return row;
+          });
+
+          // Format as markdown table
+          let table = '| Scenario | ' + metricsToCompare.join(' | ') + ' |\n';
+          table += '|----------|' + metricsToCompare.map(() => '--------').join('|') + '|\n';
+          comparison.forEach(row => {
+            table += `| ${row.name} | `;
+            table += metricsToCompare
+              .map(m => {
+                const val = row[m];
+                return typeof val === 'number' ? `$${val.toLocaleString()}` : val;
+              })
+              .join(' | ');
+            table += ' |\n';
+          });
+
+          return table;
+        }
+
         case 'read_source_code': {
           const { getSourceCode } = await import('../../lib/sourceCodeProvider');
           const source = getSourceCode(args.target);
@@ -339,11 +478,331 @@ export function Chat({
           return content;
         }
 
+        case 'find_optimal': {
+          const { parameter, year, metric, direction, minValue, maxValue, constraint } = args;
+
+          // Set search bounds
+          let min = minValue ?? 0;
+          let max = maxValue ?? (parameter === 'rothConversion' ? params.iraStart : 500000);
+
+          // Binary search for optimal value
+          const iterations = 10; // log2(1M) ≈ 20, 10 iterations = ~$1K precision
+          let bestValue = min;
+          let _bestMetric = null; // Used for tracking during search
+
+          const evaluate = testValue => {
+            const overrides = {};
+
+            if (parameter === 'rothConversion') {
+              if (year) {
+                // Single year
+                overrides.rothConversions = { ...params.rothConversions, [year]: testValue };
+              } else {
+                // Uniform across all years
+                const years = {};
+                for (let y = params.startYear; y <= params.endYear; y++) {
+                  years[y] = testValue;
+                }
+                overrides.rothConversions = years;
+              }
+            } else if (parameter === 'expenses') {
+              overrides.annualExpenses = testValue;
+            }
+
+            const testParams = { ...params, ...overrides };
+            const proj = generateProjections(testParams);
+            const sum = calculateSummary(proj);
+
+            // Check constraint
+            if (constraint === 'avoidIrmaa') {
+              const hasIrmaa = proj.some(p => p.irmaa > 0);
+              if (hasIrmaa) return null; // Violates constraint
+            }
+            if (constraint === 'stayIn22Bracket' || constraint === 'stayIn24Bracket') {
+              const targetRate = constraint === 'stayIn22Bracket' ? 0.22 : 0.24;
+              const exceeds = proj.some(p => p.marginalRate > targetRate);
+              if (exceeds) return null;
+            }
+
+            return sum[
+              metric === 'endingHeirValue'
+                ? 'endingHeirValue'
+                : metric === 'endingPortfolio'
+                  ? 'endingPortfolio'
+                  : metric === 'totalTaxPaid'
+                    ? 'totalTaxPaid'
+                    : 'endingHeirValue'
+            ];
+          };
+
+          // Binary search
+          for (let i = 0; i < iterations; i++) {
+            const mid = Math.floor((min + max) / 2);
+            const midValue = evaluate(mid);
+            const midPlusValue = evaluate(mid + 1000);
+
+            if (midValue === null && midPlusValue === null) {
+              // Both violate constraint, need to go lower
+              max = mid;
+            } else if (midValue === null) {
+              max = mid;
+            } else if (midPlusValue === null) {
+              // Found the boundary
+              bestValue = mid;
+              _bestMetric = midValue;
+              break;
+            } else {
+              const midBetter =
+                direction === 'maximize' ? midValue >= midPlusValue : midValue <= midPlusValue;
+              if (midBetter) {
+                max = mid;
+                bestValue = mid;
+                _bestMetric = midValue;
+              } else {
+                min = mid;
+                bestValue = mid + 1000;
+                _bestMetric = midPlusValue;
+              }
+            }
+          }
+
+          // Final evaluation
+          const finalMetric = evaluate(bestValue);
+
+          return JSON.stringify(
+            {
+              parameter,
+              year: year || 'all years',
+              optimalValue: bestValue,
+              metric,
+              direction,
+              resultingMetricValue: finalMetric,
+              constraint: constraint || 'none',
+              searchRange: { min: minValue ?? 0, max: maxValue ?? max },
+            },
+            null,
+            2
+          );
+        }
+
+        case 'run_risk_scenarios': {
+          const defaultScenarios = [
+            { name: 'Worst Case (2% real)', returnRate: 0.02 },
+            { name: 'Average Case (5% real)', returnRate: 0.05 },
+            { name: 'Best Case (8% real)', returnRate: 0.08 },
+          ];
+
+          const scenariosToRun = args.scenarios || defaultScenarios;
+          const metrics = args.metrics || ['endingPortfolio', 'endingHeirValue', 'totalTaxPaid'];
+
+          const results = scenariosToRun.map(scenario => {
+            const testParams = {
+              ...params,
+              expectedReturn: scenario.returnRate,
+            };
+            const proj = generateProjections(testParams);
+            const sum = calculateSummary(proj);
+
+            const result = {
+              name: scenario.name,
+              returnRate: `${(scenario.returnRate * 100).toFixed(1)}%`,
+            };
+            metrics.forEach(m => {
+              result[m] = sum[m];
+            });
+
+            // Add years until depletion if applicable
+            const depletionYear = proj.find(p => p.totalEOY <= 0);
+            result.runsOutOfMoney = depletionYear ? depletionYear.year : 'Never';
+
+            return result;
+          });
+
+          // Format as markdown table
+          let table = '| Scenario | Return | ';
+          table += metrics.map(m => m.replace(/([A-Z])/g, ' $1').trim()).join(' | ');
+          table += ' | Runs Out |\n';
+
+          table += '|----------|--------|';
+          table += metrics.map(() => '--------').join('|');
+          table += '|----------|\n';
+
+          results.forEach(r => {
+            table += `| ${r.name} | ${r.returnRate} | `;
+            table += metrics
+              .map(m => {
+                const val = r[m];
+                return typeof val === 'number' ? `$${Math.round(val).toLocaleString()}` : val;
+              })
+              .join(' | ');
+            table += ` | ${r.runsOutOfMoney} |\n`;
+          });
+
+          return table;
+        }
+
+        case 'explain_calculation': {
+          const { year, calculation } = args;
+
+          const yearData = projections.find(p => p.year === year);
+          if (!yearData) {
+            return `Year ${year} not found. Available: ${projections[0]?.year} - ${projections[projections.length - 1]?.year}`;
+          }
+
+          const fmt = n => (typeof n === 'number' ? `$${Math.round(n).toLocaleString()}` : 'N/A');
+
+          const explanations = {
+            federal_tax: () => ({
+              title: 'Federal Income Tax Calculation',
+              year,
+              steps: [
+                {
+                  step: 1,
+                  description: 'Calculate Adjusted Gross Income (AGI)',
+                  value: fmt(yearData.agi),
+                },
+                {
+                  step: 2,
+                  description: 'Subtract Standard Deduction',
+                  value: fmt(yearData.standardDeduction || 29200),
+                },
+                { step: 3, description: 'Taxable Income', value: fmt(yearData.taxableIncome) },
+                {
+                  step: 4,
+                  description: 'Apply Tax Brackets (10%, 12%, 22%, 24%, etc.)',
+                  value: 'Progressive',
+                },
+                { step: 5, description: 'Federal Tax', value: fmt(yearData.federalTax) },
+              ],
+              marginalBracket: `${((yearData.marginalRate || 0.22) * 100).toFixed(0)}%`,
+              effectiveRate: `${((yearData.federalTax / (yearData.agi || 1)) * 100).toFixed(1)}%`,
+            }),
+
+            heir_value: () => ({
+              title: 'Heir Value Calculation',
+              year,
+              steps: [
+                { step: 1, description: 'IRA Balance', value: fmt(yearData.iraEOY) },
+                {
+                  step: 2,
+                  description: 'Less: Heir Tax on IRA (income tax)',
+                  value: `-${fmt(yearData.iraEOY * (params.heirFedRate + params.heirStateRate))}`,
+                },
+                {
+                  step: 3,
+                  description: 'Net IRA to Heirs',
+                  value: fmt(yearData.iraEOY * (1 - params.heirFedRate - params.heirStateRate)),
+                },
+                {
+                  step: 4,
+                  description: 'Plus: Roth Balance (tax-free)',
+                  value: `+${fmt(yearData.rothEOY)}`,
+                },
+                {
+                  step: 5,
+                  description: 'Plus: After-Tax Balance',
+                  value: `+${fmt(yearData.afterTaxEOY)}`,
+                },
+                {
+                  step: 6,
+                  description: 'Less: Cap Gains on After-Tax',
+                  value: `-${fmt(yearData.afterTaxEOY * 0.15)}`,
+                },
+                { step: 7, description: 'Total Heir Value', value: fmt(yearData.heirValue) },
+              ],
+              heirTaxRates: {
+                federal: `${(params.heirFedRate * 100).toFixed(0)}%`,
+                state: `${(params.heirStateRate * 100).toFixed(0)}%`,
+              },
+            }),
+
+            rmd: () => ({
+              title: 'Required Minimum Distribution',
+              year,
+              age: yearData.age,
+              rmdRequired: yearData.age >= 73,
+              steps:
+                yearData.age >= 73
+                  ? [
+                      {
+                        step: 1,
+                        description: 'Prior Year-End IRA Balance',
+                        value: fmt(yearData.iraEOY),
+                      },
+                      {
+                        step: 2,
+                        description: 'Life Expectancy Factor',
+                        value: yearData.rmdFactor || 'See IRS table',
+                      },
+                      { step: 3, description: 'RMD = Balance / Factor', value: fmt(yearData.rmd) },
+                    ]
+                  : [
+                      { step: 1, description: 'Age Check', value: `Age ${yearData.age} < 73` },
+                      { step: 2, description: 'RMD Required?', value: 'No' },
+                    ],
+              note: 'RMDs begin at age 73 under SECURE 2.0 Act (was 72, will be 75 for those born 1960+)',
+            }),
+
+            irmaa: () => ({
+              title: 'IRMAA (Medicare Income-Related Monthly Adjustment)',
+              year,
+              steps: [
+                {
+                  step: 1,
+                  description: 'MAGI from 2 years prior',
+                  value: fmt(yearData.irmaaLookbackMagi || yearData.magi),
+                },
+                { step: 2, description: 'Compare to IRMAA Thresholds', value: 'See bracket table' },
+                {
+                  step: 3,
+                  description: 'Monthly Part B Surcharge',
+                  value: fmt((yearData.irmaa || 0) / 12),
+                },
+                { step: 4, description: 'Annual IRMAA', value: fmt(yearData.irmaa) },
+              ],
+              triggered: (yearData.irmaa || 0) > 0,
+              note: 'IRMAA looks at income from 2 years prior. High Roth conversions today affect Medicare premiums in 2 years.',
+            }),
+
+            social_security_tax: () => ({
+              title: 'Social Security Benefit Taxation',
+              year,
+              steps: [
+                { step: 1, description: 'Annual SS Benefit', value: fmt(yearData.socialSecurity) },
+                {
+                  step: 2,
+                  description: 'Calculate Provisional Income',
+                  value: 'AGI + 50% of SS + tax-exempt interest',
+                },
+                {
+                  step: 3,
+                  description: 'Provisional Income',
+                  value: fmt(yearData.provisionalIncome || yearData.agi),
+                },
+                {
+                  step: 4,
+                  description: 'Taxable Portion (0%, 50%, or 85%)',
+                  value: `${((yearData.ssTaxablePercent || 0.85) * 100).toFixed(0)}%`,
+                },
+                { step: 5, description: 'Taxable SS Amount', value: fmt(yearData.ssTaxable) },
+              ],
+              note: 'Up to 85% of SS can be taxable if provisional income exceeds thresholds.',
+            }),
+          };
+
+          const explainer = explanations[calculation];
+          if (!explainer) {
+            return `Unknown calculation: ${calculation}. Available: ${Object.keys(explanations).join(', ')}`;
+          }
+
+          return JSON.stringify(explainer(), null, 2);
+        }
+
         default:
           return `Unknown tool: ${name}`;
       }
     },
-    [params, projections, summary, onCreateScenario, onUpdateParams]
+    [params, projections, summary, scenarios, onCreateScenario, onUpdateParams]
   );
 
   // Cancel the current request
@@ -430,7 +889,16 @@ export function Chat({
       setStreamingContent(''); // Clear streaming content
 
       // Handle tool calls (non-streaming for tool loop)
+      let toolIterations = 0;
       while (response.toolCalls && response.toolCalls.length > 0) {
+        toolIterations++;
+
+        if (toolIterations > MAX_TOOL_ITERATIONS) {
+          console.warn(`Tool call limit (${MAX_TOOL_ITERATIONS}) reached. Generating final response.`);
+          assistantContent += '\n\n*Note: I reached my tool call limit. If you need more analysis, please ask a follow-up question.*';
+          break;
+        }
+
         const toolResults = [];
 
         for (const toolCall of response.toolCalls) {
