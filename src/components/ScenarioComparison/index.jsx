@@ -43,7 +43,7 @@ import {
 } from 'recharts';
 
 import { ScenarioNameModal } from './ScenarioNameModal';
-import { generateProjections, calculateSummary } from '../../lib';
+import { generateProjections, calculateSummary, deepClone } from '../../lib';
 import { fmt$, fmtPct } from '../../lib/formatters';
 
 // LocalStorage key for saved scenarios
@@ -551,54 +551,62 @@ export function ScenarioComparison({
   useEffect(() => {
     if (pendingScenario) {
       const newId = pendingScenario.createdAt || Date.now();
+
+      // Deep clone current params and apply overrides to create full snapshot
+      const baseSnapshot = deepClone(params);
+      const finalParams = pendingScenario.overrides
+        ? { ...baseSnapshot, ...pendingScenario.overrides }
+        : baseSnapshot;
+
       const newScenario = {
         id: newId,
         name: pendingScenario.name || 'From Optimizer',
         description: pendingScenario.description || '',
-        overrides: pendingScenario.overrides || {},
+        baseParams: finalParams, // Full snapshot for calculations
+        overrides: pendingScenario.overrides || {}, // Keep for display purposes
       };
       setScenarios(prev => [...prev, newScenario]);
       // Auto-select the new scenario
       setSelectedScenarioIds(prev => new Set([...prev, newId]));
       onPendingScenarioConsumed?.();
     }
-  }, [pendingScenario, onPendingScenarioConsumed]);
+  }, [pendingScenario, onPendingScenarioConsumed, params]);
 
   // Calculate all scenario projections
-  // Must match the same parameter merging as useProjections.js to get identical results
+  // Uses stored baseParams snapshot for each scenario (not current params)
   const scenarioResults = useMemo(() => {
-    // Compute exemptSSFromTax function same as useProjections
-    const getExemptSSForYear = year => {
-      const mode = settings.ssExemptionMode || 'disabled';
-      if (mode === 'disabled') return false;
-      if (mode === 'permanent') return true;
-      return year >= 2025 && year <= 2028;
-    };
-
     const results = scenarios.map(scenario => {
-      // Merge settings the same way useProjections does
+      // Use the stored baseParams snapshot
+      const scenarioParams = scenario.baseParams;
+
+      // Compute exemptSSFromTax function for this scenario's params
+      const getExemptSSForYear = year => {
+        const mode = settings.ssExemptionMode || 'disabled';
+        if (mode === 'disabled') return false;
+        if (mode === 'permanent') return true;
+        return year >= 2025 && year <= 2028;
+      };
+
       const mergedParams = {
-        ...params,
+        ...scenarioParams,
         ...options,
-        heirs: params.heirs || [],
-        discountRate: params.discountRate || 0.03,
-        heirDistributionStrategy: params.heirDistributionStrategy || 'even',
-        heirNormalizationYears: params.heirNormalizationYears || 10,
+        heirs: scenarioParams.heirs || [],
+        discountRate: scenarioParams.discountRate || 0.03,
+        heirDistributionStrategy: scenarioParams.heirDistributionStrategy || 'even',
+        heirNormalizationYears: scenarioParams.heirNormalizationYears || 10,
         getExemptSSForYear,
-        exemptSSFromTax: getExemptSSForYear(params.startYear || 2026),
-        birthYear: settings.primaryBirthYear || params.birthYear,
+        exemptSSFromTax: getExemptSSForYear(scenarioParams.startYear || 2026),
+        birthYear: settings.primaryBirthYear || scenarioParams.birthYear,
         customBrackets: settings.customBrackets || null,
         customIRMAA: settings.customIRMAA || null,
         taxYear: settings.taxYear || 2025,
-        // Apply scenario overrides LAST so they take precedence
-        ...scenario.overrides,
       };
       const proj = generateProjections(mergedParams);
       const sum = calculateSummary(proj);
       return { ...scenario, projections: proj, summary: sum };
     });
     return results;
-  }, [params, scenarios, settings, options]);
+  }, [scenarios, settings, options]);
 
   // Toggle a scenario in/out of selection
   const toggleScenarioSelection = useCallback(id => {
@@ -638,6 +646,7 @@ export function ScenarioComparison({
       onScenariosChange(
         scenarioResults.map(s => ({
           name: s.name,
+          baseParams: s.baseParams, // Include for AI context
           overrides: s.overrides,
           summary: s.summary,
         }))
@@ -755,11 +764,19 @@ export function ScenarioComparison({
   const createScenario = useCallback(
     (preset, customName = null) => {
       const newId = Date.now();
+
+      // Deep clone current params and apply preset overrides to create full snapshot
+      const baseSnapshot = deepClone(params);
+      const finalParams = preset?.overrides
+        ? { ...baseSnapshot, ...preset.overrides }
+        : baseSnapshot;
+
       const newScenario = {
         id: newId,
         name: customName || (preset ? preset.name : getDefaultScenarioName('custom')),
         description: preset?.description || '',
-        overrides: preset?.overrides || {},
+        baseParams: finalParams, // Full snapshot for calculations
+        overrides: preset?.overrides || {}, // Keep for display purposes
       };
       setScenarios(prev => [...prev, newScenario]);
       // Auto-select the new scenario
@@ -767,7 +784,7 @@ export function ScenarioComparison({
       setShowPresets(false);
       setNamingScenario(null);
     },
-    [getDefaultScenarioName]
+    [getDefaultScenarioName, params]
   );
 
   // Handle adding a scenario - shows dialog for custom, creates immediately for presets
@@ -800,7 +817,8 @@ export function ScenarioComparison({
       id: Date.now(),
       name: `${scenario.name} (Copy)`,
       description: scenario.description,
-      overrides: { ...scenario.overrides },
+      baseParams: deepClone(scenario.baseParams), // Deep clone the snapshot
+      overrides: deepClone(scenario.overrides), // Deep clone overrides too
     };
     setScenarios([...scenarios, newScenario]);
   };
@@ -841,6 +859,7 @@ export function ScenarioComparison({
       scenarios: scenarios.map(s => ({
         name: s.name,
         description: s.description,
+        baseParams: s.baseParams, // Include full snapshot
         overrides: s.overrides,
       })),
     };
@@ -878,6 +897,7 @@ export function ScenarioComparison({
       scenarios: scenarios.map(s => ({
         name: s.name,
         description: s.description,
+        baseParams: s.baseParams, // Include full snapshot
         overrides: s.overrides,
       })),
     };
@@ -902,10 +922,15 @@ export function ScenarioComparison({
         try {
           const data = JSON.parse(event.target.result);
           if (data.scenarios && Array.isArray(data.scenarios)) {
-            const imported = data.scenarios.map((s, sIdx) => ({
-              ...s,
-              id: Date.now() + sIdx,
-            }));
+            const imported = data.scenarios.map((s, sIdx) => {
+              // If importing old format without baseParams, create snapshot from current params + overrides
+              const baseParams = s.baseParams || { ...params, ...(s.overrides || {}) };
+              return {
+                ...s,
+                id: Date.now() + sIdx,
+                baseParams,
+              };
+            });
             setScenarios([...scenarios, ...imported]);
           }
         } catch (err) {
@@ -915,7 +940,7 @@ export function ScenarioComparison({
       reader.readAsText(file);
       e.target.value = '';
     },
-    [scenarios]
+    [scenarios, params]
   );
 
   // Custom tooltip component with colored indicators
