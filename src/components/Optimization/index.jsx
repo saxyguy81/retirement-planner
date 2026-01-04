@@ -102,13 +102,49 @@ function generateConversionScenarios(baseParams, years, amounts) {
   return scenarios;
 }
 
-export function Optimization({ params, summary, updateParams, onCreateScenario }) {
+export function Optimization({
+  params,
+  summary,
+  updateParams,
+  onCreateScenario,
+  settings = {},
+  options = {},
+}) {
   const [selectedObjective, setSelectedObjective] = useState('maxHeir');
   const [isRunning, setIsRunning] = useState(false);
   const [results, setResults] = useState(null);
   const [conversionYears, setConversionYears] = useState([2026, 2027, 2028, 2029, 2030]);
 
   const objective = OBJECTIVES.find(o => o.id === selectedObjective);
+
+  // Helper to build projection params consistent with useProjections.js
+  const buildProjectionParams = useCallback(
+    (overrides = {}) => {
+      const getExemptSSForYear = year => {
+        const mode = settings.ssExemptionMode || 'disabled';
+        if (mode === 'disabled') return false;
+        if (mode === 'permanent') return true;
+        return year >= 2025 && year <= 2028;
+      };
+
+      return {
+        ...params,
+        ...options,
+        heirs: params.heirs || [],
+        discountRate: params.discountRate || 0.03,
+        heirDistributionStrategy: params.heirDistributionStrategy || 'even',
+        heirNormalizationYears: params.heirNormalizationYears || 10,
+        getExemptSSForYear,
+        exemptSSFromTax: getExemptSSForYear(params.startYear || 2026),
+        birthYear: settings.primaryBirthYear || params.birthYear,
+        customBrackets: settings.customBrackets || null,
+        customIRMAA: settings.customIRMAA || null,
+        taxYear: settings.taxYear || 2025,
+        ...overrides,
+      };
+    },
+    [params, options, settings]
+  );
 
   const runOptimization = useCallback(() => {
     // Test amounts
@@ -120,7 +156,7 @@ export function Optimization({ params, summary, updateParams, onCreateScenario }
     setTimeout(() => {
       const scenarios = generateConversionScenarios(params, conversionYears, testAmounts);
       const evaluated = scenarios.map(scenario => {
-        const testParams = { ...params, rothConversions: scenario.conversions };
+        const testParams = buildProjectionParams({ rothConversions: scenario.conversions });
         const proj = generateProjections(testParams);
         const sum = calculateSummary(proj);
 
@@ -164,7 +200,7 @@ export function Optimization({ params, summary, updateParams, onCreateScenario }
       });
       setIsRunning(false);
     }, 100);
-  }, [params, summary, objective, conversionYears]);
+  }, [params, summary, objective, conversionYears, buildProjectionParams]);
 
   const applyOptimal = useCallback(() => {
     if (results?.best) {

@@ -421,6 +421,9 @@ export function ScenarioComparison({
   showPV = true,
   pendingScenario = null,
   onPendingScenarioConsumed = null,
+  onScenariosChange = null,
+  settings = {},
+  options = {},
 }) {
   const [scenarios, setScenarios] = useState([]);
   const [savedScenarioSets, setSavedScenarioSets] = useState(() => loadSavedScenarios());
@@ -452,15 +455,53 @@ export function ScenarioComparison({
   }, [pendingScenario, onPendingScenarioConsumed]);
 
   // Calculate all scenario projections
+  // Must match the same parameter merging as useProjections.js to get identical results
   const scenarioResults = useMemo(() => {
+    // Compute exemptSSFromTax function same as useProjections
+    const getExemptSSForYear = year => {
+      const mode = settings.ssExemptionMode || 'disabled';
+      if (mode === 'disabled') return false;
+      if (mode === 'permanent') return true;
+      return year >= 2025 && year <= 2028;
+    };
+
     const results = scenarios.map(scenario => {
-      const mergedParams = { ...params, ...scenario.overrides };
+      // Merge settings the same way useProjections does
+      const mergedParams = {
+        ...params,
+        ...options,
+        heirs: params.heirs || [],
+        discountRate: params.discountRate || 0.03,
+        heirDistributionStrategy: params.heirDistributionStrategy || 'even',
+        heirNormalizationYears: params.heirNormalizationYears || 10,
+        getExemptSSForYear,
+        exemptSSFromTax: getExemptSSForYear(params.startYear || 2026),
+        birthYear: settings.primaryBirthYear || params.birthYear,
+        customBrackets: settings.customBrackets || null,
+        customIRMAA: settings.customIRMAA || null,
+        taxYear: settings.taxYear || 2025,
+        // Apply scenario overrides LAST so they take precedence
+        ...scenario.overrides,
+      };
       const proj = generateProjections(mergedParams);
       const sum = calculateSummary(proj);
       return { ...scenario, projections: proj, summary: sum };
     });
     return results;
-  }, [params, scenarios]);
+  }, [params, scenarios, settings, options]);
+
+  // Report scenarios to parent (for Chat access)
+  useEffect(() => {
+    if (onScenariosChange) {
+      onScenariosChange(
+        scenarioResults.map(s => ({
+          name: s.name,
+          overrides: s.overrides,
+          summary: s.summary,
+        }))
+      );
+    }
+  }, [scenarioResults, onScenariosChange]);
 
   // Get selected scenario for detailed/diff views
   const selectedScenario = useMemo(() => {

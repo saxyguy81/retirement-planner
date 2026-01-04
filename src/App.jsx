@@ -78,9 +78,9 @@ const preloadMap = {
   settings: preloadSettings,
 };
 import { useProjections } from './hooks/useProjections';
+import { loadAIConfig, saveAIConfig } from './lib/aiService';
 import { exportToExcel, exportToJSON, exportToPDF } from './lib/excelExport';
 import { setGlobalPrecision } from './lib/formatters';
-import { loadAIConfig, saveAIConfig } from './lib/aiService';
 
 const TABS = [
   { id: 'projections', icon: Table, label: 'Projections' },
@@ -104,6 +104,7 @@ export default function App() {
   const [saveName, setSaveName] = useState('');
   const [showPV, setShowPV] = useState(true); // Global Present Value toggle
   const [pendingScenario, setPendingScenario] = useState(null);
+  const [chatScenarios, setChatScenarios] = useState([]); // Scenarios for Chat access
   const configFileInputRef = useRef(null);
   const exportMenuRef = useRef(null);
   const saveMenuRef = useRef(null);
@@ -195,6 +196,7 @@ export default function App() {
       type: 'retirement-planner-config',
       params: { ...params },
       options: { ...options },
+      settings: { ...settings },
       aiConfig: loadAIConfig(),
     };
 
@@ -228,7 +230,7 @@ export default function App() {
     a.download = `retirement-config-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [params, options]);
+  }, [params, options, settings]);
 
   // Load configuration from JSON file
   const handleLoadFromFile = useCallback(async () => {
@@ -252,6 +254,7 @@ export default function App() {
           if (data.params) {
             updateParams(data.params);
             if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
+            if (data.settings) updateSettings(data.settings);
             if (data.aiConfig) saveAIConfig(data.aiConfig);
           } else {
             alert('Invalid configuration file');
@@ -261,6 +264,7 @@ export default function App() {
 
         updateParams(data.params);
         if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
+        if (data.settings) updateSettings(data.settings);
         if (data.aiConfig) saveAIConfig(data.aiConfig);
         return;
       } catch (err) {
@@ -271,7 +275,7 @@ export default function App() {
 
     // Fallback: use file input
     configFileInputRef.current?.click();
-  }, [updateParams, setOptions]);
+  }, [updateParams, setOptions, updateSettings]);
 
   // Handle config file input (fallback for browsers without File System Access API)
   const handleConfigImport = useCallback(
@@ -287,6 +291,7 @@ export default function App() {
           if (data.params) {
             updateParams(data.params);
             if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
+            if (data.settings) updateSettings(data.settings);
             if (data.aiConfig) saveAIConfig(data.aiConfig);
           } else {
             alert('Invalid configuration file');
@@ -294,6 +299,7 @@ export default function App() {
         } else {
           updateParams(data.params);
           if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
+          if (data.settings) updateSettings(data.settings);
           if (data.aiConfig) saveAIConfig(data.aiConfig);
         }
       } catch (err) {
@@ -302,7 +308,7 @@ export default function App() {
 
       e.target.value = '';
     },
-    [updateParams, setOptions]
+    [updateParams, setOptions, updateSettings]
   );
 
   // Handle creating scenario from optimizer results (navigates to scenarios tab)
@@ -328,6 +334,11 @@ export default function App() {
       createdAt: Date.now(),
     });
     // DO NOT navigate - let user stay in chat
+  }, []);
+
+  // Callback for ScenarioComparison to report scenarios to Chat
+  const handleScenariosChange = useCallback(scenarios => {
+    setChatScenarios(scenarios);
   }, []);
 
   // Split panel view configurations - use render functions for lazy loading
@@ -743,6 +754,9 @@ export default function App() {
                       showPV={showPV}
                       pendingScenario={pendingScenario}
                       onPendingScenarioConsumed={() => setPendingScenario(null)}
+                      onScenariosChange={handleScenariosChange}
+                      settings={settings}
+                      options={options}
                     />
                   )}
 
@@ -753,6 +767,8 @@ export default function App() {
                       summary={summary}
                       updateParams={updateParams}
                       onCreateScenario={handleCreateScenarioFromOptimizer}
+                      settings={settings}
+                      options={options}
                     />
                   )}
 
@@ -761,9 +777,12 @@ export default function App() {
                       params={params}
                       projections={projections}
                       summary={summary}
+                      scenarios={chatScenarios}
                       onCreateScenario={handleCreateScenarioFromChat}
                       onUpdateParams={updateParams}
                       onNavigate={tab => setActiveTab(tab)}
+                      settings={settings}
+                      options={options}
                     />
                   )}
 

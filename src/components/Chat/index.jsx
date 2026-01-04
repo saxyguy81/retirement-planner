@@ -149,6 +149,8 @@ export function Chat({
   onCreateScenario,
   onUpdateParams,
   onNavigate,
+  settings = {},
+  options = {},
 }) {
   const [messages, setMessages] = useState(() => loadChatHistory());
   const [input, setInput] = useState('');
@@ -207,6 +209,38 @@ export function Chat({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent]);
+
+  // Helper to build projection params consistent with useProjections.js
+  // This ensures Chat's run_projection, analyze, and stress_test use the same
+  // settings (birthYear, customBrackets, taxYear, etc.) as the base case
+  const buildProjectionParams = useCallback(
+    (overrides = {}) => {
+      const getExemptSSForYear = year => {
+        const mode = settings.ssExemptionMode || 'disabled';
+        if (mode === 'disabled') return false;
+        if (mode === 'permanent') return true;
+        return year >= 2025 && year <= 2028;
+      };
+
+      return {
+        ...params,
+        ...options,
+        heirs: params.heirs || [],
+        discountRate: params.discountRate || 0.03,
+        heirDistributionStrategy: params.heirDistributionStrategy || 'even',
+        heirNormalizationYears: params.heirNormalizationYears || 10,
+        getExemptSSForYear,
+        exemptSSFromTax: getExemptSSForYear(params.startYear || 2026),
+        birthYear: settings.primaryBirthYear || params.birthYear,
+        customBrackets: settings.customBrackets || null,
+        customIRMAA: settings.customIRMAA || null,
+        taxYear: settings.taxYear || 2025,
+        // Apply overrides LAST so they take precedence
+        ...overrides,
+      };
+    },
+    [params, options, settings]
+  );
 
   // Execute tool calls
   const executeToolCall = useCallback(
@@ -321,7 +355,7 @@ export function Chat({
 
         case 'run_projection': {
           const overrides = args.overrides || {};
-          const testParams = { ...params, ...overrides };
+          const testParams = buildProjectionParams(overrides);
           const proj = generateProjections(testParams);
           const sum = calculateSummary(proj);
           return JSON.stringify({
@@ -509,7 +543,7 @@ export function Chat({
               overrides.annualExpenses = testValue;
             }
 
-            const testParams = { ...params, ...overrides };
+            const testParams = buildProjectionParams(overrides);
             const proj = generateProjections(testParams);
             const sum = calculateSummary(proj);
 
@@ -596,10 +630,9 @@ export function Chat({
           const metrics = args.metrics || ['endingPortfolio', 'endingHeirValue', 'totalTaxPaid'];
 
           const results = scenariosToRun.map(scenario => {
-            const testParams = {
-              ...params,
+            const testParams = buildProjectionParams({
               expectedReturn: scenario.returnRate,
-            };
+            });
             const proj = generateProjections(testParams);
             const sum = calculateSummary(proj);
 
