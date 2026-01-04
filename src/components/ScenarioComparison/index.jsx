@@ -26,6 +26,7 @@ import {
   LayoutList,
   Columns,
   GitMerge,
+  ChevronDown,
 } from 'lucide-react';
 import { useState, useMemo, useCallback, Fragment, useEffect } from 'react';
 import {
@@ -204,6 +205,7 @@ function DiffTable({
   scenarioColor,
   showPV,
   discountRate = 0.03,
+  baseName = 'Base Case',
 }) {
   // Threshold for considering a change "insignificant" (1%)
   const INSIGNIFICANT_THRESHOLD = 0.01;
@@ -286,7 +288,7 @@ function DiffTable({
       {/* Header with comparison indicator */}
       <div className="p-2 border-b border-slate-700 flex items-center gap-2">
         <div className="w-3 h-3 rounded-full bg-emerald-500" />
-        <span className="text-emerald-400 text-xs">Base Case</span>
+        <span className="text-emerald-400 text-xs">{baseName}</span>
         <span className="text-slate-500 mx-1">vs</span>
         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: scenarioColor }} />
         <span className="text-xs" style={{ color: scenarioColor }}>
@@ -391,6 +393,106 @@ function DiffTable({
   );
 }
 
+/**
+ * MultiDiffSummary - Shows summary comparison cards for multiple scenarios
+ * First scenario (or base if included) is the reference
+ */
+function MultiDiffSummary({
+  baseProjections,
+  baseSummary,
+  scenarios,
+  includeBase,
+  showPV,
+  scenarioColors,
+}) {
+  // Reference is base if included, otherwise first scenario
+  const referenceProj = includeBase ? baseProjections : scenarios[0]?.projections;
+  const referenceSum = includeBase ? baseSummary : scenarios[0]?.summary;
+  const referenceName = includeBase ? 'Base Case' : scenarios[0]?.name;
+  const referenceColor = includeBase ? '#10b981' : scenarioColors[0];
+
+  // Scenarios to compare (exclude reference if it's from scenarios)
+  const compareScenarios = includeBase ? scenarios : scenarios.slice(1);
+
+  const metrics = [
+    { label: 'Final Portfolio', key: 'endingPortfolio', pvKey: 'pvTotalEOY', higherIsBetter: true },
+    { label: 'Heir Value', key: 'endingHeirValue', pvKey: 'pvHeirValue', higherIsBetter: true },
+    { label: 'Total Tax', key: 'totalTaxPaid', pvKey: null, higherIsBetter: false },
+  ];
+
+  const getValue = (proj, sum, metric) => {
+    if (showPV && metric.pvKey && proj?.length) {
+      return proj[proj.length - 1]?.[metric.pvKey];
+    }
+    return sum?.[metric.key];
+  };
+
+  const refValues = metrics.map(m => getValue(referenceProj, referenceSum, m));
+
+  return (
+    <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+      <div className="p-3 border-b border-slate-700">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 text-xs">Reference:</span>
+          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: referenceColor }} />
+          <span className="text-sm font-medium" style={{ color: referenceColor }}>
+            {referenceName}
+          </span>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-slate-700">
+              <th className="text-left py-2 px-3 text-slate-400 font-normal">Metric</th>
+              <th className="text-right py-2 px-3 font-normal" style={{ color: referenceColor }}>
+                {referenceName}
+              </th>
+              {compareScenarios.map((s, idx) => (
+                <th
+                  key={s.id}
+                  className="text-right py-2 px-3 font-normal"
+                  style={{ color: scenarioColors[includeBase ? idx : idx + 1] }}
+                >
+                  {s.name}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {metrics.map((metric, mIdx) => (
+              <tr key={metric.key} className="border-b border-slate-800">
+                <td className="py-2 px-3 text-slate-300">{metric.label}</td>
+                <td className="py-2 px-3 text-right text-slate-200 font-mono">
+                  {fmt$(refValues[mIdx])}
+                </td>
+                {compareScenarios.map(s => {
+                  const val = getValue(s.projections, s.summary, metric);
+                  const diff = val - refValues[mIdx];
+                  const isBetter = metric.higherIsBetter ? diff > 0 : diff < 0;
+                  return (
+                    <td key={s.id} className="py-2 px-3 text-right font-mono">
+                      <div className="text-slate-200">{fmt$(val)}</div>
+                      {diff !== 0 && (
+                        <div
+                          className={`text-xs ${isBetter ? 'text-emerald-400' : 'text-rose-400'}`}
+                        >
+                          {diff > 0 ? '+' : ''}
+                          {fmt$(diff)}
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // Load saved scenarios from localStorage
 const loadSavedScenarios = () => {
   try {
@@ -438,18 +540,26 @@ export function ScenarioComparison({
 
   // Phase 5: Enhanced view modes
   const [viewMode, setViewMode] = useState('summary'); // 'summary' | 'detailed' | 'diff'
-  const [selectedScenarioId, setSelectedScenarioId] = useState(null); // For detailed/diff views
+  // Multi-select: Set of scenario IDs to include in comparison
+  const [selectedScenarioIds, setSelectedScenarioIds] = useState(new Set());
+  // Toggle to include/exclude base case from comparison
+  const [includeBaseCase, setIncludeBaseCase] = useState(true);
+  // Dropdown visibility for scenario selector
+  const [showScenarioSelector, setShowScenarioSelector] = useState(false);
 
   // Handle incoming scenario from optimizer
   useEffect(() => {
     if (pendingScenario) {
+      const newId = pendingScenario.createdAt || Date.now();
       const newScenario = {
-        id: pendingScenario.createdAt || Date.now(),
+        id: newId,
         name: pendingScenario.name || 'From Optimizer',
         description: pendingScenario.description || '',
         overrides: pendingScenario.overrides || {},
       };
       setScenarios(prev => [...prev, newScenario]);
+      // Auto-select the new scenario
+      setSelectedScenarioIds(prev => new Set([...prev, newId]));
       onPendingScenarioConsumed?.();
     }
   }, [pendingScenario, onPendingScenarioConsumed]);
@@ -490,6 +600,38 @@ export function ScenarioComparison({
     return results;
   }, [params, scenarios, settings, options]);
 
+  // Toggle a scenario in/out of selection
+  const toggleScenarioSelection = useCallback(id => {
+    setSelectedScenarioIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  // Select all scenarios
+  const selectAllScenarios = useCallback(() => {
+    setSelectedScenarioIds(new Set(scenarioResults.map(s => s.id)));
+  }, [scenarioResults]);
+
+  // Clear all selections
+  const clearScenarioSelection = useCallback(() => {
+    setSelectedScenarioIds(new Set());
+  }, []);
+
+  // Get selected scenarios for display
+  const selectedScenarios = useMemo(() => {
+    if (selectedScenarioIds.size === 0) {
+      // If nothing selected, default to all scenarios
+      return scenarioResults;
+    }
+    return scenarioResults.filter(s => selectedScenarioIds.has(s.id));
+  }, [scenarioResults, selectedScenarioIds]);
+
   // Report scenarios to parent (for Chat access)
   useEffect(() => {
     if (onScenariosChange) {
@@ -502,21 +644,6 @@ export function ScenarioComparison({
       );
     }
   }, [scenarioResults, onScenariosChange]);
-
-  // Get selected scenario for detailed/diff views
-  const selectedScenario = useMemo(() => {
-    if (!selectedScenarioId && scenarioResults.length > 0) {
-      return scenarioResults[0];
-    }
-    return scenarioResults.find(s => s.id === selectedScenarioId) || null;
-  }, [selectedScenarioId, scenarioResults]);
-
-  // Get color for selected scenario
-  const selectedScenarioColor = useMemo(() => {
-    if (!selectedScenario) return SCENARIO_COLORS[0];
-    const idx = scenarioResults.findIndex(s => s.id === selectedScenario.id);
-    return SCENARIO_COLORS[idx % SCENARIO_COLORS.length];
-  }, [selectedScenario, scenarioResults]);
 
   // Get the appropriate metric key based on PV toggle
   const getMetricKey = useCallback(
@@ -538,17 +665,18 @@ export function ScenarioComparison({
   // Comparison chart data
   const comparisonData = useMemo(() => {
     const metricKey = getMetricKey(selectedMetric);
-    if (scenarioResults.length === 0)
-      return projections.map(p => ({ year: p.year, Base: p[metricKey] / 1e6 }));
-
-    return projections.map((p, pIdx) => {
-      const row = { year: p.year, Base: p[metricKey] / 1e6 };
-      scenarioResults.forEach(s => {
+    const data = projections.map((p, pIdx) => {
+      const row = { year: p.year };
+      if (includeBaseCase) {
+        row.Base = p[metricKey] / 1e6;
+      }
+      selectedScenarios.forEach(s => {
         row[s.name] = s.projections[pIdx]?.[metricKey] / 1e6 || 0;
       });
       return row;
     });
-  }, [projections, scenarioResults, selectedMetric, getMetricKey]);
+    return data;
+  }, [projections, selectedScenarios, selectedMetric, getMetricKey, includeBaseCase]);
 
   // Summary metrics for comparison - some have PV equivalents
   const comparisonMetrics = useMemo(
@@ -626,13 +754,16 @@ export function ScenarioComparison({
   // Create a scenario with given name (used by both preset and custom flows)
   const createScenario = useCallback(
     (preset, customName = null) => {
+      const newId = Date.now();
       const newScenario = {
-        id: Date.now(),
+        id: newId,
         name: customName || (preset ? preset.name : getDefaultScenarioName('custom')),
         description: preset?.description || '',
         overrides: preset?.overrides || {},
       };
       setScenarios(prev => [...prev, newScenario]);
+      // Auto-select the new scenario
+      setSelectedScenarioIds(prev => new Set([...prev, newId]));
       setShowPresets(false);
       setNamingScenario(null);
     },
@@ -656,10 +787,12 @@ export function ScenarioComparison({
 
   const removeScenario = id => {
     setScenarios(scenarios.filter(s => s.id !== id));
-    // Reset selected scenario if it was removed
-    if (selectedScenarioId === id) {
-      setSelectedScenarioId(null);
-    }
+    // Remove from selection
+    setSelectedScenarioIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
   const duplicateScenario = scenario => {
@@ -855,20 +988,85 @@ export function ScenarioComparison({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {/* Scenario Selector for Detailed/Diff views */}
+          {/* Include Base Case Toggle */}
+          {scenarios.length > 0 && (
+            <>
+              <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeBaseCase}
+                  onChange={e => setIncludeBaseCase(e.target.checked)}
+                  className="w-3 h-3 rounded border-slate-600 bg-slate-800
+                             checked:bg-emerald-600 checked:border-emerald-600
+                             focus:ring-0 focus:ring-offset-0"
+                />
+                <span className="text-slate-400">Include base</span>
+              </label>
+              <div className="w-px h-4 bg-slate-700" />
+            </>
+          )}
+
+          {/* Scenario Multi-Select */}
           {scenarios.length > 0 && (viewMode === 'detailed' || viewMode === 'diff') && (
             <>
-              <select
-                value={selectedScenarioId || scenarioResults[0]?.id || ''}
-                onChange={e => setSelectedScenarioId(Number(e.target.value))}
-                className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs"
-              >
-                {scenarioResults.map((s, _idx) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <button
+                  onClick={() => setShowScenarioSelector(prev => !prev)}
+                  className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs
+                             flex items-center gap-1 hover:bg-slate-700"
+                >
+                  <span>
+                    {selectedScenarioIds.size === 0
+                      ? 'All scenarios'
+                      : `${selectedScenarioIds.size} selected`}
+                  </span>
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+
+                {showScenarioSelector && (
+                  <div
+                    className="absolute right-0 top-full mt-1 w-48 bg-slate-800 border
+                                  border-slate-700 rounded shadow-lg z-20 py-1"
+                  >
+                    {/* Select All / Clear */}
+                    <div className="px-2 py-1 border-b border-slate-700 flex gap-2">
+                      <button
+                        onClick={selectAllScenarios}
+                        className="text-xs text-blue-400 hover:text-blue-300"
+                      >
+                        Select all
+                      </button>
+                      <button
+                        onClick={clearScenarioSelection}
+                        className="text-xs text-slate-400 hover:text-slate-300"
+                      >
+                        Clear
+                      </button>
+                    </div>
+
+                    {/* Scenario Checkboxes */}
+                    {scenarioResults.map((s, idx) => (
+                      <label
+                        key={s.id}
+                        className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-700 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedScenarioIds.size === 0 || selectedScenarioIds.has(s.id)}
+                          onChange={() => toggleScenarioSelection(s.id)}
+                          className="w-3 h-3 rounded border-slate-600 bg-slate-800
+                                     checked:bg-blue-600 checked:border-blue-600"
+                        />
+                        <div
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: SCENARIO_COLORS[idx % SCENARIO_COLORS.length] }}
+                        />
+                        <span className="text-xs text-slate-200 truncate">{s.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="w-px h-4 bg-slate-700" />
             </>
           )}
@@ -1062,45 +1260,48 @@ export function ScenarioComparison({
               <div className="space-y-4">
                 {/* Scenario Cards */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {/* Base Scenario */}
-                  <div className="bg-slate-900 border-2 border-emerald-500/50 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                        <span className="font-medium text-emerald-400">Base Case</span>
+                  {/* Base Scenario Card - only show if includeBaseCase is true */}
+                  {includeBaseCase && (
+                    <div className="bg-slate-900 border-2 border-emerald-500/50 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                          <span className="font-medium text-emerald-400">Base Case</span>
+                        </div>
+                      </div>
+                      <div className="text-slate-400 text-xs mb-3">Current parameters</div>
+                      <div className="space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Final Portfolio</span>
+                          <span className="text-emerald-400 font-medium">
+                            {fmt$(
+                              showPV
+                                ? projections[projections.length - 1]?.pvTotalEOY
+                                : summary.endingPortfolio
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Heir Value</span>
+                          <span className="text-blue-400">
+                            {fmt$(
+                              showPV
+                                ? projections[projections.length - 1]?.pvHeirValue
+                                : summary.endingHeirValue
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Total Tax</span>
+                          <span className="text-rose-400">{fmt$(summary.totalTaxPaid)}</span>
+                        </div>
                       </div>
                     </div>
-                    <div className="text-slate-400 text-xs mb-3">Current parameters</div>
-                    <div className="space-y-1">
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Final Portfolio</span>
-                        <span className="text-emerald-400 font-medium">
-                          {fmt$(
-                            showPV
-                              ? projections[projections.length - 1]?.pvTotalEOY
-                              : summary.endingPortfolio
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Heir Value</span>
-                        <span className="text-blue-400">
-                          {fmt$(
-                            showPV
-                              ? projections[projections.length - 1]?.pvHeirValue
-                              : summary.endingHeirValue
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Total Tax</span>
-                        <span className="text-rose-400">{fmt$(summary.totalTaxPaid)}</span>
-                      </div>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Scenario Cards */}
-                  {scenarioResults.map((scenario, scenarioIdx) => {
+                  {selectedScenarios.map(scenario => {
+                    const originalIdx = scenarioResults.indexOf(scenario);
                     const lastProj = scenario.projections[scenario.projections.length - 1];
                     const baseLastProj = projections[projections.length - 1];
                     const scenarioPortfolio = showPV
@@ -1125,7 +1326,7 @@ export function ScenarioComparison({
                               className="w-3 h-3 rounded-full shrink-0"
                               style={{
                                 backgroundColor:
-                                  SCENARIO_COLORS[scenarioIdx % SCENARIO_COLORS.length],
+                                  SCENARIO_COLORS[originalIdx % SCENARIO_COLORS.length],
                               }}
                             ></div>
                             {isEditing ? (
@@ -1265,17 +1466,21 @@ export function ScenarioComparison({
                         strokeWidth={3}
                         dot={false}
                         name="Base Case"
+                        hide={!includeBaseCase}
                       />
-                      {scenarioResults.map((s, sIdx) => (
-                        <Line
-                          key={s.id}
-                          type="monotone"
-                          dataKey={s.name}
-                          stroke={SCENARIO_COLORS[sIdx % SCENARIO_COLORS.length]}
-                          strokeWidth={2.5}
-                          dot={false}
-                        />
-                      ))}
+                      {selectedScenarios.map(s => {
+                        const originalIdx = scenarioResults.indexOf(s);
+                        return (
+                          <Line
+                            key={s.id}
+                            type="monotone"
+                            dataKey={s.name}
+                            stroke={SCENARIO_COLORS[originalIdx % SCENARIO_COLORS.length]}
+                            strokeWidth={2.5}
+                            dot={false}
+                          />
+                        );
+                      })}
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -1290,36 +1495,55 @@ export function ScenarioComparison({
                       <thead>
                         <tr className="border-b border-slate-700">
                           <th className="text-left py-2 px-3 text-slate-400 font-normal">Metric</th>
-                          <th className="text-right py-2 px-3 text-emerald-400 font-normal">
-                            Base
-                          </th>
-                          {scenarioResults.map((s, sIdx) => (
-                            <th
-                              key={s.id}
-                              className="text-right py-2 px-3 font-normal"
-                              style={{ color: SCENARIO_COLORS[sIdx % SCENARIO_COLORS.length] }}
-                            >
-                              {s.name}
+                          {includeBaseCase && (
+                            <th className="text-right py-2 px-3 text-emerald-400 font-normal">
+                              Base
                             </th>
-                          ))}
+                          )}
+                          {selectedScenarios.map(s => {
+                            const originalIdx = scenarioResults.indexOf(s);
+                            return (
+                              <th
+                                key={s.id}
+                                className="text-right py-2 px-3 font-normal"
+                                style={{
+                                  color: SCENARIO_COLORS[originalIdx % SCENARIO_COLORS.length],
+                                }}
+                              >
+                                {s.name}
+                              </th>
+                            );
+                          })}
                         </tr>
                       </thead>
                       <tbody>
                         {comparisonMetrics.map(metric => {
                           const baseValue = getMetricValue(projections, summary, metric);
+                          // For diff calculation, use first selected scenario if no base
+                          const referenceValue = includeBaseCase
+                            ? baseValue
+                            : getMetricValue(
+                                selectedScenarios[0]?.projections,
+                                selectedScenarios[0]?.summary,
+                                metric
+                              );
+
                           return (
                             <tr
                               key={metric.key}
                               className="border-b border-slate-800 hover:bg-slate-800/50"
                             >
                               <td className="py-2 px-3 text-slate-300">{metric.label}</td>
-                              <td className="py-2 px-3 text-right text-slate-200 font-mono">
-                                {metric.format === '$' ? fmt$(baseValue) : fmtPct(baseValue)}
-                              </td>
-                              {scenarioResults.map(s => {
+                              {includeBaseCase && (
+                                <td className="py-2 px-3 text-right text-slate-200 font-mono">
+                                  {metric.format === '$' ? fmt$(baseValue) : fmtPct(baseValue)}
+                                </td>
+                              )}
+                              {selectedScenarios.map((s, sIdx) => {
                                 const value = getMetricValue(s.projections, s.summary, metric);
-                                const diff =
-                                  metric.format === '$' ? value - baseValue : value - baseValue;
+                                // Skip diff for first scenario if it's the reference
+                                const showDiff = includeBaseCase || sIdx > 0;
+                                const diff = showDiff ? value - referenceValue : 0;
                                 const isBetter =
                                   metric.key === 'totalTaxPaid' || metric.key === 'totalIRMAAPaid'
                                     ? diff < 0
@@ -1330,7 +1554,7 @@ export function ScenarioComparison({
                                     <div className="text-slate-200">
                                       {metric.format === '$' ? fmt$(value) : fmtPct(value)}
                                     </div>
-                                    {diff !== 0 && (
+                                    {showDiff && diff !== 0 && (
                                       <div
                                         className={`text-xs ${isBetter ? 'text-emerald-400' : 'text-rose-400'}`}
                                       >
@@ -1354,64 +1578,70 @@ export function ScenarioComparison({
             {/* Detailed View Mode */}
             {viewMode === 'detailed' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Dynamic grid based on selection count */}
+                <div
+                  className={`grid gap-4 ${
+                    (includeBaseCase ? 1 : 0) + selectedScenarios.length <= 2
+                      ? 'grid-cols-1 lg:grid-cols-2'
+                      : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3'
+                  }`}
+                >
                   {/* Base Case Mini Table */}
-                  <div className="bg-slate-900 border-2 border-emerald-500/50 rounded-lg overflow-hidden">
-                    <div className="p-2 border-b border-emerald-500/30 bg-emerald-500/10">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                        <span className="text-emerald-400 font-medium text-sm">Base Case</span>
-                      </div>
-                    </div>
-                    <MiniProjectionsTable
-                      projections={projections}
-                      label="Metric"
-                      color="#10b981"
-                      showPV={showPV}
-                    />
-                  </div>
-
-                  {/* Selected Scenario Mini Table */}
-                  {selectedScenario && (
-                    <div
-                      className="bg-slate-900 border-2 rounded-lg overflow-hidden"
-                      style={{ borderColor: `${selectedScenarioColor}80` }}
-                    >
-                      <div
-                        className="p-2 border-b"
-                        style={{
-                          borderColor: `${selectedScenarioColor}50`,
-                          backgroundColor: `${selectedScenarioColor}10`,
-                        }}
-                      >
+                  {includeBaseCase && (
+                    <div className="bg-slate-900 border-2 border-emerald-500/50 rounded-lg overflow-hidden">
+                      <div className="p-2 border-b border-emerald-500/30 bg-emerald-500/10">
                         <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: selectedScenarioColor }}
-                          />
-                          <span
-                            className="font-medium text-sm"
-                            style={{ color: selectedScenarioColor }}
-                          >
-                            {selectedScenario.name}
-                          </span>
+                          <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                          <span className="text-emerald-400 font-medium text-sm">Base Case</span>
                         </div>
                       </div>
                       <MiniProjectionsTable
-                        projections={selectedScenario.projections}
+                        projections={projections}
                         label="Metric"
-                        color={selectedScenarioColor}
+                        color="#10b981"
                         showPV={showPV}
                       />
                     </div>
                   )}
+
+                  {/* Selected Scenario Mini Tables */}
+                  {selectedScenarios.map(scenario => {
+                    const originalIdx = scenarioResults.indexOf(scenario);
+                    const color = SCENARIO_COLORS[originalIdx % SCENARIO_COLORS.length];
+                    return (
+                      <div
+                        key={scenario.id}
+                        className="bg-slate-900 border-2 rounded-lg overflow-hidden"
+                        style={{ borderColor: `${color}80` }}
+                      >
+                        <div
+                          className="p-2 border-b"
+                          style={{ borderColor: `${color}50`, backgroundColor: `${color}10` }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: color }}
+                            />
+                            <span className="font-medium text-sm" style={{ color }}>
+                              {scenario.name}
+                            </span>
+                          </div>
+                        </div>
+                        <MiniProjectionsTable
+                          projections={scenario.projections}
+                          label="Metric"
+                          color={color}
+                          showPV={showPV}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
 
-                {/* Comparison Chart in Detailed View */}
+                {/* Comparison Chart */}
                 <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="text-slate-200 font-medium">Side-by-Side Trend</div>
-                  </div>
+                  <div className="text-slate-200 font-medium mb-4">Side-by-Side Trend</div>
                   <ResponsiveContainer width="100%" height={250}>
                     <LineChart data={comparisonData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -1423,23 +1653,29 @@ export function ScenarioComparison({
                       />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ paddingTop: '10px' }} iconType="line" iconSize={12} />
-                      <Line
-                        type="monotone"
-                        dataKey="Base"
-                        stroke="#10b981"
-                        strokeWidth={3}
-                        dot={false}
-                        name="Base Case"
-                      />
-                      {selectedScenario && (
+                      {includeBaseCase && (
                         <Line
                           type="monotone"
-                          dataKey={selectedScenario.name}
-                          stroke={selectedScenarioColor}
+                          dataKey="Base"
+                          stroke="#10b981"
                           strokeWidth={3}
                           dot={false}
+                          name="Base Case"
                         />
                       )}
+                      {selectedScenarios.map(s => {
+                        const originalIdx = scenarioResults.indexOf(s);
+                        return (
+                          <Line
+                            key={s.id}
+                            type="monotone"
+                            dataKey={s.name}
+                            stroke={SCENARIO_COLORS[originalIdx % SCENARIO_COLORS.length]}
+                            strokeWidth={3}
+                            dot={false}
+                          />
+                        );
+                      })}
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -1447,157 +1683,125 @@ export function ScenarioComparison({
             )}
 
             {/* Diff View Mode */}
-            {viewMode === 'diff' && selectedScenario && (
+            {viewMode === 'diff' && (
               <div className="space-y-4">
-                {/* Diff Table */}
-                <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
-                  <DiffTable
-                    baseProjections={projections}
-                    scenarioProjections={selectedScenario.projections}
-                    scenarioName={selectedScenario.name}
-                    scenarioColor={selectedScenarioColor}
-                    showPV={showPV}
-                  />
-                </div>
-
-                {/* Summary Diff Cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                  {[
-                    {
-                      label: 'Final Portfolio',
-                      base: showPV
-                        ? projections[projections.length - 1]?.pvTotalEOY
-                        : summary.endingPortfolio,
-                      scenario: showPV
-                        ? selectedScenario.projections[selectedScenario.projections.length - 1]
-                            ?.pvTotalEOY
-                        : selectedScenario.summary.endingPortfolio,
-                      higherIsBetter: true,
-                      format: '$',
-                    },
-                    {
-                      label: 'Heir Value',
-                      base: showPV
-                        ? projections[projections.length - 1]?.pvHeirValue
-                        : summary.endingHeirValue,
-                      scenario: showPV
-                        ? selectedScenario.projections[selectedScenario.projections.length - 1]
-                            ?.pvHeirValue
-                        : selectedScenario.summary.endingHeirValue,
-                      higherIsBetter: true,
-                      format: '$',
-                    },
-                    {
-                      label: 'Total Tax Paid',
-                      base: summary.totalTaxPaid,
-                      scenario: selectedScenario.summary.totalTaxPaid,
-                      higherIsBetter: false,
-                      format: '$',
-                    },
-                    {
-                      label: 'Final Roth %',
-                      base: projections[projections.length - 1]?.rothPercent,
-                      scenario:
-                        selectedScenario.projections[selectedScenario.projections.length - 1]
-                          ?.rothPercent,
-                      higherIsBetter: true,
-                      format: '%',
-                    },
-                  ].map(item => {
-                    const diff = item.scenario - item.base;
-                    const isBetter = item.higherIsBetter ? diff > 0 : diff < 0;
-                    const diffFormatted = item.format === '%' ? fmtPct(diff) : fmt$(diff);
-
-                    return (
-                      <div
-                        key={item.label}
-                        className="bg-slate-900 border border-slate-700 rounded-lg p-3"
-                      >
-                        <div className="text-slate-400 text-xs mb-2">{item.label}</div>
-                        <div className="flex items-baseline gap-2">
-                          <span
-                            className={`text-lg font-medium ${
-                              diff === 0
-                                ? 'text-slate-400'
-                                : isBetter
-                                  ? 'text-emerald-400'
-                                  : 'text-rose-400'
-                            }`}
-                          >
-                            {diff > 0 ? '+' : ''}
-                            {diffFormatted}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-xs mt-2 text-slate-500">
-                          <span>
-                            Base: {item.format === '%' ? fmtPct(item.base) : fmt$(item.base)}
-                          </span>
-                          <span>
-                            {selectedScenario.name}:{' '}
-                            {item.format === '%' ? fmtPct(item.scenario) : fmt$(item.scenario)}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Difference Bar Chart */}
-                <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                  <div className="text-slate-200 font-medium mb-4">
-                    Portfolio Difference Over Time
+                {/* Need at least 2 items to compare */}
+                {(includeBaseCase ? 1 : 0) + selectedScenarios.length < 2 ? (
+                  <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+                    <GitMerge className="w-12 h-12 mb-3 opacity-50" />
+                    <div className="text-lg mb-2">Need at least 2 scenarios to compare</div>
+                    <div className="text-sm">
+                      Select more scenarios or enable &quot;Include base&quot;
+                    </div>
                   </div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart
-                      data={projections
-                        .filter((_, pIdx) => pIdx % 3 === 0 || pIdx === projections.length - 1)
-                        .map(p => {
-                          const baseVal = showPV ? p.pvTotalEOY : p.totalEOY;
-                          const scenarioRow = selectedScenario.projections.find(
-                            sp => sp.year === p.year
-                          );
-                          const scenarioVal = scenarioRow
-                            ? showPV
-                              ? scenarioRow.pvTotalEOY
-                              : scenarioRow.totalEOY
-                            : 0;
-                          return {
-                            year: p.year,
-                            diff: (scenarioVal - baseVal) / 1e6,
-                          };
-                        })}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="year" stroke="#64748b" fontSize={10} />
-                      <YAxis
-                        stroke="#64748b"
-                        fontSize={10}
-                        tickFormatter={v => `${v >= 0 ? '+' : ''}$${v.toFixed(1)}M`}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
-                          fontSize: '11px',
-                        }}
-                        formatter={value => [
-                          `${value >= 0 ? '+' : ''}$${value.toFixed(2)}M`,
-                          'Difference',
-                        ]}
-                      />
-                      <Bar dataKey="diff" fill={selectedScenarioColor} radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
+                ) : (
+                  <>
+                    {/* Multi-Scenario Summary Comparison */}
+                    <MultiDiffSummary
+                      baseProjections={projections}
+                      baseSummary={summary}
+                      scenarios={selectedScenarios}
+                      includeBase={includeBaseCase}
+                      showPV={showPV}
+                      scenarioColors={selectedScenarios.map(s => {
+                        const idx = scenarioResults.indexOf(s);
+                        return SCENARIO_COLORS[idx % SCENARIO_COLORS.length];
+                      })}
+                    />
 
-            {/* Fallback for diff view without scenario */}
-            {viewMode === 'diff' && !selectedScenario && (
-              <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-                <GitMerge className="w-12 h-12 mb-3 opacity-50" />
-                <div className="text-lg mb-2">No scenario selected</div>
-                <div className="text-sm">Select a scenario to compare with the base case</div>
+                    {/* Individual Diff Tables - show each scenario vs reference */}
+                    {selectedScenarios.length > 0 &&
+                      (includeBaseCase || selectedScenarios.length > 1) && (
+                        <div className="space-y-4">
+                          <div className="text-slate-400 text-xs">
+                            Detailed year-by-year comparison:
+                          </div>
+                          {(includeBaseCase ? selectedScenarios : selectedScenarios.slice(1)).map(
+                            scenario => {
+                              const originalIdx = scenarioResults.indexOf(scenario);
+                              const color = SCENARIO_COLORS[originalIdx % SCENARIO_COLORS.length];
+                              const referenceProj = includeBaseCase
+                                ? projections
+                                : selectedScenarios[0].projections;
+                              const referenceName = includeBaseCase
+                                ? 'Base Case'
+                                : selectedScenarios[0].name;
+
+                              return (
+                                <div
+                                  key={scenario.id}
+                                  className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden"
+                                >
+                                  <DiffTable
+                                    baseProjections={referenceProj}
+                                    scenarioProjections={scenario.projections}
+                                    scenarioName={scenario.name}
+                                    scenarioColor={color}
+                                    showPV={showPV}
+                                    baseName={referenceName}
+                                  />
+                                </div>
+                              );
+                            }
+                          )}
+                        </div>
+                      )}
+
+                    {/* Multi-Scenario Bar Chart */}
+                    <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+                      <div className="text-slate-200 font-medium mb-4">
+                        Portfolio Comparison Over Time
+                      </div>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <BarChart
+                          data={projections
+                            .filter((_, pIdx) => pIdx % 5 === 0 || pIdx === projections.length - 1)
+                            .map(p => {
+                              const row = { year: p.year };
+                              if (includeBaseCase) {
+                                row['Base'] = (showPV ? p.pvTotalEOY : p.totalEOY) / 1e6;
+                              }
+                              selectedScenarios.forEach(s => {
+                                const sRow = s.projections.find(sp => sp.year === p.year);
+                                row[s.name] = sRow
+                                  ? (showPV ? sRow.pvTotalEOY : sRow.totalEOY) / 1e6
+                                  : 0;
+                              });
+                              return row;
+                            })}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                          <XAxis dataKey="year" stroke="#64748b" fontSize={10} />
+                          <YAxis
+                            stroke="#64748b"
+                            fontSize={10}
+                            tickFormatter={v => `$${v.toFixed(1)}M`}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: '#1e293b',
+                              border: '1px solid #334155',
+                              fontSize: '11px',
+                            }}
+                            formatter={value => [`$${value?.toFixed(2)}M`]}
+                          />
+                          <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                          {includeBaseCase && <Bar dataKey="Base" fill="#10b981" />}
+                          {selectedScenarios.map(s => {
+                            const idx = scenarioResults.indexOf(s);
+                            return (
+                              <Bar
+                                key={s.id}
+                                dataKey={s.name}
+                                fill={SCENARIO_COLORS[idx % SCENARIO_COLORS.length]}
+                              />
+                            );
+                          })}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </>
