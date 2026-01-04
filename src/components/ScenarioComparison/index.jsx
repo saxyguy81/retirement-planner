@@ -27,6 +27,7 @@ import {
   Columns,
   GitMerge,
   ChevronDown,
+  RotateCcw,
 } from 'lucide-react';
 import { useState, useMemo, useCallback, Fragment, useEffect } from 'react';
 import {
@@ -524,6 +525,7 @@ export function ScenarioComparison({
   pendingScenario = null,
   onPendingScenarioConsumed = null,
   onScenariosChange = null,
+  onApplyScenario = null,
   settings = {},
   options = {},
 }) {
@@ -1391,6 +1393,15 @@ export function ScenarioComparison({
                             )}
                           </div>
                           <div className="flex items-center gap-1 shrink-0 ml-2">
+                            {onApplyScenario && (
+                              <button
+                                onClick={() => onApplyScenario(scenario.baseParams)}
+                                className="text-slate-500 hover:text-emerald-400 p-0.5"
+                                title="Apply to base inputs"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                              </button>
+                            )}
                             <button
                               onClick={() => startEditing(scenario)}
                               className="text-slate-500 hover:text-blue-400 p-0.5"

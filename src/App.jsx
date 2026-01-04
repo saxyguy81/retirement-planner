@@ -756,6 +756,7 @@ export default function App() {
                       pendingScenario={pendingScenario}
                       onPendingScenarioConsumed={() => setPendingScenario(null)}
                       onScenariosChange={handleScenariosChange}
+                      onApplyScenario={updateParams}
                       settings={settings}
                       options={options}
                     />
