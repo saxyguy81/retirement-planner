@@ -39,6 +39,7 @@ import { LazyErrorBoundary } from './components/LazyErrorBoundary';
 import { LazyLoadingFallback } from './components/LazyLoadingFallback';
 import { ProjectionsTable } from './components/ProjectionsTable';
 import { SplitPanel } from './components/SplitPanel';
+import UpdatePrompt from './components/UpdatePrompt';
 
 // Lazy imports - loaded on demand
 const Dashboard = lazy(() =>
@@ -834,6 +835,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <UpdatePrompt />
     </div>
   );
 }
