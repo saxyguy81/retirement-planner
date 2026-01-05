@@ -20,8 +20,9 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  ExternalLink,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import { TaxTablesEditor } from './TaxTablesEditor';
 import {
@@ -31,6 +32,7 @@ import {
   loadAIConfig,
   DEFAULT_AI_CONFIG,
 } from '../../lib/aiService';
+import { fetchModelsForProvider } from '../../lib/modelFetcher';
 
 // Collapsible section wrapper
 function SettingsSection({ title, icon: Icon, expanded, onToggle, color, children }) {
@@ -92,11 +94,71 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
   const [testStatus, setTestStatus] = useState(null);
   const [testMessage, setTestMessage] = useState('');
 
+  // Dynamic model fetching state
+  const [dynamicModels, setDynamicModels] = useState([]);
+  const [modelLoadingState, setModelLoadingState] = useState('idle'); // 'idle' | 'loading' | 'success' | 'error'
+  const [modelError, setModelError] = useState('');
+  const [manualModelEntry, setManualModelEntry] = useState(false);
+
   const toggle = section => {
     setExpanded(prev =>
       prev.includes(section) ? prev.filter(s => s !== section) : [...prev, section]
     );
   };
+
+  // Fetch models when provider or API key changes
+  useEffect(() => {
+    const provider = aiConfig.provider;
+    const apiKey = aiConfig.apiKey;
+    const customBaseUrl = aiConfig.customBaseUrl;
+
+    // Skip for custom provider (no discovery)
+    if (provider === 'custom') {
+      setDynamicModels([]);
+      setModelLoadingState('idle');
+      return;
+    }
+
+    // Ollama doesn't need API key
+    const needsKey = PROVIDERS[provider]?.requiresApiKey !== false;
+    if (needsKey && !apiKey) {
+      setDynamicModels(PROVIDERS[provider]?.defaultModels || []);
+      setModelLoadingState('idle');
+      return;
+    }
+
+    // Debounce the fetch
+    const timeoutId = setTimeout(async () => {
+      setModelLoadingState('loading');
+      setModelError('');
+      setManualModelEntry(false);
+
+      try {
+        const models = await fetchModelsForProvider(provider, apiKey, customBaseUrl);
+        setDynamicModels(models);
+        setModelLoadingState('success');
+
+        // Auto-select first model if current model not in list
+        if (models.length > 0) {
+          setAiConfig(prev => {
+            if (!models.includes(prev.model)) {
+              const newConfig = { ...prev, model: models[0] };
+              saveAIConfig(newConfig);
+              return newConfig;
+            }
+            return prev;
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch models:', error);
+        setModelError(error.message);
+        setDynamicModels(PROVIDERS[provider]?.defaultModels || []);
+        setModelLoadingState('error');
+      }
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [aiConfig.provider, aiConfig.apiKey, aiConfig.customBaseUrl]);
 
   // AI config handlers
   const updateAiConfig = updates => {
@@ -107,7 +169,8 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
   };
 
   const handleTestConnection = async () => {
-    if (!aiConfig.apiKey && aiConfig.provider !== 'custom') {
+    const needsKey = PROVIDERS[aiConfig.provider]?.requiresApiKey !== false;
+    if (!aiConfig.apiKey && needsKey && aiConfig.provider !== 'custom') {
       setTestStatus('error');
       setTestMessage('Please enter an API key');
       return;
@@ -281,8 +344,11 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
                 value={aiConfig.provider}
                 onChange={e => {
                   const newProvider = e.target.value;
-                  const defaultModel = PROVIDERS[newProvider]?.models[0] || '';
+                  const defaultModel = PROVIDERS[newProvider]?.defaultModels?.[0] || '';
                   updateAiConfig({ provider: newProvider, model: defaultModel });
+                  setDynamicModels([]);
+                  setModelLoadingState('idle');
+                  setManualModelEntry(false);
                 }}
                 className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
               >
@@ -315,17 +381,58 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
               <div className="text-slate-500 text-[10px] mt-1">
                 Your API key is stored locally and never sent to our servers.
               </div>
+              {/* Built-in key option for Google */}
+              {currentProvider?.hasBuiltInKey && (
+                <button
+                  onClick={() => updateAiConfig({ apiKey: DEFAULT_AI_CONFIG.apiKey })}
+                  className="mt-2 text-purple-400 text-xs hover:text-purple-300 underline"
+                >
+                  Use built-in API key
+                </button>
+              )}
             </div>
 
             {/* Model Selection */}
             <div>
-              <label className="block text-slate-400 text-xs mb-1">Model</label>
-              {aiConfig.provider === 'custom' ? (
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-slate-400 text-xs">
+                  Model
+                  {modelLoadingState === 'loading' && (
+                    <Loader2 className="w-3 h-3 animate-spin inline ml-2" />
+                  )}
+                </label>
+                {currentProvider?.modelsDocsUrl && (
+                  <a
+                    href={currentProvider.modelsDocsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-purple-400 text-[10px] hover:text-purple-300 flex items-center gap-1"
+                  >
+                    See available models
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+
+              {modelLoadingState === 'error' && (
+                <div className="text-amber-400 text-xs mb-2 flex items-center gap-1">
+                  <XCircle className="w-3 h-3" />
+                  <span className="flex-1 truncate">{modelError}</span>
+                  <button
+                    onClick={() => setManualModelEntry(true)}
+                    className="text-purple-400 underline ml-1 whitespace-nowrap"
+                  >
+                    Enter manually
+                  </button>
+                </div>
+              )}
+
+              {aiConfig.provider === 'custom' || manualModelEntry ? (
                 <input
                   type="text"
                   value={aiConfig.model}
                   onChange={e => updateAiConfig({ model: e.target.value })}
-                  placeholder="Model name"
+                  placeholder="Model name (e.g., gpt-4o)"
                   className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
                 />
               ) : (
@@ -333,25 +440,54 @@ export function SettingsPanel({ settings, updateSettings, resetSettings }) {
                   value={aiConfig.model}
                   onChange={e => updateAiConfig({ model: e.target.value })}
                   className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                  disabled={modelLoadingState === 'loading'}
                 >
-                  {currentProvider?.models.map(model => (
-                    <option key={model} value={model}>
-                      {model}
-                    </option>
-                  ))}
+                  {(() => {
+                    const models =
+                      dynamicModels.length > 0
+                        ? dynamicModels
+                        : currentProvider?.defaultModels || [];
+                    if (models.length === 0) {
+                      return (
+                        <option value="" disabled>
+                          {modelLoadingState === 'loading'
+                            ? 'Loading models...'
+                            : 'Enter API key to load models'}
+                        </option>
+                      );
+                    }
+                    return models.map(model => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ));
+                  })()}
                 </select>
+              )}
+
+              {modelLoadingState === 'success' && dynamicModels.length > 0 && (
+                <div className="text-emerald-400 text-xs mt-1">
+                  {dynamicModels.length} models available
+                </div>
               )}
             </div>
 
-            {/* Custom Base URL (for custom provider) */}
-            {aiConfig.provider === 'custom' && (
+            {/* Custom Base URL - show for custom and ollama */}
+            {(aiConfig.provider === 'custom' || aiConfig.provider === 'ollama') && (
               <div>
                 <label className="block text-slate-400 text-xs mb-1">Base URL</label>
                 <input
                   type="text"
-                  value={aiConfig.customBaseUrl}
+                  value={
+                    aiConfig.customBaseUrl ||
+                    (aiConfig.provider === 'ollama' ? 'http://localhost:11434' : '')
+                  }
                   onChange={e => updateAiConfig({ customBaseUrl: e.target.value })}
-                  placeholder="http://localhost:4000/api/v1/chat/completions"
+                  placeholder={
+                    aiConfig.provider === 'ollama'
+                      ? 'http://localhost:11434'
+                      : 'http://localhost:4000/api/v1/chat/completions'
+                  }
                   className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
                 />
               </div>

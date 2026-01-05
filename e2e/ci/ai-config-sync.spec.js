@@ -47,8 +47,10 @@ test.describe('AI Config Sync', () => {
     const providerSelect = page.locator('div:has(> label:text("Provider")) select');
     await expect(providerSelect).toHaveValue('google');
 
-    // Model should show gemini-2.5-flash
-    const modelSelect = page.locator('div:has(> label:text("Model")) select');
+    // Model should show gemini-2.5-flash (label is now in a flex container)
+    // The AI Assistant section has a select for model - find it by looking within that section
+    const aiSection = page.locator('text=AI Assistant').locator('xpath=ancestor::div[contains(@class, "border-b")]');
+    const modelSelect = aiSection.locator('select').nth(1); // Second select (first is Provider)
     await expect(modelSelect).toHaveValue('gemini-2.5-flash');
   });
 
@@ -69,8 +71,8 @@ test.describe('AI Config Sync', () => {
     // Fill in custom endpoint (placeholder contains "localhost")
     await page.fill('input[placeholder*="localhost"]', 'http://localhost:4000/v1/messages');
 
-    // Fill in model (for custom provider, it's an input field with placeholder "Model name")
-    await page.fill('input[placeholder="Model name"]', 'test-model');
+    // Fill in model (for custom provider, it's an input field with placeholder containing "Model name")
+    await page.fill('input[placeholder*="Model name"]', 'test-model');
 
     // Navigate to Chat
     await page.click('button:has-text("AI Chat")');

@@ -106,6 +106,21 @@ export const TOOL_UI_CONFIG = {
     label: 'Reading web page',
     capability: null, // Internal tool, works with web_search
   },
+  find_optimal: {
+    icon: '🎯',
+    label: 'Finding optimal value',
+    capability: { title: 'Optimize', description: 'Find best conversion amounts' },
+  },
+  run_risk_scenarios: {
+    icon: '📊',
+    label: 'Running risk scenarios',
+    capability: { title: 'Risk Analysis', description: 'Compare best/worst/average outcomes' },
+  },
+  explain_calculation: {
+    icon: '📐',
+    label: 'Explaining calculation',
+    capability: { title: 'Explain Math', description: 'Show step-by-step calculations' },
+  },
 };
 
 // Helper to get capabilities for empty state
@@ -143,14 +158,38 @@ export const AGENT_TOOLS = [
   },
   {
     name: 'get_current_state',
-    description: 'Get current retirement plan parameters, projections, and summary',
+    description:
+      'Get current retirement plan parameters, projections, summary, and tax information',
     parameters: {
       type: 'object',
       properties: {
         include: {
           type: 'array',
-          items: { type: 'string', enum: ['params', 'projections', 'summary', 'scenarios'] },
+          items: {
+            type: 'string',
+            enum: [
+              'params',
+              'projections',
+              'summary',
+              'scenarios',
+              'all_params',
+              'tax_brackets',
+              'irmaa_years',
+            ],
+          },
           description: 'What data to include',
+        },
+        projectionRange: {
+          type: 'string',
+          enum: ['first5', 'last5', 'all', 'custom'],
+          description: 'Which projection years to return',
+        },
+        startYear: { type: 'number', description: 'For custom range: start year' },
+        endYear: { type: 'number', description: 'For custom range: end year' },
+        columns: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Specific projection columns to include',
         },
       },
     },
@@ -266,6 +305,98 @@ export const AGENT_TOOLS = [
         },
       },
       required: ['type'],
+    },
+  },
+  {
+    name: 'find_optimal',
+    description:
+      'Search for the optimal value of a parameter to maximize or minimize a metric. Uses binary search to efficiently find the best value.',
+    parameters: {
+      type: 'object',
+      properties: {
+        parameter: {
+          type: 'string',
+          enum: ['rothConversion', 'expenses', 'ssStartAge'],
+          description: 'Which parameter to optimize',
+        },
+        year: {
+          type: 'number',
+          description: 'For rothConversion: which year to optimize (or omit for uniform)',
+        },
+        metric: {
+          type: 'string',
+          enum: ['endingHeirValue', 'endingPortfolio', 'totalTaxPaid', 'avoidIrmaa'],
+          description: 'What to optimize for',
+        },
+        direction: {
+          type: 'string',
+          enum: ['maximize', 'minimize'],
+          description: 'Whether to maximize or minimize the metric',
+        },
+        minValue: { type: 'number', description: 'Minimum value to try' },
+        maxValue: { type: 'number', description: 'Maximum value to try' },
+        constraint: {
+          type: 'string',
+          enum: ['stayIn22Bracket', 'stayIn24Bracket', 'avoidIrmaa', 'none'],
+          description: 'Optional constraint to respect',
+        },
+      },
+      required: ['parameter', 'metric', 'direction'],
+    },
+  },
+  {
+    name: 'run_risk_scenarios',
+    description:
+      'Run projections under different market return assumptions to show best/worst/average case outcomes',
+    parameters: {
+      type: 'object',
+      properties: {
+        scenarios: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              returnRate: {
+                type: 'number',
+                description: 'Annual real return rate (e.g., 0.02 for 2%)',
+              },
+            },
+          },
+          description: 'Custom scenarios to run. If not provided, uses default worst/average/best.',
+        },
+        metrics: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Which metrics to compare',
+        },
+      },
+    },
+  },
+  {
+    name: 'explain_calculation',
+    description:
+      'Get a detailed step-by-step explanation of how a specific calculation was performed for a given year',
+    parameters: {
+      type: 'object',
+      properties: {
+        year: { type: 'number', description: 'The year to explain' },
+        calculation: {
+          type: 'string',
+          enum: [
+            'federal_tax',
+            'heir_value',
+            'rmd',
+            'roth_conversion_impact',
+            'irmaa',
+            'social_security_tax',
+            'capital_gains_tax',
+            'total_income',
+          ],
+          description: 'Which calculation to explain',
+        },
+      },
+      required: ['year', 'calculation'],
     },
   },
   {
@@ -458,7 +589,12 @@ export const PROVIDERS = {
   anthropic: {
     name: 'Anthropic (Claude)',
     baseUrl: 'https://api.anthropic.com/v1/messages',
-    models: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'],
+    defaultModels: [
+      'claude-sonnet-4-20250514',
+      'claude-3-5-sonnet-20241022',
+      'claude-3-5-haiku-20241022',
+    ],
+    modelsDocsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models',
     headers: apiKey => ({
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
@@ -468,7 +604,8 @@ export const PROVIDERS = {
   openai: {
     name: 'OpenAI',
     baseUrl: 'https://api.openai.com/v1/chat/completions',
-    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
+    defaultModels: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
+    modelsDocsUrl: 'https://platform.openai.com/docs/models',
     headers: apiKey => ({
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
@@ -477,25 +614,48 @@ export const PROVIDERS = {
   google: {
     name: 'Google (Gemini)',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
-    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+    defaultModels: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+    modelsDocsUrl: 'https://ai.google.dev/gemini-api/docs/models/gemini',
+    hasBuiltInKey: true,
     headers: () => ({
+      'Content-Type': 'application/json',
+    }),
+  },
+  groq: {
+    name: 'Groq',
+    baseUrl: 'https://api.groq.com/openai/v1/chat/completions',
+    defaultModels: [], // Fetched dynamically from API
+    modelsDocsUrl: 'https://console.groq.com/docs/models',
+    headers: apiKey => ({
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     }),
   },
   openrouter: {
     name: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
-    models: ['anthropic/claude-sonnet-4', 'openai/gpt-4o', 'google/gemini-pro-1.5'],
+    defaultModels: ['anthropic/claude-sonnet-4', 'openai/gpt-4o', 'google/gemini-pro-1.5'],
+    modelsDocsUrl: 'https://openrouter.ai/models',
     headers: apiKey => ({
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : '',
     }),
   },
+  ollama: {
+    name: 'Ollama (Local)',
+    baseUrl: 'http://localhost:11434/api/chat',
+    defaultModels: [],
+    modelsDocsUrl: 'https://ollama.com/library',
+    requiresApiKey: false,
+    headers: () => ({
+      'Content-Type': 'application/json',
+    }),
+  },
   custom: {
     name: 'Custom Endpoint',
     baseUrl: '',
-    models: [],
+    defaultModels: [],
     headers: apiKey => ({
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
@@ -510,15 +670,46 @@ export const SYSTEM_PROMPT = `You are a helpful retirement planning assistant. Y
 - Explain tax implications of different strategies
 - Answer questions about Roth conversions, Social Security, and other retirement topics
 - Look up current tax rules, contribution limits, and financial regulations
+- Find optimal values for Roth conversions and other parameters
+- Show step-by-step calculation explanations
 
 You have access to tools to:
-- Get current state, run projections, and create scenarios
-- Search the web for current information (use web_search for questions about current rules, limits, or rates)
-- Read web pages for detailed information (use fetch_page after web_search when you need more details)
+- get_current_state: View plan parameters, projections, tax brackets, and IRMAA years
+- run_projection: Run what-if scenarios with custom parameters
+- create_scenario: Create named scenarios for comparison
+- compare_scenarios: Compare multiple scenarios side-by-side
+- find_optimal: Search for optimal parameter values (Roth conversions, etc.)
+- run_risk_scenarios: Show outcomes under different market return assumptions
+- explain_calculation: Get step-by-step breakdown of tax and financial calculations
+- web_search/fetch_page: Look up current rules and rates
 
-IMPORTANT: When users ask about current tax rules, contribution limits, COLA adjustments, or other information that changes yearly, USE the web_search tool to get accurate, up-to-date information. Do not rely on your training data for time-sensitive financial information.
+IMPORTANT GUIDELINES:
 
-Be concise but thorough in your explanations. Use specific numbers when relevant. Cite your sources when using web search results.`;
+1. ACKNOWLEDGE LIMITATIONS: If you're uncertain about a calculation or cannot verify a result, say so explicitly. Use phrases like "Based on the projection model..." or "According to the tool results..." rather than stating things as absolute fact.
+
+2. WEB SEARCH: Use web_search for questions about:
+   - Current year tax brackets, limits, or thresholds
+   - COLA adjustments and benefit changes
+   - Recent legislation (SECURE Act, etc.)
+   - Any information that changes yearly
+   Do NOT rely on training data for time-sensitive financial information.
+
+3. CALCULATION EXPLANATIONS: When explaining how something is calculated:
+   - Use the explain_calculation tool for step-by-step breakdowns
+   - Show the actual numbers from the user's projection
+   - If the projection model differs from IRS rules, note this
+
+4. HANDLE ERRORS GRACEFULLY: If a tool returns an error or unexpected result:
+   - Explain what happened clearly
+   - Suggest alternatives or workarounds
+   - Don't make up data to fill gaps
+
+5. SCENARIO COMPARISONS: When comparing scenarios:
+   - Use compare_scenarios tool for structured comparison
+   - Highlight key differences, not just list numbers
+   - Note tradeoffs (e.g., "lower taxes now but higher IRMAA later")
+
+Be concise but thorough. Use specific numbers from the user's plan. Cite web sources when used.`;
 
 /**
  * AI Service class
@@ -587,6 +778,8 @@ export class AIService {
     // Native providers use their specific format
     if (this.provider === 'anthropic') return 'anthropic';
     if (this.provider === 'google') return 'google';
+    if (this.provider === 'ollama') return 'ollama';
+    // groq, openai, openrouter all use OpenAI format
     return 'openai';
   }
 
@@ -682,8 +875,19 @@ export class AIService {
       }
 
       return request;
+    } else if (format === 'ollama') {
+      // Ollama API format
+      const filteredMessages = [systemMessage, ...messages].filter(
+        m => m.role === 'system' || (m.content && m.content.trim().length > 0)
+      );
+
+      return {
+        model: this.model,
+        messages: filteredMessages,
+        stream: false,
+      };
     } else {
-      // OpenAI / OpenRouter format
+      // OpenAI / OpenRouter / Groq format
       // Filter out messages with empty/whitespace content (keep system message)
       const filteredMessages = [systemMessage, ...messages].filter(
         m => m.role === 'system' || (m.content && m.content.trim().length > 0)
@@ -759,6 +963,13 @@ export class AIService {
         toolCalls,
         stopReason: candidate?.finishReason,
       };
+    } else if (format === 'ollama') {
+      // Ollama response format
+      return {
+        content: data.message?.content || '',
+        toolCalls: [],
+        stopReason: data.done ? 'stop' : null,
+      };
     } else {
       // OpenAI / OpenRouter response format
       const choice = data.choices?.[0];
@@ -813,6 +1024,12 @@ export class AIService {
     if (this.provider === 'google') {
       const action = streaming ? 'streamGenerateContent' : 'generateContent';
       return `${providerConfig.baseUrl}/${this.model}:${action}?key=${this.apiKey}`;
+    }
+
+    // Ollama uses custom base URL or default localhost
+    if (this.provider === 'ollama') {
+      const base = this.customBaseUrl || 'http://localhost:11434';
+      return `${base}/api/chat`;
     }
 
     return this.customBaseUrl || providerConfig.baseUrl;
