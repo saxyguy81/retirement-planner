@@ -304,7 +304,7 @@ export function InputPanel({
                 <label className="block text-slate-500 text-[10px] mb-0.5">Start Year</label>
                 <YearInput
                   value={params.startYear}
-                  onChange={(v) => updateParam('startYear', v)}
+                  onChange={v => updateParam('startYear', v)}
                   min={2020}
                   max={2100}
                   placeholder="e.g., 2025"
@@ -314,7 +314,7 @@ export function InputPanel({
                 <label className="block text-slate-500 text-[10px] mb-0.5">End Year</label>
                 <YearInput
                   value={params.endYear}
-                  onChange={(v) => updateParam('endYear', v)}
+                  onChange={v => updateParam('endYear', v)}
                   min={2020}
                   max={2100}
                   placeholder="e.g., 2055"
@@ -343,7 +343,7 @@ export function InputPanel({
                 <label className="block text-slate-500 text-[10px] mb-0.5">Birth Year</label>
                 <YearInput
                   value={settings?.primaryBirthYear}
-                  onChange={(v) => updateSettings?.({ primaryBirthYear: v })}
+                  onChange={v => updateSettings?.({ primaryBirthYear: v })}
                   min={1920}
                   max={2010}
                   placeholder="e.g., 1960"
@@ -365,7 +365,7 @@ export function InputPanel({
                 <label className="block text-slate-500 text-[10px] mb-0.5">Spouse Birth</label>
                 <YearInput
                   value={settings?.spouseBirthYear}
-                  onChange={(v) => updateSettings?.({ spouseBirthYear: v })}
+                  onChange={v => updateSettings?.({ spouseBirthYear: v })}
                   min={1920}
                   max={2010}
                   placeholder="e.g., 1962"
@@ -384,7 +384,7 @@ export function InputPanel({
                 <span className="text-slate-400 text-xs">Death Year</span>
                 <YearInput
                   value={params.survivorDeathYear}
-                  onChange={(v) => updateParam('survivorDeathYear', v)}
+                  onChange={v => updateParam('survivorDeathYear', v)}
                   min={2025}
                   max={2100}
                   allowEmpty={true}
@@ -1088,7 +1088,7 @@ export function InputPanel({
                       <label className="block text-slate-500 text-[10px] mb-0.5">Birth Year</label>
                       <YearInput
                         value={heir.birthYear}
-                        onChange={(v) => updateHeir(index, { birthYear: v })}
+                        onChange={v => updateHeir(index, { birthYear: v })}
                         min={1940}
                         max={2020}
                         placeholder="e.g., 1980"

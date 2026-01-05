@@ -41,7 +41,7 @@ export function useUndoRedo(initialState, maxHistory = 50) {
    * Only adds to history if state has actually changed
    */
   const pushState = useCallback(
-    (newState) => {
+    newState => {
       // Clear any pending debounce
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
@@ -58,7 +58,7 @@ export function useUndoRedo(initialState, maxHistory = 50) {
 
         lastPushedRef.current = newStateStr;
 
-        setHistory((prev) => {
+        setHistory(prev => {
           // Trim future states if we're not at the end
           const newHistory = prev.slice(0, pointer + 1);
 
@@ -84,7 +84,7 @@ export function useUndoRedo(initialState, maxHistory = 50) {
    * Undo - go back one state in history
    */
   const undo = useCallback(() => {
-    setPointer((p) => {
+    setPointer(p => {
       const newP = Math.max(0, p - 1);
       // Update last pushed ref to prevent pushState from overriding
       lastPushedRef.current = JSON.stringify(history[newP]);
@@ -96,7 +96,7 @@ export function useUndoRedo(initialState, maxHistory = 50) {
    * Redo - go forward one state in history
    */
   const redo = useCallback(() => {
-    setPointer((p) => {
+    setPointer(p => {
       const newP = Math.min(history.length - 1, p + 1);
       // Update last pushed ref to prevent pushState from overriding
       lastPushedRef.current = JSON.stringify(history[newP]);
@@ -134,7 +134,7 @@ export function useUndoRedo(initialState, maxHistory = 50) {
     canRedo,
     historyInfo,
     // Force update current without going through history (for loading saved states)
-    resetHistory: useCallback((newState) => {
+    resetHistory: useCallback(newState => {
       setHistory([newState]);
       setPointer(0);
       lastPushedRef.current = JSON.stringify(newState);

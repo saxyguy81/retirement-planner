@@ -33,109 +33,14 @@ import { fmt$, fmtPct } from '../../lib/formatters';
 import { CalculationInspector } from '../CalculationInspector';
 import { CustomViewModal } from '../CustomViewModal';
 import { YearSelector } from '../YearSelector';
+import { STORY_SECTIONS, LEGACY_SECTIONS } from './sectionConfig';
 
-// Define row sections following the logical "story of a retirement year":
-// 1. What do I have? (Starting Position)
-// 2. What money is coming in? (Income)
-// 3. What money is going out? (Cash Needs)
-// 4. What am I required/choosing to distribute? (RMD & Conversions)
-// 5. Where does the withdrawal come from? (Withdrawals)
-// 6. How much tax do I owe? (Tax Detail)
-// 7. IRMAA breakdown (IRMAA Detail)
-// 8. What do I have left? (Ending Position)
-// 9. What's it worth to heirs? (Heir Value)
-// 10. Performance metrics (Analysis & Metrics)
+// Section configurations imported from sectionConfig.js
+// STORY_SECTIONS provides a reorganized 5-section view
+// LEGACY_SECTIONS maintains backward compatibility with the original 10-section view
 //
 // Note: PV transformation is applied dynamically at render time for all $ format fields
-const SECTIONS = [
-  {
-    title: 'STARTING POSITION',
-    rows: [
-      { key: 'atBOY', label: 'After-Tax', format: '$' },
-      { key: 'iraBOY', label: 'Traditional IRA', format: '$' },
-      { key: 'rothBOY', label: 'Roth IRA', format: '$' },
-      { key: 'totalBOY', label: 'Total', format: '$', highlight: true },
-      { key: 'costBasisBOY', label: 'Cost Basis', format: '$', dim: true },
-    ],
-  },
-  {
-    title: 'INCOME',
-    rows: [{ key: 'ssAnnual', label: 'Social Security', format: '$' }],
-  },
-  {
-    title: 'CASH NEEDS',
-    rows: [
-      { key: 'expenses', label: 'Annual Expenses', format: '$' },
-      { key: 'irmaaTotal', label: 'IRMAA Surcharges', format: '$' },
-    ],
-  },
-  {
-    title: 'RMD & CONVERSIONS',
-    rows: [
-      { key: 'rmdFactor', label: 'RMD Factor', format: 'n', dim: true },
-      { key: 'rmdRequired', label: 'RMD Required', format: '$' },
-      { key: 'rothConversion', label: 'Roth Conversion', format: '$', highlight: true },
-    ],
-  },
-  {
-    title: 'WITHDRAWALS',
-    rows: [
-      { key: 'atWithdrawal', label: 'From After-Tax', format: '$' },
-      { key: 'iraWithdrawal', label: 'From IRA', format: '$' },
-      { key: 'rothWithdrawal', label: 'From Roth', format: '$' },
-      { key: 'totalWithdrawal', label: 'Total Withdrawal', format: '$', highlight: true },
-    ],
-  },
-  {
-    title: 'TAX DETAIL',
-    rows: [
-      { key: 'taxableSS', label: 'Taxable Soc Sec', format: '$', dim: true },
-      { key: 'ordinaryIncome', label: 'Ordinary Income', format: '$', dim: true },
-      { key: 'capitalGains', label: 'Capital Gains', format: '$', dim: true },
-      { key: 'taxableOrdinary', label: 'Taxable Income', format: '$', dim: true },
-      { key: 'federalTax', label: 'Federal Tax', format: '$' },
-      { key: 'ltcgTax', label: 'LTCG Tax', format: '$' },
-      { key: 'niit', label: 'NIIT (3.8%)', format: '$' },
-      { key: 'stateTax', label: 'State Tax', format: '$' },
-      { key: 'totalTax', label: 'Total Tax', format: '$', highlight: true },
-    ],
-  },
-  {
-    title: 'IRMAA DETAIL',
-    rows: [
-      { key: 'irmaaMAGI', label: 'MAGI (2yr prior)', format: '$', dim: true },
-      { key: 'irmaaPartB', label: 'Part B Surcharge', format: '$', dim: true },
-      { key: 'irmaaPartD', label: 'Part D Surcharge', format: '$', dim: true },
-    ],
-  },
-  {
-    title: 'ENDING POSITION',
-    rows: [
-      { key: 'atEOY', label: 'After-Tax', format: '$' },
-      { key: 'iraEOY', label: 'Traditional IRA', format: '$' },
-      { key: 'rothEOY', label: 'Roth IRA', format: '$' },
-      { key: 'totalEOY', label: 'Total', format: '$', highlight: true },
-      { key: 'costBasisEOY', label: 'Cost Basis', format: '$', dim: true },
-      { key: 'rothPercent', label: 'Roth %', format: '%', dim: true },
-    ],
-  },
-  {
-    title: 'HEIR VALUE',
-    rows: [{ key: 'heirValue', label: 'After-Tax to Heirs', format: '$', highlight: true }],
-  },
-  {
-    title: 'ANALYSIS & METRICS',
-    rows: [
-      { key: 'effectiveAtReturn', label: 'AT Return Rate', format: '%', dim: true },
-      { key: 'effectiveIraReturn', label: 'IRA Return Rate', format: '%', dim: true },
-      { key: 'effectiveRothReturn', label: 'Roth Return Rate', format: '%', dim: true },
-      { key: 'cumulativeTax', label: 'Cumulative Tax Paid', format: '$' },
-      { key: 'cumulativeIRMAA', label: 'Cumulative IRMAA', format: '$' },
-      { key: 'cumulativeCapitalGains', label: 'Cumulative Cap Gains', format: '$' },
-      { key: 'atLiquidationPercent', label: 'AT Liquidation %', format: '%', highlight: true },
-    ],
-  },
-];
+const SECTIONS = LEGACY_SECTIONS;
 
 // Helper function to apply Present Value discount factor
 // PV = FV / (1 + r)^n where r = discount rate and n = years from start

@@ -49,6 +49,7 @@ const MAX_WIDTH = 500;
  * @param {boolean} props.canGoBack - Whether back navigation is available
  * @param {boolean} props.canGoForward - Whether forward navigation is available
  * @param {Function} props.scrollToCell - Function to scroll table to a cell
+ * @param {Function} props.onOpenTaxTables - Callback to open tax table viewer
  */
 export function InspectorPanel({
   isOpen,
@@ -65,6 +66,7 @@ export function InspectorPanel({
   canGoBack,
   canGoForward,
   scrollToCell,
+  onOpenTaxTables,
 }) {
   // Panel width with localStorage persistence
   const [width, setWidth] = useState(() => {
@@ -325,7 +327,12 @@ export function InspectorPanel({
 
       {/* Footer actions */}
       <div className="p-3 border-t border-slate-700 flex gap-2 text-xs text-slate-400">
-        <button className="hover:text-slate-300">View Tax Tables</button>
+        <button
+          onClick={() => onOpenTaxTables?.(activeField, activeYear, activeData)}
+          className="hover:text-slate-300 transition-colors"
+        >
+          View Tax Tables
+        </button>
         <span className="text-slate-600">|</span>
         <button className="hover:text-slate-300">Export Details</button>
       </div>

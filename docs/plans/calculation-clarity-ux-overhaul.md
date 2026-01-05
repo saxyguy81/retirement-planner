@@ -1709,18 +1709,18 @@ const openTaxTables = () => {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `npm run build` succeeds
-- [ ] Tax table data imports correctly
-- [ ] Inflation adjustment calculates properly
+- [x] `npm run build` succeeds
+- [x] Tax table data imports correctly
+- [x] Inflation adjustment calculates properly
 
 #### Manual Verification:
-- [ ] All 6 tax table tabs display correctly
-- [ ] "You are here" indicator highlights correct bracket/tier
-- [ ] "Distance to next bracket" shows meaningful information
-- [ ] Source citations are accurate
-- [ ] External links work (IRS publications)
-- [ ] Year selector updates all tables
-- [ ] Opening from inspector shows relevant tab
+- [x] All 6 tax table tabs display correctly
+- [x] "You are here" indicator highlights correct bracket/tier
+- [x] "Distance to next bracket" shows meaningful information
+- [x] Source citations are accurate
+- [x] External links work (IRS publications)
+- [x] Year selector updates all tables
+- [x] Opening from inspector shows relevant tab
 
 ---
 
@@ -2009,18 +2009,20 @@ const validateSectionConfig = (projectionSample) => {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `npm run build` succeeds
-- [ ] `npm run test:e2e` passes (update test expectations)
-- [ ] All original data fields remain accessible
-- [ ] Section config validation passes
+- [x] `npm run build` succeeds
+- [x] `npm run test:e2e` passes (update test expectations)
+- [x] All original data fields remain accessible
+- [x] Section config validation passes
 
 #### Manual Verification:
-- [ ] 5 sections tell a logical story
-- [ ] Summary rows stand out visually (bold, background)
-- [ ] Expandable subsections work (Tax, IRMAA)
-- [ ] Advanced rows are dimmer but accessible
-- [ ] BOY → EOY pairs show delta and percentage
-- [ ] Show/Hide Advanced toggle works per section
+- [x] 5 sections tell a logical story (STORY_SECTIONS config created)
+- [ ] Summary rows stand out visually (bold, background) - needs UI activation
+- [ ] Expandable subsections work (Tax, IRMAA) - needs UI activation
+- [ ] Advanced rows are dimmer but accessible - needs UI activation
+- [ ] BOY → EOY pairs show delta and percentage - needs UI activation
+- [ ] Show/Hide Advanced toggle works per section - needs UI activation
+
+**Note**: Phase 6 config created in `sectionConfig.js` with both `STORY_SECTIONS` (new 5-section layout) and `LEGACY_SECTIONS` (backward-compatible). Currently using `LEGACY_SECTIONS` by default. UI activation of `STORY_SECTIONS` deferred to avoid breaking changes.
 
 ---
 

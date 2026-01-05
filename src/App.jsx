@@ -40,6 +40,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Chat } from './components/Chat';
 import { InputPanel } from './components/InputPanel';
 import { InspectorPanel } from './components/InspectorPanel';
+import { TaxTableViewer } from './components/TaxTableViewer';
 import { LazyErrorBoundary } from './components/LazyErrorBoundary';
 import { LazyLoadingFallback } from './components/LazyLoadingFallback';
 import { PersonalizationPanel } from './components/PersonalizationPanel';
@@ -134,6 +135,13 @@ export default function App() {
   // Inspector panel state for side panel mode
   const inspectorNav = useInspectorNavigation();
   const [useSidePanelInspector, _setUseSidePanelInspector] = useState(true); // Feature flag - default ON
+
+  // Tax Table Viewer state
+  const [taxTableState, setTaxTableState] = useState({
+    isOpen: false,
+    initialTab: 'federal',
+    context: null,
+  });
 
   const configFileInputRef = useRef(null);
   const saveMenuRef = useRef(null); // Unified File menu ref
@@ -460,6 +468,41 @@ export default function App() {
     [inspectorNav, scrollToCell]
   );
 
+  // Handle opening Tax Table Viewer from inspector
+  const handleOpenTaxTables = useCallback(
+    (field, year, data) => {
+      // Determine which tab to open based on current field
+      const fieldToTab = {
+        federalTax: 'federal',
+        ltcgTax: 'ltcg',
+        irmaaTotal: 'irmaa',
+        irmaaPartB: 'irmaa',
+        irmaaPartD: 'irmaa',
+        rmdRequired: 'rmd',
+        taxableSS: 'ss',
+        stateTax: 'state',
+      };
+      const initialTab = fieldToTab[field] || 'federal';
+
+      setTaxTableState({
+        isOpen: true,
+        initialTab,
+        context: {
+          year: year,
+          age: data?.age,
+          filingStatus: 'mfj', // Could be derived from params if survivor scenario
+          taxableIncome: data?.taxableOrdinary,
+          magi: data?.irmaaMAGI,
+          iraBalance: data?.iraBOY,
+          ssIncome: data?.ssAnnual,
+          combinedIncome: data?.ordinaryIncome + (data?.ssAnnual || 0) * 0.5,
+          stateIncome: data?.capitalGains,
+        },
+      });
+    },
+    []
+  );
+
   // Split panel view configurations - use render functions for lazy loading
   const splitPanelViews = useMemo(
     () => [
@@ -503,6 +546,7 @@ export default function App() {
                 canGoBack={inspectorNav.canGoBack}
                 canGoForward={inspectorNav.canGoForward}
                 scrollToCell={scrollToCell}
+                onOpenTaxTables={handleOpenTaxTables}
               />
             )}
           </div>
@@ -1084,6 +1128,7 @@ export default function App() {
                           canGoBack={inspectorNav.canGoBack}
                           canGoForward={inspectorNav.canGoForward}
                           scrollToCell={scrollToCell}
+                          onOpenTaxTables={handleOpenTaxTables}
                         />
                       )}
                     </div>
@@ -1234,6 +1279,14 @@ export default function App() {
           onDismiss={() => setShowPersonalization(false)}
         />
       )}
+
+      {/* Tax Table Viewer Modal */}
+      <TaxTableViewer
+        isOpen={taxTableState.isOpen}
+        onClose={() => setTaxTableState(s => ({ ...s, isOpen: false }))}
+        context={taxTableState.context}
+        initialTab={taxTableState.initialTab}
+      />
     </div>
   );
 }

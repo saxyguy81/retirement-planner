@@ -67,7 +67,7 @@ export function YearInput({
     commitValue();
   };
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = e => {
     if (e.key === 'Enter') {
       e.preventDefault();
       commitValue();
@@ -86,13 +86,16 @@ export function YearInput({
       type="text"
       inputMode="numeric"
       pattern="[0-9]*"
-      value={isEditing ? localValue : (value != null ? value.toString() : '')}
-      onChange={(e) => setLocalValue(e.target.value)}
+      value={isEditing ? localValue : value != null ? value.toString() : ''}
+      onChange={e => setLocalValue(e.target.value)}
       onFocus={handleFocus}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       placeholder={placeholder}
-      className={className || 'w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none'}
+      className={
+        className ||
+        'w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none'
+      }
     />
   );
 }
