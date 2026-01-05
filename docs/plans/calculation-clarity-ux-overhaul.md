@@ -843,11 +843,11 @@ cell.classList.add('flash-highlight');
 ### Success Criteria:
 
 #### Manual Verification:
-- [ ] Clicking dependency in inspector scrolls table to that cell
-- [ ] Cell flashes blue briefly after scroll
-- [ ] Works for cells in different year columns
-- [ ] Works for cells in collapsed sections (expands section first)
-- [ ] Sticky headers don't obscure scrolled-to cells
+- [x] Clicking dependency in inspector scrolls table to that cell
+- [x] Cell flashes blue briefly after scroll
+- [x] Works for cells in different year columns
+- [x] Works for cells in collapsed sections (expands section first)
+- [x] Sticky headers don't obscure scrolled-to cells
 
 ---
 
