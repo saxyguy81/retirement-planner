@@ -240,13 +240,23 @@ function getCellColorClass(rowKey, row) {
   return colors?.text || 'text-slate-300';
 }
 
-export function ProjectionsTable({ projections, params, showPV = true }) {
+export function ProjectionsTable({
+  projections,
+  params,
+  showPV = true,
+  // New props for external inspector panel support
+  inspectorNavigation = null, // Optional external navigation state
+  onCellClick = null, // Optional callback for cell clicks
+  highlightedCell = null, // Optional {field, year} for external highlighting
+  useSidePanel = false, // Feature flag for side panel mode
+}) {
   const [yearMode, setYearMode] = useState('moderate');
   const [customYears, setCustomYears] = useState([]);
   const [collapsedSections, setCollapsedSections] = useState(DEFAULT_COLLAPSED);
 
-  // Navigation hook for CalculationInspector
-  const navigation = useInspectorNavigation();
+  // Navigation hook for CalculationInspector - use external if provided
+  const internalNavigation = useInspectorNavigation();
+  const navigation = inspectorNavigation || internalNavigation;
 
   // Cell highlighting state for dependency visualization
   const [highlightedCells, setHighlightedCells] = useState([]); // Array of { year, field, sign }
@@ -711,17 +721,30 @@ export function ProjectionsTable({ projections, params, showPV = true }) {
                                 ? applyPV(rawValue, d.yearsFromStart, params.discountRate || 0.03)
                                 : rawValue;
 
+                            // Check if this cell is the active cell in the inspector
+                            const isActiveCell =
+                              highlightedCell?.field === row.key &&
+                              highlightedCell?.year === d.year;
+
                             return (
                               <td
                                 key={d.year}
+                                id={`cell-${row.key}-${d.year}`}
+                                data-cell={`${row.key}-${d.year}`}
                                 data-field={row.key}
                                 data-year={d.year}
-                                onClick={() =>
-                                  isInspectable && navigation.navigateTo(row.key, d.year, d)
-                                }
+                                onClick={() => {
+                                  if (!isInspectable) return;
+                                  // Use external callback if provided, otherwise use navigation
+                                  if (onCellClick) {
+                                    onCellClick(row.key, d.year, d);
+                                  } else {
+                                    navigation.navigateTo(row.key, d.year, d);
+                                  }
+                                }}
                                 onMouseEnter={() => handleCellHover(row.key, d.year, d)}
                                 onMouseLeave={handleCellLeave}
-                                className={`text-right py-1 px-2 tabular-nums ${cellColorClass} ${isInspectable ? 'cursor-pointer hover:bg-blue-900/30' : ''} ${highlightClass}`}
+                                className={`text-right py-1 px-2 tabular-nums ${cellColorClass} ${isInspectable ? 'cursor-pointer hover:bg-blue-900/30' : ''} ${highlightClass} ${isActiveCell ? 'ring-2 ring-blue-500' : ''}`}
                               >
                                 {formatValue(displayValue, row.format)}
                               </td>
@@ -737,8 +760,8 @@ export function ProjectionsTable({ projections, params, showPV = true }) {
         </table>
       </div>
 
-      {/* Calculation Inspector Modal with Navigation */}
-      {navigation.current && (
+      {/* Calculation Inspector Modal with Navigation - only show when NOT using side panel */}
+      {!useSidePanel && navigation.current && (
         <CalculationInspector
           current={navigation.current}
           params={params}

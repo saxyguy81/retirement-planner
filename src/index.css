@@ -25,3 +25,35 @@
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* Flash highlight animation for scroll-to-cell navigation */
+@keyframes flash-highlight {
+  0% {
+    background-color: rgba(59, 130, 246, 0.5);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.8);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+.flash-highlight {
+  animation: flash-highlight 1.5s ease-out;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .flash-highlight {
+    animation: none;
+    background-color: rgba(59, 130, 246, 0.3);
+    transition: background-color 0.5s ease-out;
+  }
+}
+
+/* High contrast mode support for inspector navigation */
+@media (prefers-contrast: high) {
+  .flash-highlight {
+    outline: 3px solid white;
+  }
+}

@@ -39,12 +39,15 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 
 import { Chat } from './components/Chat';
 import { InputPanel } from './components/InputPanel';
+import { InspectorPanel } from './components/InspectorPanel';
 import { LazyErrorBoundary } from './components/LazyErrorBoundary';
 import { LazyLoadingFallback } from './components/LazyLoadingFallback';
 import { PersonalizationPanel } from './components/PersonalizationPanel';
 import { ProjectionsTable } from './components/ProjectionsTable';
 import { SplitPanel } from './components/SplitPanel';
 import UpdatePrompt from './components/UpdatePrompt';
+import { useChatPanelState } from './hooks/useChatPanelState';
+import { useInspectorNavigation } from './hooks/useInspectorNavigation';
 
 // Lazy imports - loaded on demand
 const Dashboard = lazy(() =>
@@ -83,7 +86,6 @@ const preloadMap = {
   optimize: preloadOptimize,
   settings: preloadSettings,
 };
-import { useChatPanelState } from './hooks/useChatPanelState';
 import { useProjections } from './hooks/useProjections';
 import { loadAIConfig, saveAIConfig } from './lib/aiService';
 import { exportToExcel, exportToJSON, exportToPDF } from './lib/excelExport';
@@ -128,6 +130,10 @@ export default function App() {
 
   // Chat panel state with persistence
   const chatPanel = useChatPanelState();
+
+  // Inspector panel state for side panel mode
+  const inspectorNav = useInspectorNavigation();
+  const [useSidePanelInspector, _setUseSidePanelInspector] = useState(true); // Feature flag - default ON
 
   const configFileInputRef = useRef(null);
   const saveMenuRef = useRef(null); // Unified File menu ref
@@ -195,7 +201,7 @@ export default function App() {
       }
 
       // Redo: Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y
-      if ((e.metaKey || e.ctrlKey) && (e.shiftKey && e.key === 'z' || e.key === 'y')) {
+      if ((e.metaKey || e.ctrlKey) && ((e.shiftKey && e.key === 'z') || e.key === 'y')) {
         const tag = e.target.tagName.toLowerCase();
         if (tag !== 'input' && tag !== 'textarea') {
           e.preventDefault();
@@ -426,6 +432,34 @@ export default function App() {
     [updateParams, updateSettings, clearSampleData]
   );
 
+  // Scroll to cell and flash highlight (for inspector navigation)
+  const scrollToCell = useCallback((field, year) => {
+    const cellId = `cell-${field}-${year}`;
+    const cell = document.getElementById(cellId);
+    if (cell) {
+      cell.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      cell.classList.add('flash-highlight');
+      setTimeout(() => cell.classList.remove('flash-highlight'), 1500);
+    }
+  }, []);
+
+  // Handle cell click in ProjectionsTable - opens side panel inspector
+  const handleInspectorCellClick = useCallback(
+    (field, year, data) => {
+      inspectorNav.navigateTo(field, year, data);
+    },
+    [inspectorNav]
+  );
+
+  // Handle navigation within inspector - updates inspector and scrolls table
+  const handleInspectorNavigate = useCallback(
+    (field, year, data) => {
+      inspectorNav.navigateTo(field, year, data);
+      scrollToCell(field, year);
+    },
+    [inspectorNav, scrollToCell]
+  );
+
   // Split panel view configurations - use render functions for lazy loading
   const splitPanelViews = useMemo(
     () => [
@@ -433,12 +467,45 @@ export default function App() {
         id: 'projections',
         label: 'Projections',
         render: () => (
-          <ProjectionsTable
-            projections={projections}
-            options={options}
-            params={params}
-            showPV={showPV}
-          />
+          <div className="flex-1 flex overflow-hidden h-full">
+            <div className="flex-1 overflow-hidden">
+              <ProjectionsTable
+                projections={projections}
+                options={options}
+                params={params}
+                showPV={showPV}
+                useSidePanel={useSidePanelInspector}
+                inspectorNavigation={useSidePanelInspector ? inspectorNav : null}
+                onCellClick={useSidePanelInspector ? handleInspectorCellClick : null}
+                highlightedCell={
+                  useSidePanelInspector && inspectorNav.current
+                    ? {
+                        field: inspectorNav.current.field,
+                        year: inspectorNav.current.year,
+                      }
+                    : null
+                }
+              />
+            </div>
+            {useSidePanelInspector && (
+              <InspectorPanel
+                isOpen={Boolean(inspectorNav.current)}
+                onClose={inspectorNav.close}
+                activeField={inspectorNav.current?.field}
+                activeYear={inspectorNav.current?.year}
+                activeData={inspectorNav.current?.data}
+                allProjections={projections}
+                params={params}
+                showPV={showPV}
+                onNavigate={handleInspectorNavigate}
+                onBack={inspectorNav.goBack}
+                onForward={inspectorNav.goForward}
+                canGoBack={inspectorNav.canGoBack}
+                canGoForward={inspectorNav.canGoForward}
+                scrollToCell={scrollToCell}
+              />
+            )}
+          </div>
         ),
       },
       {
@@ -474,7 +541,18 @@ export default function App() {
         ),
       },
     ],
-    [projections, options, params, riskYear, showPV]
+    [
+      projections,
+      options,
+      params,
+      riskYear,
+      showPV,
+      useSidePanelInspector,
+      inspectorNav,
+      handleInspectorCellClick,
+      handleInspectorNavigate,
+      scrollToCell,
+    ]
   );
 
   return (
@@ -498,7 +576,10 @@ export default function App() {
       </a>
 
       {/* Header */}
-      <header className="h-11 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-3 shrink-0" role="banner">
+      <header
+        className="h-11 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-3 shrink-0"
+        role="banner"
+      >
         <div className="flex items-center gap-2">
           <Calculator className="w-4 h-4 text-emerald-400" />
           <span className="font-semibold text-sm">Retirement Planner</span>
@@ -508,11 +589,7 @@ export default function App() {
         <div className="flex items-center gap-2">
           {/* Summary stats - most important info first */}
           {/* ARIA live region announces changes to screen readers */}
-          <div
-            className="flex items-center gap-3 text-xs"
-            aria-live="polite"
-            aria-atomic="true"
-          >
+          <div className="flex items-center gap-3 text-xs" aria-live="polite" aria-atomic="true">
             <div className="text-slate-400">
               <span className="sr-only">Final portfolio: </span>
               Final:{' '}
@@ -542,9 +619,7 @@ export default function App() {
               onClick={undo}
               disabled={!canUndo}
               className={`p-1.5 rounded text-xs ${
-                canUndo
-                  ? 'text-slate-300 hover:bg-slate-700'
-                  : 'text-slate-600 cursor-not-allowed'
+                canUndo ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 cursor-not-allowed'
               }`}
               title={`Undo (${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Z)`}
             >
@@ -554,9 +629,7 @@ export default function App() {
               onClick={redo}
               disabled={!canRedo}
               className={`p-1.5 rounded text-xs ${
-                canRedo
-                  ? 'text-slate-300 hover:bg-slate-700'
-                  : 'text-slate-600 cursor-not-allowed'
+                canRedo ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 cursor-not-allowed'
               }`}
               title={`Redo (${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Shift+Z)`}
             >
@@ -723,7 +796,11 @@ export default function App() {
                 <button
                   onClick={() => {
                     setShowSaveMenu(false);
-                    if (window.confirm('Load sample data? This will replace your current inputs with example data for exploration.')) {
+                    if (
+                      window.confirm(
+                        'Load sample data? This will replace your current inputs with example data for exploration.'
+                      )
+                    ) {
                       resetToSampleData();
                       setWorkingScenarios([]);
                     }
@@ -802,7 +879,11 @@ export default function App() {
         </div>
 
         {/* Main content area */}
-        <main id="main-content" className="flex-1 flex flex-col overflow-hidden bg-slate-950" role="main">
+        <main
+          id="main-content"
+          className="flex-1 flex flex-col overflow-hidden bg-slate-950"
+          role="main"
+        >
           {/* Tab bar */}
           <div className="h-9 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-1 shrink-0">
             <div className="flex items-center">
@@ -965,12 +1046,47 @@ export default function App() {
               ) : (
                 <LazyErrorBoundary>
                   {activeTab === 'projections' && (
-                    <ProjectionsTable
-                      projections={projections}
-                      options={options}
-                      params={params}
-                      showPV={showPV}
-                    />
+                    <div className="flex-1 flex overflow-hidden">
+                      {/* Projections Table */}
+                      <div className="flex-1 overflow-hidden">
+                        <ProjectionsTable
+                          projections={projections}
+                          options={options}
+                          params={params}
+                          showPV={showPV}
+                          useSidePanel={useSidePanelInspector}
+                          inspectorNavigation={useSidePanelInspector ? inspectorNav : null}
+                          onCellClick={useSidePanelInspector ? handleInspectorCellClick : null}
+                          highlightedCell={
+                            useSidePanelInspector && inspectorNav.current
+                              ? {
+                                  field: inspectorNav.current.field,
+                                  year: inspectorNav.current.year,
+                                }
+                              : null
+                          }
+                        />
+                      </div>
+                      {/* Side Panel Inspector */}
+                      {useSidePanelInspector && (
+                        <InspectorPanel
+                          isOpen={Boolean(inspectorNav.current)}
+                          onClose={inspectorNav.close}
+                          activeField={inspectorNav.current?.field}
+                          activeYear={inspectorNav.current?.year}
+                          activeData={inspectorNav.current?.data}
+                          allProjections={projections}
+                          params={params}
+                          showPV={showPV}
+                          onNavigate={handleInspectorNavigate}
+                          onBack={inspectorNav.goBack}
+                          onForward={inspectorNav.goForward}
+                          canGoBack={inspectorNav.canGoBack}
+                          canGoForward={inspectorNav.canGoForward}
+                          scrollToCell={scrollToCell}
+                        />
+                      )}
+                    </div>
                   )}
 
                   <Suspense fallback={<LazyLoadingFallback />}>
