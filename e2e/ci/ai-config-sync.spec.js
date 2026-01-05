@@ -161,14 +161,14 @@ test.describe('AI Config Sync', () => {
   });
 
   test('Chat picks up config changes when switching from Settings tab', async ({ page }) => {
-    // Start in Chat
+    // Open the Chat panel (clicking AI Chat tab toggles panel visibility)
     await page.click('button:has-text("AI Chat")');
     await page.waitForTimeout(300);
 
     // Verify default state (should work with default Gemini)
     await expect(page.locator('[data-testid="empty-state"]')).toBeVisible();
 
-    // Switch to Settings and change config
+    // Switch to Settings tab (chat panel remains visible as a side panel)
     await page.click('button:has-text("Settings")');
     await page.waitForTimeout(300);
     await page.click('text=AI Assistant');
@@ -181,12 +181,12 @@ test.describe('AI Config Sync', () => {
 
     // Enter API key
     await page.fill('input[type="password"]', 'sk-test-key');
-
-    // Switch back to Chat
-    await page.click('button:has-text("AI Chat")');
     await page.waitForTimeout(300);
 
-    // Chat should still be ready (config was synced)
+    // Chat panel is still visible (it's a docked panel, not a tab)
+    // So we DON'T need to click the AI Chat tab again
+
+    // Chat should still be ready (config was synced via custom event)
     await expect(page.locator('[data-testid="empty-state"]')).toBeVisible();
     await expect(page.locator('[data-testid="chat-input"]')).toBeEnabled();
 

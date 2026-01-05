@@ -38,7 +38,7 @@ test.describe('AI Chat Reload Behavior', () => {
   });
 
   test('AI Chat still works after page reload (no localStorage changes)', async ({ page }) => {
-    // First visit to Chat
+    // First visit to Chat (clicking tab toggles panel visibility)
     await page.click('button:has-text("AI Chat")');
     await page.waitForTimeout(300);
     await expect(page.locator('[data-testid="empty-state"]')).toBeVisible();
@@ -47,8 +47,8 @@ test.describe('AI Chat Reload Behavior', () => {
     await page.reload();
     await page.waitForLoadState('networkidle');
 
-    // Navigate back to Chat
-    await page.click('button:has-text("AI Chat")');
+    // Panel state should be restored from localStorage (visible=true)
+    // So we DON'T click the tab again (clicking would toggle it OFF)
     await page.waitForTimeout(300);
 
     // Should still work - no config warning

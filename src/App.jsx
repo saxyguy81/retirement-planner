@@ -18,6 +18,8 @@ import {
   Download,
   FolderOpen,
   GitCompare,
+  GripHorizontal,
+  GripVertical,
   LineChart,
   MessageCircle,
   RefreshCw,
@@ -78,6 +80,7 @@ const preloadMap = {
   optimize: preloadOptimize,
   settings: preloadSettings,
 };
+import { useChatPanelState } from './hooks/useChatPanelState';
 import { useProjections } from './hooks/useProjections';
 import { loadAIConfig, saveAIConfig } from './lib/aiService';
 import { exportToExcel, exportToJSON, exportToPDF } from './lib/excelExport';
@@ -106,6 +109,10 @@ export default function App() {
   const [showPV, setShowPV] = useState(true); // Global Present Value toggle
   const [pendingScenario, setPendingScenario] = useState(null);
   const [chatScenarios, setChatScenarios] = useState([]); // Scenarios for Chat access
+
+  // Chat panel state with persistence
+  const chatPanel = useChatPanelState();
+
   const configFileInputRef = useRef(null);
   const exportMenuRef = useRef(null);
   const saveMenuRef = useRef(null);
@@ -127,6 +134,20 @@ export default function App() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Keyboard shortcut: Cmd/Ctrl+Shift+C to toggle chat panel
+  useEffect(() => {
+    const handleKeyDown = e => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'c') {
+        e.preventDefault();
+        chatPanel.toggleVisible();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+    // chatPanel.toggleVisible is a stable callback from useCallback
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatPanel.toggleVisible]);
 
   const {
     params,
@@ -658,33 +679,42 @@ export default function App() {
           {/* Tab bar */}
           <div className="h-9 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-1 shrink-0">
             <div className="flex items-center">
-              {TABS.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id);
-                    if (
-                      splitView &&
-                      (tab.id === 'scenarios' || tab.id === 'optimize' || tab.id === 'settings')
-                    ) {
-                      setSplitView(false);
-                    }
-                  }}
-                  onMouseEnter={() => {
-                    // Preload component on hover for faster tab switching
-                    const preload = preloadMap[tab.id];
-                    if (preload) preload();
-                  }}
-                  className={`h-full px-3 flex items-center gap-1.5 border-b-2 text-xs transition-colors ${
-                    activeTab === tab.id && !splitView
-                      ? 'border-blue-500 text-blue-400 bg-slate-800/50'
-                      : 'border-transparent text-slate-400 hover:text-slate-300'
-                  }`}
-                >
-                  <tab.icon className="w-3 h-3" />
-                  {tab.label}
-                </button>
-              ))}
+              {TABS.map(tab => {
+                // Chat tab toggles panel visibility instead of switching tabs
+                const isActive = tab.id === 'chat' ? chatPanel.visible : activeTab === tab.id;
+
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      if (tab.id === 'chat') {
+                        chatPanel.toggleVisible();
+                      } else {
+                        setActiveTab(tab.id);
+                        if (
+                          splitView &&
+                          (tab.id === 'scenarios' || tab.id === 'optimize' || tab.id === 'settings')
+                        ) {
+                          setSplitView(false);
+                        }
+                      }
+                    }}
+                    onMouseEnter={() => {
+                      // Preload component on hover for faster tab switching
+                      const preload = preloadMap[tab.id];
+                      if (preload) preload();
+                    }}
+                    className={`h-full px-3 flex items-center gap-1.5 border-b-2 text-xs transition-colors ${
+                      isActive && !splitView
+                        ? 'border-blue-500 text-blue-400 bg-slate-800/50'
+                        : 'border-transparent text-slate-400 hover:text-slate-300'
+                    }`}
+                  >
+                    <tab.icon className="w-3 h-3" />
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
             {/* Split view toggle */}
             <button
@@ -710,93 +740,206 @@ export default function App() {
             </button>
           </div>
 
-          {/* Tab content */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {splitView ? (
-              <SplitPanel
-                views={splitPanelViews}
-                defaultLeftView="projections"
-                defaultRightView="dashboard"
-              />
-            ) : (
-              <LazyErrorBoundary>
-                {activeTab === 'projections' && (
-                  <ProjectionsTable
-                    projections={projections}
-                    options={options}
+          {/* Content + Chat wrapper */}
+          <div
+            ref={chatPanel.containerRef}
+            className={`flex-1 flex overflow-hidden relative ${
+              chatPanel.visible && chatPanel.position === 'top' ? 'flex-col' : 'flex-row'
+            }`}
+            style={{
+              cursor: chatPanel.isResizing
+                ? chatPanel.position === 'right'
+                  ? 'col-resize'
+                  : 'row-resize'
+                : 'auto',
+            }}
+          >
+            {/* Drop zone indicators */}
+            {chatPanel.isDragging && (
+              <>
+                {/* Right drop zone */}
+                <div
+                  className={`absolute z-50 pointer-events-none transition-opacity duration-150 ${
+                    chatPanel.dropZone === 'right' ? 'opacity-100' : 'opacity-0'
+                  }`}
+                  style={{
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: '120px',
+                    background: 'linear-gradient(to left, rgba(59, 130, 246, 0.3), transparent)',
+                    borderRight: '3px solid rgb(59, 130, 246)',
+                  }}
+                />
+                {/* Top drop zone */}
+                <div
+                  className={`absolute z-50 pointer-events-none transition-opacity duration-150 ${
+                    chatPanel.dropZone === 'top' ? 'opacity-100' : 'opacity-0'
+                  }`}
+                  style={{
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    height: '100px',
+                    background: 'linear-gradient(to bottom, rgba(59, 130, 246, 0.3), transparent)',
+                    borderTop: '3px solid rgb(59, 130, 246)',
+                  }}
+                />
+              </>
+            )}
+
+            {/* TOP POSITION: Chat panel above content */}
+            {chatPanel.visible && chatPanel.position === 'top' && (
+              <>
+                {/* Chat panel */}
+                <div
+                  className="flex flex-col overflow-hidden bg-slate-950 border-b border-slate-700 shrink-0"
+                  style={{
+                    height: `${chatPanel.size}px`,
+                    transition: chatPanel.isResizing ? 'none' : 'height 0.15s ease',
+                  }}
+                >
+                  <Chat
                     params={params}
-                    showPV={showPV}
+                    projections={projections}
+                    summary={summary}
+                    scenarios={chatScenarios}
+                    onCreateScenario={handleCreateScenarioFromChat}
+                    onUpdateParams={updateParams}
+                    onNavigate={tab => setActiveTab(tab)}
+                    settings={settings}
+                    options={options}
+                    panelMode={true}
+                    onClose={chatPanel.hide}
+                    onDragStart={chatPanel.startDrag}
+                    isDragging={chatPanel.isDragging}
                   />
-                )}
+                </div>
+                {/* Resize handle */}
+                <div
+                  className={`h-1 w-full cursor-row-resize shrink-0 flex items-center justify-center group ${
+                    chatPanel.isResizing ? 'bg-blue-500' : 'bg-slate-700 hover:bg-blue-500'
+                  }`}
+                  onMouseDown={chatPanel.startResize}
+                >
+                  <GripHorizontal className="w-4 h-4 text-slate-500 group-hover:text-white" />
+                </div>
+              </>
+            )}
 
-                <Suspense fallback={<LazyLoadingFallback />}>
-                  {activeTab === 'dashboard' && (
-                    <Dashboard projections={projections} params={params} showPV={showPV} />
-                  )}
-
-                  {activeTab === 'risk' && (
-                    <RiskAllocation
+            {/* Main tab content area */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {splitView ? (
+                <SplitPanel
+                  views={splitPanelViews}
+                  defaultLeftView="projections"
+                  defaultRightView="dashboard"
+                />
+              ) : (
+                <LazyErrorBoundary>
+                  {activeTab === 'projections' && (
+                    <ProjectionsTable
                       projections={projections}
+                      options={options}
                       params={params}
-                      selectedYear={riskYear}
-                      onYearChange={setRiskYear}
-                    />
-                  )}
-
-                  {activeTab === 'heir' && (
-                    <HeirAnalysis projections={projections} params={params} showPV={showPV} />
-                  )}
-
-                  {activeTab === 'scenarios' && (
-                    <ScenarioComparison
-                      params={params}
-                      projections={projections}
-                      summary={summary}
                       showPV={showPV}
-                      pendingScenario={pendingScenario}
-                      onPendingScenarioConsumed={() => setPendingScenario(null)}
-                      onScenariosChange={handleScenariosChange}
-                      onApplyScenario={updateParams}
-                      settings={settings}
-                      options={options}
                     />
                   )}
 
-                  {activeTab === 'optimize' && (
-                    <Optimization
-                      params={params}
-                      projections={projections}
-                      summary={summary}
-                      updateParams={updateParams}
-                      onCreateScenario={handleCreateScenarioFromOptimizer}
-                      settings={settings}
-                      options={options}
-                    />
-                  )}
+                  <Suspense fallback={<LazyLoadingFallback />}>
+                    {activeTab === 'dashboard' && (
+                      <Dashboard projections={projections} params={params} showPV={showPV} />
+                    )}
 
-                  {activeTab === 'chat' && (
-                    <Chat
-                      params={params}
-                      projections={projections}
-                      summary={summary}
-                      scenarios={chatScenarios}
-                      onCreateScenario={handleCreateScenarioFromChat}
-                      onUpdateParams={updateParams}
-                      onNavigate={tab => setActiveTab(tab)}
-                      settings={settings}
-                      options={options}
-                    />
-                  )}
+                    {activeTab === 'risk' && (
+                      <RiskAllocation
+                        projections={projections}
+                        params={params}
+                        selectedYear={riskYear}
+                        onYearChange={setRiskYear}
+                      />
+                    )}
 
-                  {activeTab === 'settings' && (
-                    <SettingsPanel
-                      settings={settings}
-                      updateSettings={updateSettings}
-                      resetSettings={resetSettings}
-                    />
-                  )}
-                </Suspense>
-              </LazyErrorBoundary>
+                    {activeTab === 'heir' && (
+                      <HeirAnalysis projections={projections} params={params} showPV={showPV} />
+                    )}
+
+                    {activeTab === 'scenarios' && (
+                      <ScenarioComparison
+                        params={params}
+                        projections={projections}
+                        summary={summary}
+                        showPV={showPV}
+                        pendingScenario={pendingScenario}
+                        onPendingScenarioConsumed={() => setPendingScenario(null)}
+                        onScenariosChange={handleScenariosChange}
+                        onApplyScenario={updateParams}
+                        settings={settings}
+                        options={options}
+                      />
+                    )}
+
+                    {activeTab === 'optimize' && (
+                      <Optimization
+                        params={params}
+                        projections={projections}
+                        summary={summary}
+                        updateParams={updateParams}
+                        onCreateScenario={handleCreateScenarioFromOptimizer}
+                        settings={settings}
+                        options={options}
+                      />
+                    )}
+
+                    {activeTab === 'settings' && (
+                      <SettingsPanel
+                        settings={settings}
+                        updateSettings={updateSettings}
+                        resetSettings={resetSettings}
+                      />
+                    )}
+                  </Suspense>
+                </LazyErrorBoundary>
+              )}
+            </div>
+
+            {/* RIGHT POSITION: Resize handle + Chat panel */}
+            {chatPanel.visible && chatPanel.position === 'right' && (
+              <>
+                {/* Resize handle */}
+                <div
+                  className={`w-1 h-full cursor-col-resize shrink-0 flex items-center justify-center group ${
+                    chatPanel.isResizing ? 'bg-blue-500' : 'bg-slate-700 hover:bg-blue-500'
+                  }`}
+                  onMouseDown={chatPanel.startResize}
+                >
+                  <GripVertical className="w-4 h-4 text-slate-500 group-hover:text-white" />
+                </div>
+                {/* Chat panel */}
+                <div
+                  className="flex flex-col overflow-hidden bg-slate-950 border-l border-slate-700 shrink-0"
+                  style={{
+                    width: `${chatPanel.size}px`,
+                    transition: chatPanel.isResizing ? 'none' : 'width 0.15s ease',
+                  }}
+                >
+                  <Chat
+                    params={params}
+                    projections={projections}
+                    summary={summary}
+                    scenarios={chatScenarios}
+                    onCreateScenario={handleCreateScenarioFromChat}
+                    onUpdateParams={updateParams}
+                    onNavigate={tab => setActiveTab(tab)}
+                    settings={settings}
+                    options={options}
+                    panelMode={true}
+                    onClose={chatPanel.hide}
+                    onDragStart={chatPanel.startDrag}
+                    isDragging={chatPanel.isDragging}
+                  />
+                </div>
+              </>
             )}
           </div>
         </main>

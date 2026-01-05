@@ -22,6 +22,7 @@ import {
   Check,
   Square,
   Copy,
+  X,
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 
@@ -151,6 +152,11 @@ export function Chat({
   onNavigate,
   settings = {},
   options = {},
+  // Panel mode props
+  panelMode = false,
+  onClose,
+  onDragStart,
+  isDragging = false,
 }) {
   const [messages, setMessages] = useState(() => loadChatHistory());
   const [input, setInput] = useState('');
@@ -927,8 +933,11 @@ export function Chat({
         toolIterations++;
 
         if (toolIterations > MAX_TOOL_ITERATIONS) {
-          console.warn(`Tool call limit (${MAX_TOOL_ITERATIONS}) reached. Generating final response.`);
-          assistantContent += '\n\n*Note: I reached my tool call limit. If you need more analysis, please ask a follow-up question.*';
+          console.warn(
+            `Tool call limit (${MAX_TOOL_ITERATIONS}) reached. Generating final response.`
+          );
+          assistantContent +=
+            '\n\n*Note: I reached my tool call limit. If you need more analysis, please ask a follow-up question.*';
           break;
         }
 
@@ -1035,10 +1044,16 @@ export function Chat({
   return (
     <div className="flex-1 flex flex-col overflow-hidden text-xs">
       {/* Header */}
-      <div className="h-10 bg-slate-900/50 border-b border-slate-800 flex items-center px-3 justify-between shrink-0">
+      <div
+        className={`h-10 bg-slate-900/50 border-b border-slate-800 flex items-center px-3 justify-between shrink-0 ${
+          panelMode ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : ''
+        }`}
+        onMouseDown={panelMode ? onDragStart : undefined}
+      >
         <div className="flex items-center gap-2">
           <MessageCircle className="w-4 h-4 text-purple-400" />
           <span className="text-slate-200 font-medium">AI Assistant</span>
+          {panelMode && <span className="text-slate-500 text-[10px]">(drag to reposition)</span>}
           <span className="text-slate-500">({messages.length} messages)</span>
           {/* Token usage indicator */}
           {(sessionTokens.input > 0 || sessionTokens.output > 0) && (
@@ -1071,10 +1086,22 @@ export function Chat({
             className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 hover:bg-slate-600"
             title="Start a new chat session (clears history)"
             data-testid="new-chat-button"
+            onMouseDown={e => e.stopPropagation()}
           >
             <Trash2 className="w-3 h-3" />
             New Chat
           </button>
+          {/* Close button - only in panel mode */}
+          {panelMode && onClose && (
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200"
+              title="Close panel (toggle with AI Chat tab)"
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
