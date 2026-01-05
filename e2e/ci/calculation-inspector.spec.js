@@ -62,6 +62,9 @@ test.describe('Calculation Inspector', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    // Navigate to Projections tab (default is now Dashboard)
+    await page.click('button:has-text("Projections")');
+    await page.waitForTimeout(300);
     // Wait for projections table to be visible
     await page.waitForSelector('[data-testid="projections-table"]', { timeout: 10000 });
   });

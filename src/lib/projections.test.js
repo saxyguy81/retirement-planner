@@ -5,7 +5,12 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { generateProjections, calculateSummary, compareScenarios } from './projections.js';
+import {
+  generateProjections,
+  calculateSummary,
+  compareScenarios,
+  resolveOverride,
+} from './projections.js';
 import { DEFAULT_PARAMS } from './taxTables.js';
 
 // =============================================================================
@@ -300,8 +305,8 @@ describe('generateProjections - snapshot baselines', () => {
     const params = {
       ...TEST_PARAMS,
       rothConversions: {
-        2026: 200000,
-        2027: 200000,
+        2026: { amount: 200000, isPV: false },
+        2027: { amount: 200000, isPV: false },
       },
     };
 
@@ -498,7 +503,7 @@ describe('generateProjections - Roth conversion', () => {
     const baseParams = { ...TEST_PARAMS };
     const conversionParams = {
       ...TEST_PARAMS,
-      rothConversions: { 2026: 100000 },
+      rothConversions: { 2026: { amount: 100000, isPV: false } },
     };
 
     const baseProjections = generateProjections(baseParams);
@@ -518,7 +523,7 @@ describe('generateProjections - Roth conversion', () => {
     const conversionAmount = 100000;
     const params = {
       ...TEST_PARAMS,
-      rothConversions: { 2026: conversionAmount },
+      rothConversions: { 2026: { amount: conversionAmount, isPV: false } },
     };
 
     const projections = generateProjections(params);
@@ -549,7 +554,7 @@ describe('generateProjections - Roth conversion', () => {
     const params = {
       ...TEST_PARAMS,
       iraStart: 100000,
-      rothConversions: { 2026: 200000 }, // More than available
+      rothConversions: { 2026: { amount: 200000, isPV: false } }, // More than available
     };
 
     const projections = generateProjections(params);
@@ -562,7 +567,7 @@ describe('generateProjections - Roth conversion', () => {
   it('conversion appears in MAGI for future IRMAA', () => {
     const params = {
       ...TEST_PARAMS,
-      rothConversions: { 2026: 500000 },
+      rothConversions: { 2026: { amount: 500000, isPV: false } },
     };
 
     const projections = generateProjections(params);
@@ -710,8 +715,8 @@ describe('generateProjections - expense overrides', () => {
     const params = {
       ...TEST_PARAMS,
       expenseOverrides: {
-        2027: 120000,
-        2029: 50000,
+        2027: { amount: 120000, isPV: false },
+        2029: { amount: 50000, isPV: false },
       },
     };
 
@@ -728,7 +733,7 @@ describe('generateProjections - expense overrides', () => {
     const params = {
       ...TEST_PARAMS,
       expenseOverrides: {
-        2027: 120000, // Only override 2027
+        2027: { amount: 120000, isPV: false }, // Only override 2027
       },
     };
 
@@ -953,7 +958,7 @@ describe('calculateSummary', () => {
 describe('compareScenarios', () => {
   it('returns base projection and named scenarios', () => {
     const scenarios = {
-      highConversion: { rothConversions: { 2026: 200000 } },
+      highConversion: { rothConversions: { 2026: { amount: 200000, isPV: false } } },
       lowExpenses: { annualExpenses: 50000 },
     };
 
@@ -967,7 +972,7 @@ describe('compareScenarios', () => {
 
   it('scenarios differ from base', () => {
     const scenarios = {
-      highConversion: { rothConversions: { 2026: 200000 } },
+      highConversion: { rothConversions: { 2026: { amount: 200000, isPV: false } } },
     };
 
     const result = compareScenarios(TEST_PARAMS, scenarios);
@@ -1132,7 +1137,7 @@ describe('generateProjections - AT harvest overrides', () => {
     const baseParams = { ...TEST_PARAMS };
     const harvestParams = {
       ...TEST_PARAMS,
-      atHarvestOverrides: { 2026: 50000 },
+      atHarvestOverrides: { 2026: { amount: 50000, isPV: false } },
     };
 
     const baseProjections = generateProjections(baseParams);
@@ -1197,7 +1202,7 @@ describe('generateProjections - Roth conversion feasibility', () => {
     const params = {
       ...TEST_PARAMS,
       iraStart: 100000,
-      rothConversions: { 2026: 200000 }, // Request more than available
+      rothConversions: { 2026: { amount: 200000, isPV: false } }, // Request more than available
     };
 
     const projections = generateProjections(params);
@@ -1212,7 +1217,7 @@ describe('generateProjections - Roth conversion feasibility', () => {
     const params = {
       ...TEST_PARAMS,
       iraStart: 500000,
-      rothConversions: { 2026: 100000 },
+      rothConversions: { 2026: { amount: 100000, isPV: false } },
     };
 
     const projections = generateProjections(params);
@@ -1228,7 +1233,7 @@ describe('generateProjections - Roth conversion feasibility', () => {
       ...TEST_PARAMS,
       iraStart: 100000,
       birthYear: 1953, // Age 73 in 2026 triggers RMD
-      rothConversions: { 2026: 100000 }, // Request full IRA amount
+      rothConversions: { 2026: { amount: 100000, isPV: false } }, // Request full IRA amount
     };
 
     const projections = generateProjections(params);
@@ -1248,7 +1253,7 @@ describe('generateProjections - Roth conversion feasibility', () => {
     const params = {
       ...TEST_PARAMS,
       iraStart: 150000,
-      rothConversions: { 2026: 200000 },
+      rothConversions: { 2026: { amount: 200000, isPV: false } },
     };
 
     const projections = generateProjections(params);
@@ -1284,7 +1289,10 @@ describe('calculateSummary - conversion feasibility', () => {
     const params = {
       ...TEST_PARAMS,
       iraStart: 150000,
-      rothConversions: { 2026: 100000, 2027: 100000 }, // Total 200K > 150K IRA
+      rothConversions: {
+        2026: { amount: 100000, isPV: false },
+        2027: { amount: 100000, isPV: false },
+      }, // Total 200K > 150K IRA
     };
 
     const projections = generateProjections(params);
@@ -1299,7 +1307,10 @@ describe('calculateSummary - conversion feasibility', () => {
     const params = {
       ...TEST_PARAMS,
       iraStart: 500000,
-      rothConversions: { 2026: 50000, 2027: 50000 },
+      rothConversions: {
+        2026: { amount: 50000, isPV: false },
+        2027: { amount: 50000, isPV: false },
+      },
     };
 
     const projections = generateProjections(params);
@@ -1315,7 +1326,7 @@ describe('calculateSummary - conversion feasibility', () => {
     const params = {
       ...TEST_PARAMS,
       iraStart: 100000,
-      rothConversions: { 2026: 200000 }, // Request 2x available
+      rothConversions: { 2026: { amount: 200000, isPV: false } }, // Request 2x available
     };
 
     const projections = generateProjections(params);
@@ -1334,7 +1345,7 @@ describe('calculateSummary - conversion feasibility', () => {
     const params = {
       ...TEST_PARAMS,
       iraStart: 100000,
-      rothConversions: { 2026: 200000 },
+      rothConversions: { 2026: { amount: 200000, isPV: false } },
     };
 
     const projections = generateProjections(params);
@@ -1349,10 +1360,10 @@ describe('calculateSummary - conversion feasibility', () => {
       ...TEST_PARAMS,
       iraStart: 300000,
       rothConversions: {
-        2026: 100000,
-        2027: 100000,
-        2028: 100000,
-        2029: 100000,
+        2026: { amount: 100000, isPV: false },
+        2027: { amount: 100000, isPV: false },
+        2028: { amount: 100000, isPV: false },
+        2029: { amount: 100000, isPV: false },
       },
     };
 
@@ -1375,5 +1386,166 @@ describe('calculateSummary - conversion feasibility', () => {
     expect(summary.conversionShortfall).toBe(0);
     expect(summary.conversionFeasibilityPercent).toBe(1); // No conversions = fully feasible
     expect(summary.isFullyFeasible).toBe(true);
+  });
+});
+
+// =============================================================================
+// RESOLVE OVERRIDE TESTS
+// =============================================================================
+
+describe('resolveOverride', () => {
+  it('returns null for undefined/null', () => {
+    expect(resolveOverride(undefined, 5, 0.03)).toBeNull();
+    expect(resolveOverride(null, 5, 0.03)).toBeNull();
+  });
+
+  it('returns FV amount unchanged when isPV is false', () => {
+    const override = { amount: 150000, isPV: false };
+    expect(resolveOverride(override, 5, 0.03)).toBe(150000);
+  });
+
+  it('inflates PV amount to FV when isPV is true', () => {
+    const override = { amount: 150000, isPV: true };
+    const result = resolveOverride(override, 10, 0.03);
+    const expected = 150000 * Math.pow(1.03, 10);
+    expect(result).toBeCloseTo(expected, 2);
+  });
+
+  it('returns amount unchanged for year 0 regardless of isPV', () => {
+    expect(resolveOverride({ amount: 150000, isPV: true }, 0, 0.03)).toBe(150000);
+    expect(resolveOverride({ amount: 150000, isPV: false }, 0, 0.03)).toBe(150000);
+  });
+
+  it('handles zero amount', () => {
+    expect(resolveOverride({ amount: 0, isPV: true }, 5, 0.03)).toBe(0);
+    expect(resolveOverride({ amount: 0, isPV: false }, 5, 0.03)).toBe(0);
+  });
+
+  it('handles zero inflation rate', () => {
+    const override = { amount: 100000, isPV: true };
+    expect(resolveOverride(override, 10, 0)).toBe(100000);
+  });
+
+  it('handles high inflation rates correctly', () => {
+    const override = { amount: 100000, isPV: true };
+    const result = resolveOverride(override, 5, 0.1); // 10% inflation
+    const expected = 100000 * Math.pow(1.1, 5);
+    expect(result).toBeCloseTo(expected, 2);
+  });
+});
+
+// =============================================================================
+// PROJECTION OVERRIDES WITH PV/FV TESTS
+// =============================================================================
+
+describe('projection overrides with PV/FV', () => {
+  it('applies FV expense override directly', () => {
+    const params = {
+      ...TEST_PARAMS,
+      startYear: 2026,
+      expenseOverrides: { 2030: { amount: 180000, isPV: false } },
+    };
+    const projections = generateProjections(params);
+    const year2030 = projections.find(p => p.year === 2030);
+    expect(year2030.expenses).toBe(180000);
+  });
+
+  it('inflates PV expense override to correct FV', () => {
+    const params = {
+      ...TEST_PARAMS,
+      startYear: 2026,
+      annualExpenses: 150000,
+      expenseInflation: 0.03,
+      expenseOverrides: { 2030: { amount: 150000, isPV: true } },
+    };
+    const projections = generateProjections(params);
+    const year2030 = projections.find(p => p.year === 2030);
+    const expectedFV = 150000 * Math.pow(1.03, 4); // 4 years from 2026
+    expect(year2030.expenses).toBeCloseTo(expectedFV, 0);
+  });
+
+  it('applies FV Roth conversion override directly', () => {
+    const params = {
+      ...TEST_PARAMS,
+      startYear: 2026,
+      iraStart: 1000000,
+      rothConversions: { 2028: { amount: 200000, isPV: false } },
+    };
+    const projections = generateProjections(params);
+    const year2028 = projections.find(p => p.year === 2028);
+    expect(year2028.rothConversion).toBe(200000);
+  });
+
+  it('inflates PV Roth conversion override to correct FV', () => {
+    const params = {
+      ...TEST_PARAMS,
+      startYear: 2026,
+      iraStart: 1000000,
+      expenseInflation: 0.03,
+      rothConversions: { 2028: { amount: 100000, isPV: true } },
+    };
+    const projections = generateProjections(params);
+    const year2028 = projections.find(p => p.year === 2028);
+    const expectedFV = 100000 * Math.pow(1.03, 2); // 2 years from 2026
+    expect(year2028.rothConversion).toBeCloseTo(expectedFV, 0);
+  });
+
+  it('applies FV AT harvest override directly', () => {
+    const params = {
+      ...TEST_PARAMS,
+      startYear: 2026,
+      atHarvestOverrides: { 2027: { amount: 75000, isPV: false } },
+    };
+    const projections = generateProjections(params);
+    const year2027 = projections.find(p => p.year === 2027);
+    // AT harvest override increases AT withdrawal
+    expect(year2027.atWithdrawal).toBeGreaterThan(0);
+  });
+
+  it('inflates PV AT harvest override to correct FV', () => {
+    const params = {
+      ...TEST_PARAMS,
+      startYear: 2026,
+      expenseInflation: 0.03,
+      atHarvestOverrides: { 2029: { amount: 50000, isPV: true } },
+    };
+    const projections = generateProjections(params);
+    const year2029 = projections.find(p => p.year === 2029);
+    // Verify the harvest increases AT withdrawal compared to no harvest
+    const noHarvestParams = { ...params, atHarvestOverrides: {} };
+    const noHarvestProjections = generateProjections(noHarvestParams);
+    const noHarvestYear2029 = noHarvestProjections.find(p => p.year === 2029);
+    expect(year2029.atWithdrawal).toBeGreaterThanOrEqual(noHarvestYear2029.atWithdrawal);
+  });
+
+  it('mixed PV and FV overrides in same projection', () => {
+    const params = {
+      ...TEST_PARAMS,
+      startYear: 2026,
+      iraStart: 1000000,
+      expenseInflation: 0.03,
+      expenseOverrides: {
+        2027: { amount: 100000, isPV: true }, // PV - should be inflated
+        2028: { amount: 120000, isPV: false }, // FV - should be used directly
+      },
+      rothConversions: {
+        2027: { amount: 50000, isPV: false }, // FV
+        2028: { amount: 50000, isPV: true }, // PV
+      },
+    };
+    const projections = generateProjections(params);
+
+    const year2027 = projections.find(p => p.year === 2027);
+    const year2028 = projections.find(p => p.year === 2028);
+
+    // 2027: expense = 100000 * 1.03^1
+    expect(year2027.expenses).toBeCloseTo(100000 * 1.03, 0);
+    // 2027: Roth = 50000 (FV)
+    expect(year2027.rothConversion).toBe(50000);
+
+    // 2028: expense = 120000 (FV)
+    expect(year2028.expenses).toBe(120000);
+    // 2028: Roth = 50000 * 1.03^2
+    expect(year2028.rothConversion).toBeCloseTo(50000 * Math.pow(1.03, 2), 0);
   });
 });

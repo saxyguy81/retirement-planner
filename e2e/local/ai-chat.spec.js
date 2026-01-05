@@ -47,10 +47,10 @@ test.describe('AI Chat', () => {
     await page.waitForTimeout(300);
 
     // Fill in ccproxy endpoint
-    await page.fill('input[placeholder*="endpoint"], input[placeholder*="URL"]', 'http://localhost:4000/v1/messages');
+    await page.fill('input[placeholder*="endpoint"], input[placeholder*="URL"]', 'http://localhost:4000/api/v1/messages');
 
     // Fill in model
-    await page.fill('input[placeholder*="model" i], input[placeholder*="Model"]', 'claude-3-5-sonnet-20241022');
+    await page.fill('input[placeholder*="model" i], input[placeholder*="Model"]', 'claude-sonnet-4-20250514');
 
     // Fill in API key (any value works for ccproxy)
     await page.fill('input[type="password"]', 'test-api-key');

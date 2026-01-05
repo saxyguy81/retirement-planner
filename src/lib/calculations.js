@@ -151,7 +151,8 @@ export function calculateIllinoisTax(
     propertyTaxCredit,
     netTax,
     agiLimit,
-    creditLimitedByTax: propertyTax > 0 && propertyTaxCredit < Math.round(propertyTax * IL_PROPERTY_TAX_CREDIT_RATE),
+    creditLimitedByTax:
+      propertyTax > 0 && propertyTaxCredit < Math.round(propertyTax * IL_PROPERTY_TAX_CREDIT_RATE),
     creditLimitedByAGI: agi > agiLimit && propertyTax > 0,
   };
 }

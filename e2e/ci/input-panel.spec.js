@@ -15,8 +15,8 @@ test.describe('Input Panel', () => {
 
   test('can expand and collapse input sections', async ({ page }) => {
     // The sidebar should show various collapsible sections
-    // Look for section headers that are clickable - actual title is "Starting Accounts"
-    await expect(page.locator('text=Starting Accounts').first()).toBeVisible();
+    // Look for section headers that are clickable - renamed to "What You Have"
+    await expect(page.locator('text=What You Have').first()).toBeVisible();
   });
 
   test('Tax Strategies section is visible', async ({ page }) => {
@@ -25,17 +25,15 @@ test.describe('Input Panel', () => {
   });
 
   test('input panel has financial inputs', async ({ page }) => {
-    // Should see number inputs for financial values
-    const numberInputs = page.locator('input[type="number"]');
-    const inputCount = await numberInputs.count();
-    expect(inputCount).toBeGreaterThan(0);
+    // Should see text inputs for financial values (ParamInput and YearInput use type="text")
+    // Also check for any number inputs that may exist
+    const textInputs = page.locator('aside input[type="text"]');
+    const textCount = await textInputs.count();
+    expect(textCount).toBeGreaterThan(0);
   });
 
   test('expenses section with overrides works', async ({ page }) => {
-    // Expand Expenses section (now contains overrides as subsection)
-    await page.click('text=Expenses');
-    await page.waitForTimeout(300);
-
+    // "What You'll Spend" section is expanded by default now
     // Should see the Year-Specific Overrides subsection
     await expect(page.locator('text=Year-Specific Overrides').first()).toBeVisible();
 
@@ -45,7 +43,7 @@ test.describe('Input Panel', () => {
   });
 
   test('profile section displays correctly', async ({ page }) => {
-    // Profile & Life Events section should be visible in the sidebar
-    await expect(page.locator('text=Profile & Life Events').first()).toBeVisible();
+    // About You section (renamed from Profile & Life Events) should be visible
+    await expect(page.locator('text=About You').first()).toBeVisible();
   });
 });

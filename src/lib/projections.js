@@ -30,6 +30,28 @@ import {
 } from './taxTables.js';
 
 // =============================================================================
+// HELPER: Parse override values
+// Format: { amount, isPV } with PV/FV flag
+// =============================================================================
+/**
+ * Parse an override value in format ({amount, isPV})
+ * @param {{amount: number, isPV: boolean}} override - The override value
+ * @param {number} yearsFromStart - Years from projection start
+ * @param {number} inflationRate - Annual inflation rate for PV conversion
+ * @returns {number|null} The nominal (FV) amount to use in calculations
+ */
+export function resolveOverride(override, yearsFromStart, inflationRate) {
+  if (override === undefined || override === null) return null;
+
+  const { amount, isPV } = override;
+  if (isPV) {
+    // Convert PV to FV by inflating
+    return amount * Math.pow(1 + inflationRate, yearsFromStart);
+  }
+  return amount;
+}
+
+// =============================================================================
 // HELPER: Convert custom brackets from TaxBracketEditor format to calculation format
 // TaxBracketEditor format: { rate, singleThreshold, mfjThreshold }
 // Calculation format: { rate, threshold }
@@ -274,9 +296,14 @@ export function generateProjections(params = {}) {
     let ssAnnual = p.socialSecurityMonthly * 12 * Math.pow(1 + p.ssCOLA, yearsFromStart);
 
     // Expense calculation: use override if set, otherwise calculate with inflation
+    const expenseOverrideValue = resolveOverride(
+      p.expenseOverrides?.[year],
+      yearsFromStart,
+      p.expenseInflation
+    );
     let expenses =
-      p.expenseOverrides && p.expenseOverrides[year]
-        ? p.expenseOverrides[year]
+      expenseOverrideValue !== null
+        ? expenseOverrideValue
         : p.annualExpenses * Math.pow(1 + p.expenseInflation, yearsFromStart);
 
     // Adjust for survivor scenario
@@ -286,7 +313,8 @@ export function generateProjections(params = {}) {
     }
 
     // AT harvest override (extra AT liquidation for capital gains harvesting)
-    const atHarvestOverride = p.atHarvestOverrides?.[year] || 0;
+    const atHarvestOverride =
+      resolveOverride(p.atHarvestOverrides?.[year], yearsFromStart, p.expenseInflation) || 0;
 
     // RMD calculation
     const rmd = calculateRMD(iraBOY, age);
@@ -297,7 +325,8 @@ export function generateProjections(params = {}) {
     const deductiblePropertyTax = Math.min(propertyTax, saltCap);
 
     // Roth conversion for this year - cap to available IRA after RMD
-    const requestedRothConversion = p.rothConversions[year] || 0;
+    const requestedRothConversion =
+      resolveOverride(p.rothConversions?.[year], yearsFromStart, p.expenseInflation) || 0;
     const maxConversion = Math.max(0, iraBOY - rmd.required);
     const actualRothConversion = Math.min(requestedRothConversion, maxConversion);
     const conversionCapped = requestedRothConversion > actualRothConversion;

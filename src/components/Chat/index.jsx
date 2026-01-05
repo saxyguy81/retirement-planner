@@ -23,6 +23,10 @@ import {
   Square,
   Copy,
   X,
+  Zap,
+  TrendingUp,
+  DollarSign,
+  HelpCircle,
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 
@@ -52,6 +56,49 @@ const CONTEXT_WARNING_THRESHOLD = 0.75; // Warn at 75% usage
 // Maximum tool call iterations to prevent infinite loops
 // 25 iterations allows complex multi-step queries while preventing runaway loops
 const MAX_TOOL_ITERATIONS = 25;
+
+// Storage key for welcome message shown flag
+const CHAT_WELCOMED_KEY = 'rp-chat-welcomed';
+
+// Suggested prompts with emotional framing (positive, actionable)
+const SUGGESTED_PROMPTS = [
+  {
+    label: 'What Roth strategy would work best for me?',
+    icon: Zap,
+    category: 'optimize',
+  },
+  {
+    label: 'How many years of retirement am I funded for?',
+    icon: TrendingUp,
+    category: 'project',
+  },
+  {
+    label: 'What are my opportunities to reduce taxes?',
+    icon: DollarSign,
+    category: 'optimize',
+  },
+  {
+    label: 'Help me understand these projections',
+    icon: HelpCircle,
+    category: 'learn',
+  },
+];
+
+// Welcome message shown on first chat open
+const WELCOME_MESSAGE = {
+  role: 'assistant',
+  content: `I'm here to help you understand and optimize your retirement plan.
+
+**Some things I can help with:**
+- **Find your optimal Roth conversion strategy** - I'll analyze hundreds of scenarios
+- **Answer questions** about taxes, withdrawals, or any numbers you see
+- **Create "what-if" scenarios** to compare different approaches
+- **Explain the calculations** in plain English
+
+All projections are estimates based on your inputs. I'll be transparent about assumptions and limitations.
+
+What would you like to explore?`,
+};
 
 // Load chat history from localStorage
 const loadChatHistory = () => {
@@ -158,7 +205,18 @@ export function Chat({
   onDragStart,
   isDragging = false,
 }) {
-  const [messages, setMessages] = useState(() => loadChatHistory());
+  const [messages, setMessages] = useState(() => {
+    const history = loadChatHistory();
+    // Show welcome message on first visit if no history
+    if (history.length === 0) {
+      const hasBeenWelcomed = localStorage.getItem(CHAT_WELCOMED_KEY);
+      if (!hasBeenWelcomed) {
+        localStorage.setItem(CHAT_WELCOMED_KEY, 'true');
+        return [WELCOME_MESSAGE];
+      }
+    }
+    return history;
+  });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -1117,7 +1175,27 @@ export function Chat({
                 <Bot className="w-12 h-12 mb-3 opacity-50" />
                 <div className="text-lg mb-2">AI Assistant</div>
                 <div className="text-sm text-center max-w-md mb-4">
-                  I can help you with your retirement planning. Here&apos;s what I can do:
+                  I can help you explore your plan. Try asking:
+                </div>
+
+                {/* Suggested prompts with emotional framing */}
+                <div className="flex flex-wrap gap-2 justify-center max-w-lg mb-4" role="list">
+                  {SUGGESTED_PROMPTS.map(prompt => {
+                    const Icon = prompt.icon;
+                    return (
+                      <button
+                        key={prompt.label}
+                        onClick={() => {
+                          setInput(prompt.label);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 rounded-full text-xs text-slate-300 hover:bg-slate-700 hover:text-slate-100 transition-colors"
+                        role="listitem"
+                      >
+                        <Icon className="w-3.5 h-3.5 text-purple-400" aria-hidden="true" />
+                        {prompt.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Capabilities */}
@@ -1135,36 +1213,9 @@ export function Chat({
                 </div>
 
                 {/* Quick tip about base case */}
-                <div className="text-xs text-slate-500 bg-slate-800/30 rounded p-2 max-w-md mb-4">
+                <div className="text-xs text-slate-500 bg-slate-800/30 rounded p-2 max-w-md">
                   <strong>Tip:</strong> Your &quot;Base Case&quot; is your current plan in the
                   Projections tab. Scenarios I create are alternatives to compare against it.
-                </div>
-
-                {/* Example prompts */}
-                <div className="space-y-2 text-xs">
-                  <div className="text-slate-500">Try asking:</div>
-                  <button
-                    onClick={() => setInput("What's my current projected heir value?")}
-                    className="block px-3 py-1.5 bg-slate-800 rounded hover:bg-slate-700"
-                  >
-                    {'"'}What{"'"}s my current projected heir value?{'"'}
-                  </button>
-                  <button
-                    onClick={() =>
-                      setInput('How much would I save in taxes with no Roth conversions?')
-                    }
-                    className="block px-3 py-1.5 bg-slate-800 rounded hover:bg-slate-700"
-                  >
-                    {'"'}How much would I save in taxes with no Roth conversions?{'"'}
-                  </button>
-                  <button
-                    onClick={() =>
-                      setInput('Create a scenario with $500K conversions in 2026-2028')
-                    }
-                    className="block px-3 py-1.5 bg-slate-800 rounded hover:bg-slate-700"
-                  >
-                    {'"'}Create a scenario with $500K conversions in 2026-2028{'"'}
-                  </button>
                 </div>
               </div>
             )}

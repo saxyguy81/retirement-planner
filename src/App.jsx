@@ -13,6 +13,7 @@
 import {
   Calculator,
   ChevronDown,
+  ChevronRight,
   Columns,
   DollarSign,
   Download,
@@ -22,7 +23,7 @@ import {
   GripVertical,
   LineChart,
   MessageCircle,
-  RefreshCw,
+  Redo2,
   RotateCcw,
   Save,
   Settings,
@@ -30,6 +31,7 @@ import {
   Square,
   Table,
   Trash2,
+  Undo2,
   Users,
   Zap,
 } from 'lucide-react';
@@ -39,6 +41,7 @@ import { Chat } from './components/Chat';
 import { InputPanel } from './components/InputPanel';
 import { LazyErrorBoundary } from './components/LazyErrorBoundary';
 import { LazyLoadingFallback } from './components/LazyLoadingFallback';
+import { PersonalizationPanel } from './components/PersonalizationPanel';
 import { ProjectionsTable } from './components/ProjectionsTable';
 import { SplitPanel } from './components/SplitPanel';
 import UpdatePrompt from './components/UpdatePrompt';
@@ -97,58 +100,39 @@ const TABS = [
   { id: 'settings', icon: Settings, label: 'Settings' },
 ];
 
+// localStorage key for working scenarios
+const SCENARIOS_STORAGE_KEY = 'retirement-planner-working-scenarios';
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState('projections');
+  const [activeTab, setActiveTab] = useState('dashboard'); // Default to Dashboard for better first impression
   const [riskYear, setRiskYear] = useState(2028);
-  const [showExportMenu, setShowExportMenu] = useState(false);
   const [splitView, setSplitView] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [showSaveMenu, setShowSaveMenu] = useState(false);
-  const [showLoadMenu, setShowLoadMenu] = useState(false);
+  const [showSaveMenu, setShowSaveMenu] = useState(false); // Unified File menu
   const [saveName, setSaveName] = useState('');
   const [showPV, setShowPV] = useState(true); // Global Present Value toggle
   const [pendingScenario, setPendingScenario] = useState(null);
   const [chatScenarios, setChatScenarios] = useState([]); // Scenarios for Chat access
+  const [showPersonalization, setShowPersonalization] = useState(false); // Personalization panel visibility
+
+  // Working scenarios state (persists across tab switches and page reloads)
+  const [workingScenarios, setWorkingScenarios] = useState(() => {
+    try {
+      const saved = localStorage.getItem(SCENARIOS_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error('Failed to load working scenarios:', e);
+      return [];
+    }
+  });
 
   // Chat panel state with persistence
   const chatPanel = useChatPanelState();
 
   const configFileInputRef = useRef(null);
-  const exportMenuRef = useRef(null);
-  const saveMenuRef = useRef(null);
-  const loadMenuRef = useRef(null);
+  const saveMenuRef = useRef(null); // Unified File menu ref
 
-  // Close menus when clicking outside
-  useEffect(() => {
-    const handleClickOutside = e => {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
-        setShowExportMenu(false);
-      }
-      if (saveMenuRef.current && !saveMenuRef.current.contains(e.target)) {
-        setShowSaveMenu(false);
-      }
-      if (loadMenuRef.current && !loadMenuRef.current.contains(e.target)) {
-        setShowLoadMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Keyboard shortcut: Cmd/Ctrl+Shift+C to toggle chat panel
-  useEffect(() => {
-    const handleKeyDown = e => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'c') {
-        e.preventDefault();
-        chatPanel.toggleVisible();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-    // chatPanel.toggleVisible is a stable callback from useCallback
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatPanel.toggleVisible]);
-
+  // useProjections must come before any useEffect that uses undo/redo
   const {
     params,
     options,
@@ -159,8 +143,6 @@ export default function App() {
     updateRothConversion,
     updateExpenseOverride,
     updateATHarvest,
-    toggleIterative,
-    setMaxIterations,
     setOptions,
     savedStates,
     saveState,
@@ -170,19 +152,84 @@ export default function App() {
     settings,
     updateSettings,
     resetSettings,
+    isSampleData,
+    clearSampleData,
+    resetToSampleData,
+    // Undo/Redo
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useProjections();
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = e => {
+      if (saveMenuRef.current && !saveMenuRef.current.contains(e.target)) {
+        setShowSaveMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Keyboard shortcuts: Cmd/Ctrl+Shift+C to toggle chat panel, Cmd/Ctrl+Z for undo, Cmd/Ctrl+Shift+Z for redo
+  useEffect(() => {
+    const handleKeyDown = e => {
+      // Toggle chat panel: Cmd/Ctrl+Shift+C
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'c') {
+        e.preventDefault();
+        chatPanel.toggleVisible();
+        return;
+      }
+
+      // Undo: Cmd/Ctrl+Z (without shift)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        // Only prevent if not in a text input
+        const tag = e.target.tagName.toLowerCase();
+        if (tag !== 'input' && tag !== 'textarea') {
+          e.preventDefault();
+          undo();
+        }
+        return;
+      }
+
+      // Redo: Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y
+      if ((e.metaKey || e.ctrlKey) && (e.shiftKey && e.key === 'z' || e.key === 'y')) {
+        const tag = e.target.tagName.toLowerCase();
+        if (tag !== 'input' && tag !== 'textarea') {
+          e.preventDefault();
+          redo();
+        }
+        return;
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+    // chatPanel.toggleVisible is a stable callback from useCallback
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatPanel.toggleVisible, undo, redo]);
 
   // Apply global display precision setting
   useEffect(() => {
     setGlobalPrecision(settings.displayPrecision || 'abbreviated');
   }, [settings.displayPrecision]);
 
+  // Auto-save working scenarios to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(SCENARIOS_STORAGE_KEY, JSON.stringify(workingScenarios));
+    } catch (e) {
+      console.error('Failed to save working scenarios:', e);
+    }
+  }, [workingScenarios]);
+
   // Save handler
   const handleSave = useCallback(() => {
-    saveState(saveName);
+    saveState(saveName, workingScenarios);
     setSaveName('');
     setShowSaveDialog(false);
-  }, [saveState, saveName]);
+  }, [saveState, saveName, workingScenarios]);
 
   // Export handlers
   const handleExport = useCallback(
@@ -205,7 +252,7 @@ export default function App() {
           exportToPDF(exportData);
           break;
       }
-      setShowExportMenu(false);
+      // Export is now part of the unified File menu - menu closed when export button clicked
     },
     [projections, summary, params]
   );
@@ -220,6 +267,7 @@ export default function App() {
       options: { ...options },
       settings: { ...settings },
       aiConfig: loadAIConfig(),
+      scenarios: workingScenarios,
     };
 
     // Try native File System Access API first
@@ -252,7 +300,7 @@ export default function App() {
     a.download = `retirement-config-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [params, options, settings]);
+  }, [params, options, settings, workingScenarios]);
 
   // Load configuration from JSON file
   const handleLoadFromFile = useCallback(async () => {
@@ -278,6 +326,7 @@ export default function App() {
             if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
             if (data.settings) updateSettings(data.settings);
             if (data.aiConfig) saveAIConfig(data.aiConfig);
+            if (data.scenarios) setWorkingScenarios(data.scenarios);
           } else {
             alert('Invalid configuration file');
           }
@@ -288,6 +337,7 @@ export default function App() {
         if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
         if (data.settings) updateSettings(data.settings);
         if (data.aiConfig) saveAIConfig(data.aiConfig);
+        if (data.scenarios) setWorkingScenarios(data.scenarios);
         return;
       } catch (err) {
         if (err.name === 'AbortError') return;
@@ -315,6 +365,7 @@ export default function App() {
             if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
             if (data.settings) updateSettings(data.settings);
             if (data.aiConfig) saveAIConfig(data.aiConfig);
+            if (data.scenarios) setWorkingScenarios(data.scenarios);
           } else {
             alert('Invalid configuration file');
           }
@@ -323,6 +374,7 @@ export default function App() {
           if (data.options) setOptions(prev => ({ ...prev, ...data.options }));
           if (data.settings) updateSettings(data.settings);
           if (data.aiConfig) saveAIConfig(data.aiConfig);
+          if (data.scenarios) setWorkingScenarios(data.scenarios);
         }
       } catch (err) {
         alert('Failed to load configuration: ' + err.message);
@@ -362,6 +414,17 @@ export default function App() {
   const handleScenariosChange = useCallback(scenarios => {
     setChatScenarios(scenarios);
   }, []);
+
+  // Handle personalization completion - apply derived params and settings
+  const handlePersonalizationComplete = useCallback(
+    (derivedParams, derivedSettings) => {
+      updateParams(derivedParams);
+      updateSettings(derivedSettings);
+      clearSampleData();
+      setShowPersonalization(false);
+    },
+    [updateParams, updateSettings, clearSampleData]
+  );
 
   // Split panel view configurations - use render functions for lazy loading
   const splitPanelViews = useMemo(
@@ -420,8 +483,22 @@ export default function App() {
       style={{ fontFamily: 'ui-monospace, SFMono-Regular, Monaco, Consolas, monospace' }}
       data-testid="app-loaded"
     >
+      {/* Skip links for keyboard navigation - hidden until focused */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded focus:outline-none"
+      >
+        Skip to main content
+      </a>
+      <a
+        href="#input-panel"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-40 focus:z-50 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded focus:outline-none"
+      >
+        Skip to inputs
+      </a>
+
       {/* Header */}
-      <header className="h-11 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-3 shrink-0">
+      <header className="h-11 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-3 shrink-0" role="banner">
         <div className="flex items-center gap-2">
           <Calculator className="w-4 h-4 text-emerald-400" />
           <span className="font-semibold text-sm">Retirement Planner</span>
@@ -429,6 +506,64 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Summary stats - most important info first */}
+          {/* ARIA live region announces changes to screen readers */}
+          <div
+            className="flex items-center gap-3 text-xs"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <div className="text-slate-400">
+              <span className="sr-only">Final portfolio: </span>
+              Final:{' '}
+              <span className="text-emerald-400 font-medium">
+                ${(summary.endingPortfolio / 1e6).toFixed(1)}M
+              </span>
+            </div>
+            <div className="text-slate-400">
+              <span className="sr-only">Heir value: </span>
+              Heir:{' '}
+              <span className="text-blue-400 font-medium">
+                ${(summary.endingHeirValue / 1e6).toFixed(1)}M
+              </span>
+            </div>
+            <div className="text-slate-400">
+              <span className="sr-only">Total tax: </span>
+              Tax:{' '}
+              <span className="text-rose-400 font-medium">
+                ${(summary.totalTaxPaid / 1e6).toFixed(1)}M
+              </span>
+            </div>
+          </div>
+
+          {/* Undo/Redo buttons */}
+          <div className="flex items-center border-l border-slate-700 pl-2 ml-2">
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              className={`p-1.5 rounded text-xs ${
+                canUndo
+                  ? 'text-slate-300 hover:bg-slate-700'
+                  : 'text-slate-600 cursor-not-allowed'
+              }`}
+              title={`Undo (${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Z)`}
+            >
+              <Undo2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              className={`p-1.5 rounded text-xs ${
+                canRedo
+                  ? 'text-slate-300 hover:bg-slate-700'
+                  : 'text-slate-600 cursor-not-allowed'
+              }`}
+              title={`Redo (${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Shift+Z)`}
+            >
+              <Redo2 className="w-4 h-4" />
+            </button>
+          </div>
+
           {/* PV/FV Toggle - visible on all tabs except Settings */}
           {activeTab !== 'settings' && (
             <button
@@ -447,55 +582,6 @@ export default function App() {
             </button>
           )}
 
-          {/* Iterative tax toggle */}
-          <div className="flex items-center gap-1.5 bg-slate-800 rounded px-2 py-1">
-            <RefreshCw
-              className={`w-3 h-3 ${options.iterativeTax ? 'text-emerald-400' : 'text-slate-500'}`}
-            />
-            <span className="text-xs text-slate-400">Iterative Tax:</span>
-            <button
-              onClick={toggleIterative}
-              className={`px-2 py-0.5 rounded text-xs ${
-                options.iterativeTax ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-400'
-              }`}
-            >
-              {options.iterativeTax ? 'ON' : 'OFF'}
-            </button>
-            {options.iterativeTax && (
-              <select
-                value={options.maxIterations}
-                onChange={e => setMaxIterations(+e.target.value)}
-                className="bg-slate-700 text-xs rounded px-1 py-0.5 ml-1"
-              >
-                <option value={3}>3 iter</option>
-                <option value={5}>5 iter</option>
-                <option value={10}>10 iter</option>
-              </select>
-            )}
-          </div>
-
-          {/* Summary stats */}
-          <div className="flex items-center gap-3 ml-4 text-xs">
-            <div className="text-slate-400">
-              Final:{' '}
-              <span className="text-emerald-400 font-medium">
-                ${(summary.endingPortfolio / 1e6).toFixed(1)}M
-              </span>
-            </div>
-            <div className="text-slate-400">
-              Heir:{' '}
-              <span className="text-blue-400 font-medium">
-                ${(summary.endingHeirValue / 1e6).toFixed(1)}M
-              </span>
-            </div>
-            <div className="text-slate-400">
-              Tax:{' '}
-              <span className="text-rose-400 font-medium">
-                ${(summary.totalTaxPaid / 1e6).toFixed(1)}M
-              </span>
-            </div>
-          </div>
-
           {/* Hidden file input for Load fallback */}
           <input
             ref={configFileInputRef}
@@ -505,19 +591,23 @@ export default function App() {
             className="hidden"
           />
 
-          {/* State Management Buttons - Save Dropdown */}
+          {/* Unified File Menu - combines Save/Load/New/Export */}
           <div className="relative" ref={saveMenuRef}>
             <button
               onClick={() => setShowSaveMenu(!showSaveMenu)}
               className="px-2 py-1 bg-slate-700 text-white rounded text-xs flex items-center gap-1 hover:bg-slate-600"
-              title="Save current state"
+              title="File operations (Save, Load, Export)"
             >
-              <Save className="w-3 h-3" />
-              Save
+              <FolderOpen className="w-3 h-3" />
+              File
               <ChevronDown className="w-3 h-3" />
             </button>
             {showSaveMenu && (
-              <div className="absolute right-0 mt-1 w-40 bg-slate-800 border border-slate-700 rounded shadow-lg z-50">
+              <div className="absolute right-0 mt-1 w-52 bg-slate-800 border border-slate-700 rounded shadow-lg z-50 max-h-96 overflow-y-auto">
+                {/* Save Section */}
+                <div className="px-3 py-1 text-slate-500 text-[10px] bg-slate-900/50 uppercase tracking-wider">
+                  Save
+                </div>
                 <button
                   onClick={() => {
                     setShowSaveDialog(true);
@@ -525,8 +615,9 @@ export default function App() {
                   }}
                   className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 flex items-center gap-2"
                 >
-                  <span className="text-blue-400">Browser</span>
-                  <span className="text-slate-400">localStorage</span>
+                  <Save className="w-3 h-3 text-blue-400" />
+                  <span>To Browser</span>
+                  <span className="text-slate-500 ml-auto">localStorage</span>
                 </button>
                 <button
                   onClick={() => {
@@ -535,147 +626,183 @@ export default function App() {
                   }}
                   className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 flex items-center gap-2"
                 >
-                  <span className="text-emerald-400">JSON File</span>
-                  <span className="text-slate-400">download</span>
+                  <Download className="w-3 h-3 text-emerald-400" />
+                  <span>To JSON File</span>
+                  <span className="text-slate-500 ml-auto">download</span>
                 </button>
-              </div>
-            )}
-          </div>
 
-          <div className="relative" ref={loadMenuRef}>
-            <button
-              onClick={() => setShowLoadMenu(!showLoadMenu)}
-              className="px-2 py-1 bg-slate-700 text-white rounded text-xs flex items-center gap-1 hover:bg-slate-600"
-              title="Load saved state"
-            >
-              <FolderOpen className="w-3 h-3" />
-              Load
-              <ChevronDown className="w-3 h-3" />
-            </button>
-            {showLoadMenu && (
-              <div className="absolute right-0 mt-1 w-64 bg-slate-800 border border-slate-700 rounded shadow-lg z-50 max-h-80 overflow-y-auto">
-                {/* JSON File option */}
+                {/* Load Section */}
+                <div className="px-3 py-1 text-slate-500 text-[10px] bg-slate-900/50 uppercase tracking-wider border-t border-slate-700">
+                  Load
+                </div>
                 <button
                   onClick={() => {
                     handleLoadFromFile();
-                    setShowLoadMenu(false);
+                    setShowSaveMenu(false);
                   }}
-                  className="w-full px-3 py-2 text-left text-xs hover:bg-slate-700 border-b border-slate-700 flex items-center gap-2"
+                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 flex items-center gap-2"
                 >
-                  <span className="text-emerald-400">JSON File</span>
-                  <span className="text-slate-400">from disk</span>
+                  <FolderOpen className="w-3 h-3 text-emerald-400" />
+                  <span>From JSON File</span>
+                  <span className="text-slate-500 ml-auto">open</span>
                 </button>
-                {/* Browser localStorage section */}
-                <div className="px-3 py-1.5 text-slate-500 text-xs bg-slate-900/50 flex items-center gap-2">
-                  <span className="text-blue-400">Browser</span>
-                  <span>saved states</span>
-                </div>
-                {savedStates.length === 0 ? (
-                  <div className="px-3 py-2 text-slate-500 text-xs italic">
-                    No saved states in browser
+                {savedStates.length > 0 && (
+                  <div className="border-t border-slate-700/50">
+                    <div className="px-3 py-1 text-slate-600 text-[10px]">Browser saves:</div>
+                    {savedStates.map(state => (
+                      <div
+                        key={state.id}
+                        className="px-3 py-1.5 hover:bg-slate-700 flex items-center justify-between group"
+                      >
+                        <button
+                          onClick={() => {
+                            const scenarios = loadState(state.id);
+                            setWorkingScenarios(scenarios);
+                            setShowSaveMenu(false);
+                          }}
+                          className="flex-1 text-left"
+                        >
+                          <div className="text-slate-200 text-xs">{state.name}</div>
+                          <div className="text-slate-500 text-[10px]">
+                            {new Date(state.createdAt).toLocaleDateString()}
+                          </div>
+                        </button>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            deleteState(state.id);
+                          }}
+                          className="p-1 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ) : (
-                  savedStates.map(state => (
-                    <div
-                      key={state.id}
-                      className="px-3 py-2 hover:bg-slate-700 flex items-center justify-between group"
-                    >
-                      <button
-                        onClick={() => {
-                          loadState(state.id);
-                          setShowLoadMenu(false);
-                        }}
-                        className="flex-1 text-left"
-                      >
-                        <div className="text-slate-200 text-xs">{state.name}</div>
-                        <div className="text-slate-500 text-xs">
-                          {new Date(state.createdAt).toLocaleDateString()}
-                        </div>
-                      </button>
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          deleteState(state.id);
-                        }}
-                        className="p-1 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))
                 )}
+
+                {/* Export Section */}
+                <div className="px-3 py-1 text-slate-500 text-[10px] bg-slate-900/50 uppercase tracking-wider border-t border-slate-700">
+                  Export
+                </div>
+                <button
+                  onClick={() => {
+                    handleExport('xlsx');
+                    setShowSaveMenu(false);
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 flex items-center gap-2"
+                >
+                  <Download className="w-3 h-3 text-emerald-400" />
+                  <span>Excel (XLSX)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    handleExport('json');
+                    setShowSaveMenu(false);
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 flex items-center gap-2"
+                >
+                  <Download className="w-3 h-3 text-amber-400" />
+                  <span>JSON Data</span>
+                </button>
+                <button
+                  onClick={() => {
+                    handleExport('pdf');
+                    setShowSaveMenu(false);
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 flex items-center gap-2"
+                >
+                  <Download className="w-3 h-3 text-rose-400" />
+                  <span>PDF Report</span>
+                </button>
+
+                {/* Reset Options */}
+                <div className="px-3 py-1 text-slate-500 text-[10px] bg-slate-900/50 uppercase tracking-wider border-t border-slate-700">
+                  Reset
+                </div>
+                <button
+                  onClick={() => {
+                    setShowSaveMenu(false);
+                    if (window.confirm('Load sample data? This will replace your current inputs with example data for exploration.')) {
+                      resetToSampleData();
+                      setWorkingScenarios([]);
+                    }
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 flex items-center gap-2"
+                >
+                  <Users className="w-3 h-3 text-blue-400" />
+                  <span>Load Sample Data</span>
+                  <span className="text-slate-500 ml-auto">explore</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowSaveMenu(false);
+                    if (window.confirm('Start a new session? This will clear all current data.')) {
+                      resetToDefaults();
+                      setWorkingScenarios([]);
+                    }
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 flex items-center gap-2"
+                >
+                  <RotateCcw className="w-3 h-3 text-amber-400" />
+                  <span>New Session</span>
+                  <span className="text-slate-500 ml-auto">reset all</span>
+                </button>
               </div>
             )}
           </div>
 
+          {/* Settings gear - quick access */}
           <button
-            onClick={() => {
-              if (window.confirm('Start a new session? This will clear all current data.')) {
-                resetToDefaults();
-              }
-            }}
-            className="px-2 py-1 bg-amber-600 text-white rounded text-xs flex items-center gap-1 hover:bg-amber-500"
-            title="Start a new session with default values"
+            onClick={() => setActiveTab('settings')}
+            className={`p-1.5 rounded text-xs ${
+              activeTab === 'settings'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+            title="Settings"
           >
-            <RotateCcw className="w-3 h-3" />
-            New
+            <Settings className="w-4 h-4" />
           </button>
-
-          <div className="relative" ref={exportMenuRef}>
-            <button
-              onClick={() => setShowExportMenu(!showExportMenu)}
-              className="ml-1 px-2 py-1 bg-blue-600 text-white rounded text-xs flex items-center gap-1 hover:bg-blue-500"
-            >
-              <Download className="w-3 h-3" />
-              Export
-              <ChevronDown className="w-3 h-3" />
-            </button>
-            {showExportMenu && (
-              <div className="absolute right-0 mt-1 w-32 bg-slate-800 border border-slate-700 rounded shadow-lg z-50">
-                <button
-                  onClick={() => handleExport('xlsx')}
-                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 flex items-center gap-2"
-                >
-                  <span className="text-emerald-400">XLSX</span>
-                  <span className="text-slate-400">Excel</span>
-                </button>
-                <button
-                  onClick={() => handleExport('json')}
-                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 flex items-center gap-2"
-                >
-                  <span className="text-amber-400">JSON</span>
-                  <span className="text-slate-400">Data</span>
-                </button>
-                <button
-                  onClick={() => handleExport('pdf')}
-                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 flex items-center gap-2"
-                >
-                  <span className="text-rose-400">PDF</span>
-                  <span className="text-slate-400">Report</span>
-                </button>
-              </div>
-            )}
-          </div>
         </div>
       </header>
 
+      {/* Sample Data Banner - shown when viewing sample data */}
+      {isSampleData && (
+        <div className="bg-amber-900/30 border-b border-amber-700/50 px-4 py-2 flex items-center justify-between shrink-0">
+          <span className="text-amber-200 text-xs flex items-center gap-2">
+            <span aria-hidden="true">📊</span>
+            <span>Exploring a sample plan — adjust anything to see results update instantly</span>
+          </span>
+          <button
+            onClick={() => setShowPersonalization(true)}
+            className="text-amber-400 text-xs hover:text-amber-300 underline flex items-center gap-1"
+          >
+            Make it yours
+            <ChevronRight className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
       <div className="flex-1 flex overflow-hidden">
         {/* Left sidebar - Inputs */}
-        <InputPanel
-          params={params}
-          settings={settings}
-          updateParam={updateParam}
-          updateParams={updateParams}
-          updateRothConversion={updateRothConversion}
-          updateExpenseOverride={updateExpenseOverride}
-          updateATHarvest={updateATHarvest}
-          options={options}
-          setOptions={setOptions}
-          updateSettings={updateSettings}
-        />
+        <div id="input-panel">
+          <InputPanel
+            params={params}
+            settings={settings}
+            updateParam={updateParam}
+            updateParams={updateParams}
+            updateRothConversion={updateRothConversion}
+            updateExpenseOverride={updateExpenseOverride}
+            updateATHarvest={updateATHarvest}
+            options={options}
+            setOptions={setOptions}
+            updateSettings={updateSettings}
+          />
+        </div>
 
         {/* Main content area */}
-        <main className="flex-1 flex flex-col overflow-hidden bg-slate-950">
+        <main id="main-content" className="flex-1 flex flex-col overflow-hidden bg-slate-950" role="main">
           {/* Tab bar */}
           <div className="h-9 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-1 shrink-0">
             <div className="flex items-center">
@@ -876,6 +1003,8 @@ export default function App() {
                         onApplyScenario={updateParams}
                         settings={settings}
                         options={options}
+                        scenarios={workingScenarios}
+                        setScenarios={setWorkingScenarios}
                       />
                     )}
 
@@ -981,6 +1110,14 @@ export default function App() {
       )}
 
       <UpdatePrompt />
+
+      {/* Personalization Panel - shown when user clicks "Make it yours" */}
+      {showPersonalization && (
+        <PersonalizationPanel
+          onComplete={handlePersonalizationComplete}
+          onDismiss={() => setShowPersonalization(false)}
+        />
+      )}
     </div>
   );
 }

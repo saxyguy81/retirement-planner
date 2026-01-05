@@ -528,8 +528,10 @@ export function ScenarioComparison({
   onApplyScenario = null,
   settings = {},
   options = {},
+  scenarios = [],
+  setScenarios = null,
 }) {
-  const [scenarios, setScenarios] = useState([]);
+  // scenarios state is now lifted to App.jsx - no local useState needed
   const [savedScenarioSets, setSavedScenarioSets] = useState(() => loadSavedScenarios());
   const [showPresets, setShowPresets] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -572,7 +574,7 @@ export function ScenarioComparison({
       setSelectedScenarioIds(prev => new Set([...prev, newId]));
       onPendingScenarioConsumed?.();
     }
-  }, [pendingScenario, onPendingScenarioConsumed, params]);
+  }, [pendingScenario, onPendingScenarioConsumed, params, setScenarios]);
 
   // Calculate all scenario projections
   // Uses stored baseParams snapshot for each scenario (not current params)
@@ -786,7 +788,7 @@ export function ScenarioComparison({
       setShowPresets(false);
       setNamingScenario(null);
     },
-    [getDefaultScenarioName, params]
+    [getDefaultScenarioName, params, setScenarios]
   );
 
   // Handle adding a scenario - shows dialog for custom, creates immediately for presets
@@ -942,7 +944,7 @@ export function ScenarioComparison({
       reader.readAsText(file);
       e.target.value = '';
     },
-    [scenarios, params]
+    [scenarios, params, setScenarios]
   );
 
   // Custom tooltip component with colored indicators

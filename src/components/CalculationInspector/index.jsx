@@ -35,6 +35,8 @@ export function CalculationInspector({
   current, // {field, year, data} from navigation hook
   params,
   projections, // All projections for dependency lookup and navigation
+  showPV = false, // Whether PV mode is enabled
+  discountRate = 0.03, // For PV calculations
   onNavigate, // (field, year, data) => void
   onBack,
   onForward,
@@ -90,7 +92,7 @@ export function CalculationInspector({
     );
   }
 
-  const computed = calc.compute(activeData, params);
+  const computed = calc.compute(activeData, params, { showPV, discountRate });
   const handleClose = onClose || (() => {});
 
   return (
@@ -153,6 +155,9 @@ export function CalculationInspector({
         <div className="p-4 space-y-4">
           {/* Quick Answer */}
           <div className="bg-slate-800 rounded-lg p-4 text-center">
+            {computed.simpleSecondary && (
+              <div className="text-slate-400 text-sm mb-1">{computed.simpleSecondary}</div>
+            )}
             <div className="text-3xl font-mono text-blue-400">{computed.simple}</div>
             <div className="text-slate-500 text-xs mt-1">Back-of-envelope</div>
           </div>
@@ -171,14 +176,21 @@ export function CalculationInspector({
               Formula{' '}
               {hasNavigation && <span className="text-slate-600">(click values to navigate)</span>}
             </div>
-            <div className="bg-slate-950 rounded p-3 font-mono text-sm text-emerald-400">
-              <ClickableFormula
-                formula={calc.formula}
-                data={activeData}
-                projections={projections}
-                onNavigate={hasNavigation ? onNavigate : null}
-                currentField={activeField}
-              />
+            <div className="bg-slate-950 rounded p-3 font-mono text-sm space-y-1">
+              {/* Symbolic formula */}
+              <div className="text-emerald-400">
+                <ClickableFormula
+                  formula={calc.formula}
+                  data={activeData}
+                  projections={projections}
+                  onNavigate={hasNavigation ? onNavigate : null}
+                  currentField={activeField}
+                />
+              </div>
+              {/* Values overlay - adjacent line with actual numbers */}
+              {computed.formulaWithValues && (
+                <div className="text-amber-400">{computed.formulaWithValues}</div>
+              )}
             </div>
           </div>
 

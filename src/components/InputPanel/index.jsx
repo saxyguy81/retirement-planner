@@ -30,16 +30,38 @@ import {
   User,
   Plus,
   X,
-  Calendar,
   Calculator,
   Trash2,
   Home,
 } from 'lucide-react';
 import { useState } from 'react';
 
+import { LearnMore } from '../LearnMore';
+import { ProfileProgress } from '../ProfileProgress';
 import { SmartYearInput } from './SmartYearInput';
+import { YearInput } from './YearInput';
 import { getFederalMarginalRate, getStateMarginalRate } from '../../lib/calculations';
 import { fmt$ } from '../../lib/formatters';
+
+// Helper to extract amount and isPV from override
+const parseOverride = override => {
+  if (!override || typeof override !== 'object') {
+    return { amount: 0, isPV: true };
+  }
+  return { amount: override.amount || 0, isPV: override.isPV ?? true };
+};
+
+// Helper to compute converted value
+const computeEquivalent = (amount, isPV, year, startYear, inflationRate) => {
+  const yearsFromStart = year - startYear;
+  if (isPV) {
+    // PV entered, show FV equivalent
+    return amount * Math.pow(1 + inflationRate, yearsFromStart);
+  } else {
+    // FV entered, show PV equivalent
+    return amount / Math.pow(1 + inflationRate, yearsFromStart);
+  }
+};
 
 // Common US states for heir dropdown
 const US_STATES = [
@@ -214,7 +236,8 @@ export function InputPanel({
   setOptions,
   updateSettings,
 }) {
-  const [expanded, setExpanded] = useState(['timeline', 'profile', 'accounts']);
+  // Default expanded: essential sections for new users
+  const [expanded, setExpanded] = useState(['about-you', 'what-you-have', 'what-youll-spend']);
   const [newExpenseYear, setNewExpenseYear] = useState('');
   const [newHarvestYear, setNewHarvestYear] = useState('');
   const [newConversionYear, setNewConversionYear] = useState('');
@@ -263,48 +286,47 @@ export function InputPanel({
       <div className="p-2 border-b border-slate-700 text-xs font-medium text-slate-300">
         Model Inputs
       </div>
+      <ProfileProgress params={params} settings={settings} />
       <div className="flex-1 overflow-y-auto">
-        {/* Timeline Section */}
+        {/* About You Section - combines Timeline and Profile */}
         <InputSection
-          title="Timeline"
-          icon={Calendar}
-          expanded={expanded.includes('timeline')}
-          onToggle={() => toggle('timeline')}
-          color="blue"
-        >
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-slate-500 text-[10px] mb-0.5">Start Year</label>
-              <input
-                type="number"
-                value={params.startYear || 2025}
-                onChange={e => updateParam('startYear', parseInt(e.target.value) || 2025)}
-                className="w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-slate-500 text-[10px] mb-0.5">End Year</label>
-              <input
-                type="number"
-                value={params.endYear || 2054}
-                onChange={e => updateParam('endYear', parseInt(e.target.value) || 2054)}
-                className="w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
-              />
-            </div>
-          </div>
-          <div className="text-slate-500 text-[10px] mt-1">
-            Planning horizon: {(params.endYear || 2054) - (params.startYear || 2025) + 1} years
-          </div>
-        </InputSection>
-
-        {/* Profile & Life Events Section */}
-        <InputSection
-          title="Profile & Life Events"
+          title="About You"
           icon={User}
-          expanded={expanded.includes('profile')}
-          onToggle={() => toggle('profile')}
+          expanded={expanded.includes('about-you')}
+          onToggle={() => toggle('about-you')}
           color="blue"
         >
+          {/* Timeline subsection */}
+          <div className="mb-3 pb-3 border-b border-slate-700">
+            <div className="text-slate-400 text-xs font-medium mb-2">Planning Timeline</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-slate-500 text-[10px] mb-0.5">Start Year</label>
+                <YearInput
+                  value={params.startYear}
+                  onChange={(v) => updateParam('startYear', v)}
+                  min={2020}
+                  max={2100}
+                  placeholder="e.g., 2025"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-500 text-[10px] mb-0.5">End Year</label>
+                <YearInput
+                  value={params.endYear}
+                  onChange={(v) => updateParam('endYear', v)}
+                  min={2020}
+                  max={2100}
+                  placeholder="e.g., 2055"
+                />
+              </div>
+            </div>
+            <div className="text-slate-500 text-[10px] mt-1">
+              Planning horizon: {(params.endYear || 2054) - (params.startYear || 2025) + 1} years
+            </div>
+          </div>
+
+          {/* Profile subsection */}
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -319,13 +341,11 @@ export function InputPanel({
               </div>
               <div>
                 <label className="block text-slate-500 text-[10px] mb-0.5">Birth Year</label>
-                <input
-                  type="number"
-                  value={settings?.primaryBirthYear || ''}
-                  onChange={e =>
-                    updateSettings?.({ primaryBirthYear: parseInt(e.target.value) || 1960 })
-                  }
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                <YearInput
+                  value={settings?.primaryBirthYear}
+                  onChange={(v) => updateSettings?.({ primaryBirthYear: v })}
+                  min={1920}
+                  max={2010}
                   placeholder="e.g., 1960"
                 />
               </div>
@@ -343,13 +363,11 @@ export function InputPanel({
               </div>
               <div>
                 <label className="block text-slate-500 text-[10px] mb-0.5">Spouse Birth</label>
-                <input
-                  type="number"
-                  value={settings?.spouseBirthYear || ''}
-                  onChange={e =>
-                    updateSettings?.({ spouseBirthYear: parseInt(e.target.value) || 1962 })
-                  }
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                <YearInput
+                  value={settings?.spouseBirthYear}
+                  onChange={(v) => updateSettings?.({ spouseBirthYear: v })}
+                  min={1920}
+                  max={2010}
                   placeholder="e.g., 1962"
                 />
               </div>
@@ -361,20 +379,17 @@ export function InputPanel({
             {/* Survivor Scenario */}
             <div className="mt-3 pt-3 border-t border-slate-700">
               <div className="text-slate-400 text-xs font-medium mb-2">Survivor Scenario</div>
+              <LearnMore topic="survivor-scenario" />
               <div className="flex items-center justify-between py-0.5">
                 <span className="text-slate-400 text-xs">Death Year</span>
-                <input
-                  type="text"
-                  value={params.survivorDeathYear || ''}
-                  onChange={e =>
-                    updateParam(
-                      'survivorDeathYear',
-                      e.target.value ? parseInt(e.target.value) : null
-                    )
-                  }
-                  onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+                <YearInput
+                  value={params.survivorDeathYear}
+                  onChange={(v) => updateParam('survivorDeathYear', v)}
+                  min={2025}
+                  max={2100}
+                  allowEmpty={true}
                   placeholder="none"
-                  className="w-20 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs"
+                  className="w-20 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
                 />
               </div>
               <ParamInput
@@ -393,12 +408,12 @@ export function InputPanel({
           </div>
         </InputSection>
 
-        {/* Starting Accounts */}
+        {/* What You Have - Starting Accounts */}
         <InputSection
-          title="Starting Accounts"
+          title="What You Have"
           icon={DollarSign}
-          expanded={expanded.includes('accounts')}
-          onToggle={() => toggle('accounts')}
+          expanded={expanded.includes('what-you-have')}
+          onToggle={() => toggle('what-you-have')}
           color="emerald"
         >
           <ParamInput
@@ -416,6 +431,7 @@ export function InputPanel({
             value={params.rothStart}
             onChange={v => updateParam('rothStart', v)}
           />
+          <LearnMore topic="cost-basis" />
           <ParamInput
             label="AT Cost Basis"
             value={params.afterTaxCostBasis}
@@ -429,19 +445,21 @@ export function InputPanel({
           </div>
         </InputSection>
 
-        {/* Social Security */}
+        {/* What You'll Receive - Social Security */}
         <InputSection
-          title="Social Security"
+          title="What You'll Receive"
           icon={DollarSign}
-          expanded={expanded.includes('income')}
-          onToggle={() => toggle('income')}
+          expanded={expanded.includes('what-youll-receive')}
+          onToggle={() => toggle('what-youll-receive')}
           color="cyan"
         >
           <ParamInput
             label="Monthly (2026)"
             value={params.socialSecurityMonthly}
             onChange={v => updateParam('socialSecurityMonthly', v)}
+            helpText="Combined household Social Security benefit"
           />
+          <LearnMore topic="cola" />
           <ParamInput
             label="COLA"
             value={params.ssCOLA}
@@ -450,12 +468,12 @@ export function InputPanel({
           />
         </InputSection>
 
-        {/* Expenses (Combined with Overrides) */}
+        {/* What You'll Spend - Expenses */}
         <InputSection
-          title="Expenses"
+          title="What You'll Spend"
           icon={BarChart3}
-          expanded={expanded.includes('expenses')}
-          onToggle={() => toggle('expenses')}
+          expanded={expanded.includes('what-youll-spend')}
+          onToggle={() => toggle('what-youll-spend')}
           color="rose"
         >
           <ParamInput
@@ -478,41 +496,69 @@ export function InputPanel({
             ) : (
               Object.entries(params.expenseOverrides || {})
                 .sort(([a], [b]) => Number(a) - Number(b))
-                .map(([year, amount]) => (
-                  <div key={year} className="flex items-center gap-1 py-0.5">
-                    <span className="text-slate-400 text-xs w-10">{year}</span>
-                    <input
-                      type="text"
-                      value={
-                        editingInput.key === `expense-${year}`
-                          ? editingInput.value
-                          : `$${amount.toLocaleString()}`
-                      }
-                      onFocus={() =>
-                        setEditingInput({ key: `expense-${year}`, value: amount.toString() })
-                      }
-                      onChange={e =>
-                        setEditingInput({ key: `expense-${year}`, value: e.target.value })
-                      }
-                      onBlur={() => {
-                        const parsed = parseFloat(editingInput.value.replace(/[,$]/g, ''));
-                        if (!isNaN(parsed) && parsed > 0) {
-                          updateExpenseOverride(Number(year), parsed);
+                .map(([year, override]) => {
+                  const { amount, isPV } = parseOverride(override);
+                  const equivalent = computeEquivalent(
+                    amount,
+                    isPV,
+                    Number(year),
+                    params.startYear,
+                    params.expenseInflation
+                  );
+
+                  return (
+                    <div key={year} className="flex items-center gap-1 py-0.5">
+                      <span className="text-slate-400 text-xs w-10">{year}</span>
+                      <input
+                        type="text"
+                        value={
+                          editingInput.key === `expense-${year}`
+                            ? editingInput.value
+                            : `$${amount.toLocaleString()}`
                         }
-                        setEditingInput({ key: null, value: '' });
-                      }}
-                      onKeyDown={e => e.key === 'Enter' && e.target.blur()}
-                      className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
-                    />
-                    <button
-                      onClick={() => updateExpenseOverride(Number(year), null)}
-                      className="p-0.5 text-slate-500 hover:text-red-400"
-                      title="Remove override"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))
+                        onFocus={() =>
+                          setEditingInput({ key: `expense-${year}`, value: amount.toString() })
+                        }
+                        onChange={e =>
+                          setEditingInput({ key: `expense-${year}`, value: e.target.value })
+                        }
+                        onBlur={() => {
+                          const parsed = parseFloat(editingInput.value.replace(/[,$]/g, ''));
+                          if (!isNaN(parsed) && parsed > 0) {
+                            updateExpenseOverride(Number(year), parsed, isPV);
+                          }
+                          setEditingInput({ key: null, value: '' });
+                        }}
+                        onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+                        className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                      />
+                      {/* PV/FV Toggle */}
+                      <button
+                        onClick={() => updateExpenseOverride(Number(year), amount, !isPV)}
+                        className={`px-1.5 py-0.5 text-[10px] rounded ${
+                          isPV ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300'
+                        }`}
+                        title={isPV ? "Present Value (today's dollars)" : 'Future Value (nominal)'}
+                      >
+                        {isPV ? 'PV' : 'FV'}
+                      </button>
+                      {/* Equivalent display */}
+                      <span
+                        className="text-slate-500 text-[10px] w-16 text-right"
+                        title={isPV ? 'Future Value equivalent' : 'Present Value equivalent'}
+                      >
+                        {isPV ? 'FV' : 'PV'}: ${Math.round(equivalent / 1000)}K
+                      </span>
+                      <button
+                        onClick={() => updateExpenseOverride(Number(year), null)}
+                        className="p-0.5 text-slate-500 hover:text-red-400"
+                        title="Remove override"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })
             )}
             {/* Add new year - supports age or year input */}
             <div className="mt-2 pt-2 border-t border-slate-700">
@@ -552,9 +598,9 @@ export function InputPanel({
           </div>
         </InputSection>
 
-        {/* Returns & Risk */}
+        {/* Investment Returns */}
         <InputSection
-          title="Returns & Risk"
+          title="Investment Returns"
           icon={TrendingUp}
           expanded={expanded.includes('returns')}
           onToggle={() => toggle('returns')}
@@ -640,46 +686,75 @@ export function InputPanel({
           {/* Roth Conversions */}
           <div className="mb-4">
             <div className="text-slate-400 text-xs font-medium mb-2">Roth Conversions</div>
+            <LearnMore topic="roth-conversion" />
             {Object.keys(params.rothConversions || {}).length === 0 ? (
               <div className="text-slate-500 text-xs mb-2">No conversions scheduled</div>
             ) : (
               Object.entries(params.rothConversions || {})
                 .sort(([a], [b]) => Number(a) - Number(b))
-                .map(([year, amount]) => (
-                  <div key={year} className="flex items-center gap-1 py-0.5">
-                    <span className="text-slate-400 text-xs w-10">{year}</span>
-                    <input
-                      type="text"
-                      value={
-                        editingInput.key === `roth-${year}`
-                          ? editingInput.value
-                          : `$${amount.toLocaleString()}`
-                      }
-                      onFocus={() =>
-                        setEditingInput({ key: `roth-${year}`, value: amount.toString() })
-                      }
-                      onChange={e =>
-                        setEditingInput({ key: `roth-${year}`, value: e.target.value })
-                      }
-                      onBlur={() => {
-                        const parsed = parseFloat(editingInput.value.replace(/[,$]/g, ''));
-                        if (!isNaN(parsed) && parsed >= 0) {
-                          updateRothConversion(Number(year), parsed);
+                .map(([year, override]) => {
+                  const { amount, isPV } = parseOverride(override);
+                  const equivalent = computeEquivalent(
+                    amount,
+                    isPV,
+                    Number(year),
+                    params.startYear,
+                    params.expenseInflation
+                  );
+
+                  return (
+                    <div key={year} className="flex items-center gap-1 py-0.5">
+                      <span className="text-slate-400 text-xs w-10">{year}</span>
+                      <input
+                        type="text"
+                        value={
+                          editingInput.key === `roth-${year}`
+                            ? editingInput.value
+                            : `$${amount.toLocaleString()}`
                         }
-                        setEditingInput({ key: null, value: '' });
-                      }}
-                      onKeyDown={e => e.key === 'Enter' && e.target.blur()}
-                      className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
-                    />
-                    <button
-                      onClick={() => updateRothConversion(Number(year), null)}
-                      className="p-0.5 text-slate-500 hover:text-red-400"
-                      title="Remove conversion"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))
+                        onFocus={() =>
+                          setEditingInput({ key: `roth-${year}`, value: amount.toString() })
+                        }
+                        onChange={e =>
+                          setEditingInput({ key: `roth-${year}`, value: e.target.value })
+                        }
+                        onBlur={() => {
+                          const parsed = parseFloat(editingInput.value.replace(/[,$]/g, ''));
+                          if (!isNaN(parsed) && parsed >= 0) {
+                            updateRothConversion(Number(year), parsed, isPV);
+                          }
+                          setEditingInput({ key: null, value: '' });
+                        }}
+                        onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+                        className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                      />
+                      {/* PV/FV Toggle */}
+                      <button
+                        onClick={() => updateRothConversion(Number(year), amount, !isPV)}
+                        className={`px-1.5 py-0.5 text-[10px] rounded ${
+                          isPV ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300'
+                        }`}
+                        title={isPV ? "Present Value (today's dollars)" : 'Future Value (nominal)'}
+                      >
+                        {isPV ? 'PV' : 'FV'}
+                      </button>
+                      {/* Equivalent display */}
+                      <span
+                        className="text-slate-500 text-[10px] w-16 text-right"
+                        title={isPV ? 'Future Value equivalent' : 'Present Value equivalent'}
+                      >
+                        {isPV ? 'FV' : 'PV'}: ${Math.round(equivalent / 1000)}K
+                      </span>
+                      <button
+                        onClick={() => updateRothConversion(Number(year), null)}
+                        className="p-0.5 text-slate-500 hover:text-red-400"
+                        title="Remove conversion"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })
             )}
             {/* Add new conversion */}
             <div className="mt-2 pt-2 border-t border-slate-700">
@@ -721,46 +796,75 @@ export function InputPanel({
           {/* Capital Gains Harvesting */}
           <div className="pt-3 border-t border-slate-700">
             <div className="text-slate-400 text-xs font-medium mb-2">Capital Gains Harvesting</div>
+            <LearnMore topic="capital-gains" />
             {Object.keys(params.atHarvestOverrides || {}).length === 0 ? (
               <div className="text-slate-500 text-xs mb-2">No year-specific harvests</div>
             ) : (
               Object.entries(params.atHarvestOverrides || {})
                 .sort(([a], [b]) => Number(a) - Number(b))
-                .map(([year, amount]) => (
-                  <div key={year} className="flex items-center gap-1 py-0.5">
-                    <span className="text-slate-400 text-xs w-10">{year}</span>
-                    <input
-                      type="text"
-                      value={
-                        editingInput.key === `harvest-${year}`
-                          ? editingInput.value
-                          : `$${amount.toLocaleString()}`
-                      }
-                      onFocus={() =>
-                        setEditingInput({ key: `harvest-${year}`, value: amount.toString() })
-                      }
-                      onChange={e =>
-                        setEditingInput({ key: `harvest-${year}`, value: e.target.value })
-                      }
-                      onBlur={() => {
-                        const parsed = parseFloat(editingInput.value.replace(/[,$]/g, ''));
-                        if (!isNaN(parsed) && parsed > 0) {
-                          updateATHarvest(Number(year), parsed);
+                .map(([year, override]) => {
+                  const { amount, isPV } = parseOverride(override);
+                  const equivalent = computeEquivalent(
+                    amount,
+                    isPV,
+                    Number(year),
+                    params.startYear,
+                    params.expenseInflation
+                  );
+
+                  return (
+                    <div key={year} className="flex items-center gap-1 py-0.5">
+                      <span className="text-slate-400 text-xs w-10">{year}</span>
+                      <input
+                        type="text"
+                        value={
+                          editingInput.key === `harvest-${year}`
+                            ? editingInput.value
+                            : `$${amount.toLocaleString()}`
                         }
-                        setEditingInput({ key: null, value: '' });
-                      }}
-                      onKeyDown={e => e.key === 'Enter' && e.target.blur()}
-                      className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
-                    />
-                    <button
-                      onClick={() => updateATHarvest(Number(year), null)}
-                      className="p-0.5 text-slate-500 hover:text-red-400"
-                      title="Remove harvest"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))
+                        onFocus={() =>
+                          setEditingInput({ key: `harvest-${year}`, value: amount.toString() })
+                        }
+                        onChange={e =>
+                          setEditingInput({ key: `harvest-${year}`, value: e.target.value })
+                        }
+                        onBlur={() => {
+                          const parsed = parseFloat(editingInput.value.replace(/[,$]/g, ''));
+                          if (!isNaN(parsed) && parsed > 0) {
+                            updateATHarvest(Number(year), parsed, isPV);
+                          }
+                          setEditingInput({ key: null, value: '' });
+                        }}
+                        onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+                        className="flex-1 text-right bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                      />
+                      {/* PV/FV Toggle */}
+                      <button
+                        onClick={() => updateATHarvest(Number(year), amount, !isPV)}
+                        className={`px-1.5 py-0.5 text-[10px] rounded ${
+                          isPV ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300'
+                        }`}
+                        title={isPV ? "Present Value (today's dollars)" : 'Future Value (nominal)'}
+                      >
+                        {isPV ? 'PV' : 'FV'}
+                      </button>
+                      {/* Equivalent display */}
+                      <span
+                        className="text-slate-500 text-[10px] w-16 text-right"
+                        title={isPV ? 'Future Value equivalent' : 'Present Value equivalent'}
+                      >
+                        {isPV ? 'FV' : 'PV'}: ${Math.round(equivalent / 1000)}K
+                      </span>
+                      <button
+                        onClick={() => updateATHarvest(Number(year), null)}
+                        className="p-0.5 text-slate-500 hover:text-red-400"
+                        title="Remove harvest"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })
             )}
             {/* Add new year - supports age or year input */}
             <div className="mt-2 pt-2 border-t border-slate-700">
@@ -828,15 +932,18 @@ export function InputPanel({
             format="%"
           />
           <div className="mt-1 pt-1 border-t border-slate-700">
+            <LearnMore topic="magi" />
             <ParamInput
               label="2024 MAGI"
               value={params.magi2024}
               onChange={v => updateParam('magi2024', v)}
+              helpText="Affects 2026 Medicare premiums (IRMAA)"
             />
             <ParamInput
               label="2025 MAGI"
               value={params.magi2025}
               onChange={v => updateParam('magi2025', v)}
+              helpText="Affects 2027 Medicare premiums (IRMAA)"
             />
           </div>
         </InputSection>
@@ -916,6 +1023,7 @@ export function InputPanel({
             )}
 
             {/* Discount Rate */}
+            <LearnMore topic="discount-rate" />
             <ParamInput
               label="Discount Rate (PV)"
               value={params.discountRate ?? 0.03}
@@ -924,16 +1032,15 @@ export function InputPanel({
               min={0}
               max={0.15}
             />
-            <div className="text-slate-500 text-[10px]">Used for present value calculations</div>
           </div>
         </InputSection>
 
-        {/* Heir Configuration */}
+        {/* Your Legacy - Heir Configuration */}
         <InputSection
-          title="Heirs"
+          title="Your Legacy"
           icon={Users}
-          expanded={expanded.includes('heir')}
-          onToggle={() => toggle('heir')}
+          expanded={expanded.includes('legacy')}
+          onToggle={() => toggle('legacy')}
           color="indigo"
         >
           <div className="space-y-3">
@@ -979,14 +1086,13 @@ export function InputPanel({
                     </div>
                     <div>
                       <label className="block text-slate-500 text-[10px] mb-0.5">Birth Year</label>
-                      <input
-                        type="number"
-                        value={heir.birthYear || 1980}
-                        onChange={e =>
-                          updateHeir(index, { birthYear: parseInt(e.target.value) || 1980 })
-                        }
-                        className="w-full bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 text-[10px] text-slate-200"
+                      <YearInput
+                        value={heir.birthYear}
+                        onChange={(v) => updateHeir(index, { birthYear: v })}
+                        min={1940}
+                        max={2020}
                         placeholder="e.g., 1980"
+                        className="w-full bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 text-[10px] text-slate-200 focus:border-blue-500 focus:outline-none"
                       />
                     </div>
                     <div>
@@ -1061,9 +1167,7 @@ export function InputPanel({
             {/* Distribution Strategy */}
             <div className="mt-2 pt-2 border-t border-slate-700">
               <label className="block text-slate-400 text-xs mb-1">IRA Distribution Strategy</label>
-              <div className="text-slate-500 text-[10px] mb-2">
-                RMD requirements auto-determined from owner death age (SECURE Act 2.0)
-              </div>
+              <LearnMore topic="heir-distribution" />
               <div className="space-y-1">
                 <button
                   onClick={() => updateParam('heirDistributionStrategy', 'rmd_based')}

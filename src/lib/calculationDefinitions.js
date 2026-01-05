@@ -5,6 +5,27 @@
  * formula, and computation function for the Calculation Inspector.
  */
 
+// Import tax constants for dynamic formula generation
+
+// IL property tax credit constants available from './calculations.js' if needed
+
+// Import PV utilities
+import { formatDualValue } from './pvUtils.js';
+import {
+  IRMAA_BRACKETS_MFJ_2026,
+  IRMAA_BRACKETS_SINGLE_2026,
+  FEDERAL_BRACKETS_MFJ_2024,
+  FEDERAL_BRACKETS_SINGLE_2024,
+  LTCG_BRACKETS_MFJ_2024,
+  STANDARD_DEDUCTION_MFJ_2024,
+  SENIOR_BONUS_MFJ_2024,
+  SS_TAX_THRESHOLDS_MFJ,
+  SS_TAX_THRESHOLDS_SINGLE,
+  NIIT_RATE,
+  NIIT_THRESHOLD_MFJ,
+  inflateBrackets,
+} from './taxTables.js';
+
 // Helper formatters for calculation display
 const f$ = v => '$' + Math.round(v).toLocaleString();
 const fK = v => '$' + (v / 1000).toFixed(0) + 'K';
@@ -12,6 +33,63 @@ const fM = v => '$' + (v / 1000000).toFixed(2) + 'M';
 
 // Export formatters for use in other modules
 export { f$, fK, fM };
+
+// =============================================================================
+// FORMULA HELPERS - Build dynamic formulas from imported constants
+// =============================================================================
+
+// Get IRMAA brackets for display (returns object with formatted values)
+const getIRMAAInfo = (isSingle = false) => {
+  const brackets = isSingle ? IRMAA_BRACKETS_SINGLE_2026 : IRMAA_BRACKETS_MFJ_2026;
+  const basePartB = brackets[0].partB;
+  const tier1 = brackets[1];
+  const tier2 = brackets[2];
+  const tier3 = brackets[3];
+
+  return {
+    basePartB,
+    baseAnnualCouple: Math.round(basePartB * 12 * 2),
+    baseAnnualSingle: Math.round(basePartB * 12),
+    tier1Threshold: tier1.threshold,
+    tier2Threshold: tier2.threshold,
+    tier3Threshold: tier3.threshold,
+    tier1SurchargeB: Math.round((tier1.partB - basePartB) * 12),
+    tier1SurchargeD: Math.round(tier1.partD * 12),
+    tier2SurchargeB: Math.round((tier2.partB - basePartB) * 12),
+    tier2SurchargeD: Math.round(tier2.partD * 12),
+  };
+};
+
+// Get federal bracket info for a specific year (with inflation)
+// Reserved for future use: dynamic federal bracket formulas
+const _getFederalBracketInfo = (yearsFromBase = 0, inflationRate = 0.03, isSingle = false) => {
+  const baseBrackets = isSingle ? FEDERAL_BRACKETS_SINGLE_2024 : FEDERAL_BRACKETS_MFJ_2024;
+  const brackets =
+    yearsFromBase > 0 ? inflateBrackets(baseBrackets, inflationRate, yearsFromBase) : baseBrackets;
+  return brackets;
+};
+
+// Format with both PV and FV when applicable
+// Reserved for future use: alternative dual-display format
+const _formatWithPVFV = (fvValue, pvValue, showPV = false) => {
+  if (!showPV || Math.abs(fvValue - pvValue) < 100) {
+    return fK(fvValue);
+  }
+  return `${fK(pvValue)} (${fK(fvValue)} FV)`;
+};
+
+// Get IRMAA tier description for a given MAGI
+// Reserved for future use: tier display in inspector
+const _getIRMAATier = (magi, isSingle = false) => {
+  const info = getIRMAAInfo(isSingle);
+  if (magi < info.tier1Threshold) return { tier: 'None', surcharge: 0 };
+  if (magi < info.tier2Threshold) return { tier: 'Tier 1', surcharge: info.tier1SurchargeB };
+  if (magi < info.tier3Threshold) return { tier: 'Tier 2', surcharge: info.tier2SurchargeB };
+  return { tier: 'Tier 3+', surcharge: info.tier2SurchargeB * 1.5 }; // Approximate
+};
+
+// Export reserved helpers for potential future use
+export { _getFederalBracketInfo, _formatWithPVFV, _getIRMAATier };
 
 /**
  * Calculation definitions - maps field keys to explanations
@@ -138,16 +216,22 @@ export const CALCULATIONS = {
     formula:
       'totalTax = federalTax + ltcgTax + niit + stateTax\n\nFederal: Progressive brackets on ordinary income\nLTCG: 0%/15%/20% on capital gains (stacks on ordinary)\nNIIT: 3.8% on investment income above $250K MAGI\nIL State: 4.95% on investment income - 5% property tax credit',
     backOfEnvelope: 'federalTax + (capitalGains x 18%)',
-    compute: data => {
-      const { federalTax, ltcgTax, niit, stateTax, totalTax, capitalGains } = data;
+    compute: (data, params, options = {}) => {
+      const { federalTax, ltcgTax, niit, stateTax, totalTax, capitalGains, yearsFromStart } = data;
+      const { showPV = false, discountRate = 0.03 } = options;
+
+      const display = formatDualValue(totalTax, yearsFromStart, discountRate, showPV, fK);
+
       return {
         formula: `totalTax = federalTax + ltcgTax + niit + stateTax`,
         values: `${fK(federalTax)} + ${fK(ltcgTax)} + ${fK(niit)} + ${fK(stateTax)}`,
-        result: `Total Tax = ${fK(totalTax)}`,
+        result: `Total Tax = ${display.primary}`,
         simple:
           capitalGains > 0
-            ? `${fK(federalTax)} + ${fK(capitalGains)} x 18% = ${fK(totalTax)}`
-            : `${fK(federalTax)} (minimal cap gains)`,
+            ? `${fK(federalTax)} + ${fK(capitalGains)} x 18% = ${display.primary}`
+            : `${display.primary} (minimal cap gains)`,
+        simpleSecondary: display.secondary,
+        formulaWithValues: `${fK(totalTax)} = ${fK(federalTax)} + ${fK(ltcgTax)} + ${fK(niit)} + ${fK(stateTax)}`,
       };
     },
   },
@@ -172,9 +256,9 @@ export const CALCULATIONS = {
     compute: data => {
       const { capitalGains, ltcgTax, taxableOrdinary } = data;
 
-      // Calculate bracket breakdown
-      const bracket0Max = 94050;
-      const bracket15Max = 583750;
+      // Calculate bracket breakdown using imported LTCG brackets
+      const bracket0Max = LTCG_BRACKETS_MFJ_2024[1].threshold;
+      const bracket15Max = LTCG_BRACKETS_MFJ_2024[2].threshold;
 
       // How much room in each bracket after ordinary income
       const roomIn0 = Math.max(0, bracket0Max - taxableOrdinary);
@@ -225,18 +309,18 @@ export const CALCULATIONS = {
     compute: data => {
       const { capitalGains, niit, ordinaryIncome } = data;
       const magi = ordinaryIncome + capitalGains;
-      const threshold = 250000;
+      const threshold = NIIT_THRESHOLD_MFJ;
       const excess = Math.max(0, magi - threshold);
       return {
-        formula: `MAGI = ${fK(magi)}, Threshold = $250K`,
+        formula: `MAGI = ${fK(magi)}, Threshold = ${fK(threshold)}`,
         values:
           excess > 0
-            ? `niit = 3.8% x min(${fK(capitalGains)}, ${fK(excess)})`
+            ? `niit = ${(NIIT_RATE * 100).toFixed(1)}% x min(${fK(capitalGains)}, ${fK(excess)})`
             : `MAGI below threshold, no NIIT`,
         result: `NIIT = ${fK(niit)}`,
         simple:
           excess > 0
-            ? `${fK(capitalGains)} x 3.8% = ${fK(capitalGains * 0.038)}`
+            ? `${fK(capitalGains)} x ${(NIIT_RATE * 100).toFixed(1)}% = ${fK(capitalGains * NIIT_RATE)}`
             : '$0 (below threshold)',
       };
     },
@@ -350,10 +434,21 @@ export const CALCULATIONS = {
 
   taxableSS: {
     name: 'Taxable Social Security',
-    concept:
-      'Up to 85% of Social Security may be taxable, based on "combined income" (IRS Publication 915). Combined Income = AGI (excluding SS) + Tax-Exempt Interest + 50% of SS. Below $32K (MFJ): 0% taxable. $32K-$44K: up to 50%. Above $44K: up to 85%.',
-    formula:
-      'Combined Income = (IRA Withdrawal + Roth Conversion + Capital Gains) + 0.5 x SS\n\nIf Combined <= $32K (MFJ): 0% taxable\nIf Combined <= $44K (MFJ): up to 50% taxable\nIf Combined > $44K (MFJ): up to 85% taxable\n\nSingle thresholds: $25K / $34K',
+    get concept() {
+      const t = SS_TAX_THRESHOLDS_MFJ;
+      return `Up to 85% of Social Security may be taxable, based on "combined income" (IRS Publication 915). Combined Income = AGI (excluding SS) + Tax-Exempt Interest + 50% of SS. Below $${t.tier1 / 1000}K (MFJ): 0% taxable. $${t.tier1 / 1000}K-$${t.tier2 / 1000}K: up to 50%. Above $${t.tier2 / 1000}K: up to 85%.`;
+    },
+    get formula() {
+      const mfj = SS_TAX_THRESHOLDS_MFJ;
+      const single = SS_TAX_THRESHOLDS_SINGLE;
+      return (
+        'Combined Income = (IRA Withdrawal + Roth Conversion + Capital Gains) + 0.5 x SS\n\n' +
+        `If Combined <= $${mfj.tier1 / 1000}K (MFJ): 0% taxable\n` +
+        `If Combined <= $${mfj.tier2 / 1000}K (MFJ): up to 50% taxable\n` +
+        `If Combined > $${mfj.tier2 / 1000}K (MFJ): up to 85% taxable\n\n` +
+        `Single thresholds: $${single.tier1 / 1000}K / $${single.tier2 / 1000}K`
+      );
+    },
     backOfEnvelope: '85% x ssAnnual (for most retirees with other income)',
     compute: data => {
       const { ssAnnual, taxableSS, iraWithdrawal, rothConversion, capitalGains } = data;
@@ -377,18 +472,25 @@ export const CALCULATIONS = {
     name: 'Total Medicare Premium',
     concept:
       'Total Medicare cost including base Part B premium plus any IRMAA surcharges. IRMAA (Income-Related Monthly Adjustment Amount) is an extra premium if MAGI from 2 years ago exceeds thresholds.',
-    formula:
-      'irmaaTotal = Base Part B + Part B Surcharge + Part D Surcharge\n\n' +
-      'Base Part B (2024): $174.70/mo per person\n' +
-      'Surcharges apply if MAGI (2 years prior) exceeds:\n' +
-      '  > $206K (MFJ): +$70/mo Part B, +$13/mo Part D\n' +
-      '  > $258K: +$175/mo Part B, +$33/mo Part D\n' +
-      '  ... up to +$419/mo Part B, +$81/mo Part D',
-    backOfEnvelope: '$4,200/yr base for couple, more if MAGI > $206K',
+    get formula() {
+      const info = getIRMAAInfo();
+      return (
+        'irmaaTotal = Base Part B + Part B Surcharge + Part D Surcharge\n\n' +
+        `Base Part B (2026): $${info.basePartB}/mo per person\n` +
+        'Surcharges apply if MAGI (2 years prior) exceeds:\n' +
+        `  > $${(info.tier1Threshold / 1000).toFixed(0)}K (MFJ): +$${Math.round(IRMAA_BRACKETS_MFJ_2026[1].partB - info.basePartB)}/mo Part B, +$${IRMAA_BRACKETS_MFJ_2026[1].partD}/mo Part D\n` +
+        `  > $${(info.tier2Threshold / 1000).toFixed(0)}K: +$${Math.round(IRMAA_BRACKETS_MFJ_2026[2].partB - info.basePartB)}/mo Part B, +$${IRMAA_BRACKETS_MFJ_2026[2].partD}/mo Part D\n` +
+        `  ... up to +$${Math.round(IRMAA_BRACKETS_MFJ_2026[5].partB - info.basePartB)}/mo Part B, +$${IRMAA_BRACKETS_MFJ_2026[5].partD}/mo Part D`
+      );
+    },
+    get backOfEnvelope() {
+      const info = getIRMAAInfo();
+      return `$${(info.baseAnnualCouple / 1000).toFixed(1)}K/yr base for couple, more if MAGI > $${(info.tier1Threshold / 1000).toFixed(0)}K`;
+    },
     compute: data => {
       const { irmaaMAGI, irmaaPartB, irmaaPartD, irmaaTotal } = data;
-      // Base Part B premium for couple: $174.70 × 12 × 2 = $4,192.80
-      const baseAnnual = Math.round(174.7 * 12 * 2);
+      const info = getIRMAAInfo();
+      const baseAnnual = info.baseAnnualCouple;
       const surchargeB = Math.max(0, irmaaPartB - baseAnnual);
       const surchargeD = irmaaPartD || 0;
 
@@ -396,7 +498,7 @@ export const CALCULATIONS = {
       if (surchargeB > 0 || surchargeD > 0) {
         values = `Base Part B: ${fK(baseAnnual)}\nPart B Surcharge: +${fK(surchargeB)}\nPart D Surcharge: +${fK(surchargeD)}`;
       } else {
-        values = `Base Part B: ${fK(baseAnnual)}\nNo IRMAA surcharges (MAGI below $206K)`;
+        values = `Base Part B: ${fK(baseAnnual)}\nNo IRMAA surcharges (MAGI below $${(info.tier1Threshold / 1000).toFixed(0)}K)`;
       }
 
       return {
@@ -1076,15 +1178,22 @@ export const CALCULATIONS = {
     formula:
       'expenses = baseExpenses x (1 + inflation)^years + overrides\n\nBase: Starting annual expenses\nInflation: Annual expense inflation rate\nOverrides: Year-specific adjustments (e.g., one-time purchases)',
     backOfEnvelope: 'Base x 1.03 each year (3% inflation)',
-    compute: (data, params) => {
-      const { expenses } = data;
+    compute: (data, params, options = {}) => {
+      const { expenses, yearsFromStart } = data;
+      const { showPV = false, discountRate = 0.03 } = options;
       const baseExpenses = params?.annualExpenses || 150000;
-      const yearsFromStart = data.yearsFromStart || 0;
+      const inflation = params?.expenseInflation || 0.03;
+
+      // Use formatDualValue for the display
+      const display = formatDualValue(expenses, yearsFromStart, discountRate, showPV, fK);
+
       return {
         formula: `Base expenses + inflation adjustments`,
-        values: `${fK(baseExpenses)} base x (1.03)^${yearsFromStart}`,
-        result: `Expenses = ${fK(expenses)}`,
-        simple: fK(expenses),
+        values: `${fK(baseExpenses)} base x (1 + ${(inflation * 100).toFixed(1)}%)^${yearsFromStart}`,
+        result: `Expenses = ${display.primary}`,
+        simple: display.primary,
+        simpleSecondary: display.secondary,
+        formulaWithValues: `${fK(expenses)} = ${fK(baseExpenses)} × (1 + ${(inflation * 100).toFixed(1)}%)^${yearsFromStart}`,
       };
     },
   },
@@ -1130,14 +1239,20 @@ export const CALCULATIONS = {
     name: 'Taxable Ordinary Income',
     concept:
       'Ordinary income minus standard deduction. This is the amount actually subject to federal income tax brackets. Higher taxableOrdinary means higher marginal bracket.',
-    formula:
-      'taxableOrdinary = ordinaryIncome - standardDeduction\n\nStandard Deduction (2025 MFJ over 65): ~$32,300\nThis is what flows through tax brackets.',
-    backOfEnvelope: 'ordinaryIncome - $32K deduction',
+    get formula() {
+      const baseDeduction = STANDARD_DEDUCTION_MFJ_2024 + SENIOR_BONUS_MFJ_2024;
+      return `taxableOrdinary = ordinaryIncome - standardDeduction\n\nStandard Deduction (2024 MFJ over 65): ~$${(baseDeduction / 1000).toFixed(1)}K\nThis is what flows through tax brackets.`;
+    },
+    get backOfEnvelope() {
+      const baseDeduction = STANDARD_DEDUCTION_MFJ_2024 + SENIOR_BONUS_MFJ_2024;
+      return `ordinaryIncome - $${Math.round(baseDeduction / 1000)}K deduction`;
+    },
     compute: data => {
       const { taxableOrdinary, ordinaryIncome, standardDeduction } = data;
+      const defaultDeduction = STANDARD_DEDUCTION_MFJ_2024 + SENIOR_BONUS_MFJ_2024;
       return {
         formula: `taxableOrdinary = ordinaryIncome - standardDeduction`,
-        values: `${fK(ordinaryIncome)} - ${fK(standardDeduction || 32000)}`,
+        values: `${fK(ordinaryIncome)} - ${fK(standardDeduction || defaultDeduction)}`,
         result: `Taxable = ${fK(taxableOrdinary)}`,
         simple: fK(Math.max(0, taxableOrdinary)),
       };
@@ -1148,16 +1263,26 @@ export const CALCULATIONS = {
     name: 'Standard Deduction',
     concept:
       'Amount of income excluded from taxation. For married filing jointly over 65, this is significantly higher. Reduces taxable income dollar-for-dollar.',
-    formula:
-      'Standard Deduction (2025 MFJ):\nBase: $30,000\nAge 65+ bonus: +$1,600 each\nBoth 65+: $30,000 + $3,200 = $33,200',
-    backOfEnvelope: '~$32K-$33K for retired couples',
+    get formula() {
+      return (
+        `Standard Deduction (2024 MFJ):\n` +
+        `Base: $${(STANDARD_DEDUCTION_MFJ_2024 / 1000).toFixed(1)}K\n` +
+        `Age 65+ bonus: +$${Math.round(SENIOR_BONUS_MFJ_2024 / 2)} each\n` +
+        `Both 65+: $${(STANDARD_DEDUCTION_MFJ_2024 / 1000).toFixed(1)}K + $${(SENIOR_BONUS_MFJ_2024 / 1000).toFixed(1)}K = $${((STANDARD_DEDUCTION_MFJ_2024 + SENIOR_BONUS_MFJ_2024) / 1000).toFixed(1)}K`
+      );
+    },
+    get backOfEnvelope() {
+      const total = STANDARD_DEDUCTION_MFJ_2024 + SENIOR_BONUS_MFJ_2024;
+      return `~$${Math.round(total / 1000)}K for retired couples`;
+    },
     compute: data => {
       const { standardDeduction, age } = data;
+      const defaultDeduction = STANDARD_DEDUCTION_MFJ_2024 + SENIOR_BONUS_MFJ_2024;
       return {
         formula: `MFJ base + age 65+ bonuses`,
         values: `Age ${age}: Both spouses 65+ assumed`,
-        result: `Standard Deduction = ${fK(standardDeduction || 32000)}`,
-        simple: fK(standardDeduction || 32000),
+        result: `Standard Deduction = ${fK(standardDeduction || defaultDeduction)}`,
+        simple: fK(standardDeduction || defaultDeduction),
       };
     },
   },
@@ -1263,8 +1388,10 @@ export const CALCULATIONS = {
 
   cumulativeIRMAA: {
     name: 'Cumulative IRMAA Paid',
-    concept:
-      'Running total of IRMAA Medicare surcharges paid since projection start. Tracks the cost of having high income (MAGI > $206K from 2 years prior).',
+    get concept() {
+      const info = getIRMAAInfo();
+      return `Running total of IRMAA Medicare surcharges paid since projection start. Tracks the cost of having high income (MAGI > $${(info.tier1Threshold / 1000).toFixed(0)}K from 2 years prior).`;
+    },
     formula:
       'cumulativeIRMAA = Sum(Annual IRMAA)\n\nIRMAA is an extra Medicare premium, not a tax.\nBased on MAGI from 2 years prior.',
     backOfEnvelope: 'Sum of annual IRMAA surcharges',
@@ -1283,17 +1410,27 @@ export const CALCULATIONS = {
     name: 'IRMAA Lookback MAGI',
     concept:
       'Modified Adjusted Gross Income from 2 years prior, used to determine IRMAA bracket. High MAGI = higher Medicare premiums.',
-    formula:
-      'irmaaMAGI = MAGI from (current year - 2)\n\nThresholds (MFJ 2025):\n< $206K: $0 surcharge\n$206K-$258K: Tier 1\n$258K-$322K: Tier 2\netc.',
+    get formula() {
+      const info = getIRMAAInfo();
+      return (
+        'irmaaMAGI = MAGI from (current year - 2)\n\n' +
+        `Thresholds (MFJ 2026):\n` +
+        `< $${(info.tier1Threshold / 1000).toFixed(0)}K: $0 surcharge\n` +
+        `$${(info.tier1Threshold / 1000).toFixed(0)}K-$${(info.tier2Threshold / 1000).toFixed(0)}K: Tier 1\n` +
+        `$${(info.tier2Threshold / 1000).toFixed(0)}K-$${(info.tier3Threshold / 1000).toFixed(0)}K: Tier 2\n` +
+        'etc.'
+      );
+    },
     backOfEnvelope: "Your income from 2 years ago determines this year's IRMAA",
     compute: data => {
       const { irmaaMAGI, year, irmaaTotal } = data;
+      const info = getIRMAAInfo();
       const tier =
         irmaaTotal === 0
           ? 'None'
-          : irmaaMAGI < 258000
+          : irmaaMAGI < info.tier2Threshold
             ? 'Tier 1'
-            : irmaaMAGI < 322000
+            : irmaaMAGI < info.tier3Threshold
               ? 'Tier 2'
               : 'Tier 3+';
       return {
@@ -1307,21 +1444,31 @@ export const CALCULATIONS = {
 
   irmaaPartB: {
     name: 'Medicare Part B (Total)',
-    concept:
-      'Total Medicare Part B premium including base premium and any IRMAA surcharge. Base premium is $174.70/mo/person (2024). IRMAA surcharge applies if MAGI from 2 years prior exceeds thresholds.',
-    formula:
-      'Part B = Base + Surcharge\n\n' +
-      'Base: $174.70/mo/person ($4,193/yr for couple)\n' +
-      'Surcharge tiers (per person/year):\n' +
-      '  Tier 1 ($206K-$258K): +$840/yr\n' +
-      '  Tier 2 ($258K-$322K): +$2,100/yr\n' +
-      '  Tier 3+: Higher surcharges',
-    backOfEnvelope: '$4.2K base for couple, +$2K-$10K with surcharges',
+    get concept() {
+      const info = getIRMAAInfo();
+      return `Total Medicare Part B premium including base premium and any IRMAA surcharge. Base premium is $${info.basePartB}/mo/person (2026). IRMAA surcharge applies if MAGI from 2 years prior exceeds thresholds.`;
+    },
+    get formula() {
+      const info = getIRMAAInfo();
+      return (
+        'Part B = Base + Surcharge\n\n' +
+        `Base: $${info.basePartB}/mo/person ($${(info.baseAnnualCouple / 1000).toFixed(1)}K/yr for couple)\n` +
+        'Surcharge tiers (per person/year):\n' +
+        `  Tier 1 ($${(info.tier1Threshold / 1000).toFixed(0)}K-$${(info.tier2Threshold / 1000).toFixed(0)}K): +$${info.tier1SurchargeB}/yr\n` +
+        `  Tier 2 ($${(info.tier2Threshold / 1000).toFixed(0)}K-$${(info.tier3Threshold / 1000).toFixed(0)}K): +$${info.tier2SurchargeB}/yr\n` +
+        '  Tier 3+: Higher surcharges'
+      );
+    },
+    get backOfEnvelope() {
+      const info = getIRMAAInfo();
+      return `$${(info.baseAnnualCouple / 1000).toFixed(1)}K base for couple, +$2K-$10K with surcharges`;
+    },
     compute: data => {
       const { irmaaPartB, irmaaMAGI } = data;
+      const info = getIRMAAInfo();
       const perPerson = irmaaPartB / 2;
       const monthly = perPerson / 12;
-      const baseAnnual = Math.round(174.7 * 12 * 2); // Base for couple
+      const baseAnnual = info.baseAnnualCouple;
       const surcharge = Math.max(0, irmaaPartB - baseAnnual);
       return {
         formula: `Base + Surcharge x 2 people x 12 months`,

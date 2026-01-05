@@ -20,12 +20,13 @@ test.describe('Navigation', () => {
     // Check header shows "Retirement Planner"
     await expect(page.locator('text=Retirement Planner')).toBeVisible();
 
-    // Check projections tab is active by default
-    await expect(page.locator('button:has-text("Projections")')).toBeVisible();
+    // Check Dashboard tab is active by default (for better first impression)
+    await expect(page.locator('button:has-text("Dashboard")')).toBeVisible();
   });
 
   test('can navigate between all tabs', async ({ page }) => {
-    const tabs = ['Projections', 'Dashboard', 'Risk', 'Heir', 'Scenarios', 'Optimize', 'AI Chat', 'Settings'];
+    // Tab labels as they appear in the UI
+    const tabs = ['Projections', 'Dashboard', 'Risk Allocation', 'Heir Analysis', 'Scenarios', 'Optimize', 'AI Chat', 'Settings'];
 
     for (const tab of tabs) {
       const tabButton = page.locator(`button:has-text("${tab}")`).first();
@@ -36,7 +37,7 @@ test.describe('Navigation', () => {
     }
   });
 
-  test('New button shows confirmation dialog', async ({ page }) => {
+  test('File menu contains New Session option', async ({ page }) => {
     // Set up dialog handler before clicking
     let dialogMessage = '';
     page.on('dialog', async dialog => {
@@ -44,13 +45,22 @@ test.describe('Navigation', () => {
       await dialog.dismiss();
     });
 
-    await page.click('button:has-text("New")');
+    // Click the File menu button
+    await page.click('button:has-text("File")');
+    await page.waitForTimeout(200);
+
+    // Click New Session inside the menu
+    await page.click('button:has-text("New Session")');
     await page.waitForTimeout(500);
 
     expect(dialogMessage).toContain('Start a new session');
   });
 
   test('projections table displays data', async ({ page }) => {
+    // Navigate to Projections tab (default is now Dashboard)
+    await page.click('button:has-text("Projections")');
+    await page.waitForTimeout(300);
+
     // Should see year column starting from 2025
     await expect(page.locator('text=2025').first()).toBeVisible();
 
@@ -59,6 +69,10 @@ test.describe('Navigation', () => {
   });
 
   test('PV/FV toggle works', async ({ page }) => {
+    // Navigate to Projections tab (default is now Dashboard)
+    await page.click('button:has-text("Projections")');
+    await page.waitForTimeout(300);
+
     // Find the PV/FV button
     const pvButton = page.locator('button:has-text("PV")');
     const fvButton = page.locator('button:has-text("FV")');

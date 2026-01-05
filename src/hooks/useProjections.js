@@ -2,16 +2,19 @@
  * useProjections Hook
  * Manages projection state and recalculation
  * Includes localStorage persistence for auto-restore and named saves
+ * Includes undo/redo functionality for fearless exploration
  */
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 
 import { generateProjections, calculateSummary, DEFAULT_PARAMS } from '../lib';
+import { SAMPLE_PARAMS, SAMPLE_SETTINGS, SAMPLE_OPTIONS } from '../lib/sampleData';
 
 // localStorage keys
 const STORAGE_KEY = 'retirement-planner-state';
 const SAVED_STATES_KEY = 'retirement-planner-saved-states';
 const SETTINGS_KEY = 'retirement-planner-settings';
+const VISITED_KEY = 'retirement-planner-visited';
 
 // Default options
 const DEFAULT_OPTIONS = { iterativeTax: true, maxIterations: 5 };
@@ -111,9 +114,37 @@ const saveSettings = settings => {
   }
 };
 
+// Helper: Check if this is a first visit (no saved data)
+const isFirstVisit = () => {
+  try {
+    const hasVisited = localStorage.getItem(VISITED_KEY);
+    const hasSavedState = localStorage.getItem(STORAGE_KEY);
+    return !hasVisited && !hasSavedState;
+  } catch (e) {
+    return false;
+  }
+};
+
+// Helper: Mark as visited
+const markAsVisited = () => {
+  try {
+    localStorage.setItem(VISITED_KEY, 'true');
+  } catch (e) {
+    console.error('Failed to mark as visited:', e);
+  }
+};
+
 export function useProjections(initialParams = {}) {
-  // Auto-restore last state or use defaults
+  // Check if this is a first visit for sample data
+  const [isSampleData, setIsSampleData] = useState(() => isFirstVisit());
+
+  // Auto-restore last state, use sample data on first visit, or use defaults
   const [params, setParams] = useState(() => {
+    // First visit: use sample data
+    if (isFirstVisit()) {
+      return { ...DEFAULT_PARAMS, ...SAMPLE_PARAMS };
+    }
+    // Returning user: try to restore
     const restored = loadLastState();
     if (restored) {
       return restored.params;
@@ -122,6 +153,10 @@ export function useProjections(initialParams = {}) {
   });
 
   const [options, setOptions] = useState(() => {
+    // First visit: use sample options
+    if (isFirstVisit()) {
+      return { ...DEFAULT_OPTIONS, ...SAMPLE_OPTIONS };
+    }
     const restored = loadLastState();
     if (restored) {
       return restored.options;
@@ -132,19 +167,41 @@ export function useProjections(initialParams = {}) {
   const [savedStates, setSavedStates] = useState(() => loadSavedStates());
 
   const [settings, setSettings] = useState(() => {
+    // First visit: use sample settings
+    if (isFirstVisit()) {
+      return { ...DEFAULT_SETTINGS, ...SAMPLE_SETTINGS };
+    }
     const restored = loadSettings();
     return restored || { ...DEFAULT_SETTINGS };
   });
 
-  // Auto-save whenever params or options change
+  // Auto-save whenever params or options change (and mark as visited once user makes changes)
   useEffect(() => {
     saveCurrentState(params, options);
+    // Mark as visited once user has made any changes (params saved means they're committed)
+    if (!isFirstVisit()) {
+      markAsVisited();
+    }
   }, [params, options]);
 
   // Auto-save settings whenever they change
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  // Clear sample data flag when user modifies params
+  const clearSampleData = useCallback(() => {
+    setIsSampleData(false);
+    markAsVisited();
+  }, []);
+
+  // Reset to sample data (for easy exploration)
+  const resetToSampleData = useCallback(() => {
+    setParams({ ...DEFAULT_PARAMS, ...SAMPLE_PARAMS });
+    setOptions({ ...DEFAULT_OPTIONS, ...SAMPLE_OPTIONS });
+    setSettings(prev => ({ ...prev, ...SAMPLE_SETTINGS }));
+    setIsSampleData(true);
+  }, []);
 
   // Memoized projections - recalculates only when params/options/settings change
   // Merges relevant settings into projection params
@@ -194,39 +251,39 @@ export function useProjections(initialParams = {}) {
   }, []);
 
   // Update Roth conversion for a specific year
-  const updateRothConversion = useCallback((year, amount) => {
+  const updateRothConversion = useCallback((year, amount, isPV = true) => {
     setParams(prev => {
       const newConversions = { ...prev.rothConversions };
       if (amount === null || amount === 0) {
         delete newConversions[year]; // Remove conversion if cleared
       } else {
-        newConversions[year] = amount;
+        newConversions[year] = { amount, isPV };
       }
       return { ...prev, rothConversions: newConversions };
     });
   }, []);
 
   // Update expense override for a specific year
-  const updateExpenseOverride = useCallback((year, amount) => {
+  const updateExpenseOverride = useCallback((year, amount, isPV = true) => {
     setParams(prev => {
       const newOverrides = { ...prev.expenseOverrides };
       if (amount === null || amount === 0) {
         delete newOverrides[year]; // Remove override if cleared
       } else {
-        newOverrides[year] = amount;
+        newOverrides[year] = { amount, isPV };
       }
       return { ...prev, expenseOverrides: newOverrides };
     });
   }, []);
 
   // Update AT harvest override for a specific year
-  const updateATHarvest = useCallback((year, amount) => {
+  const updateATHarvest = useCallback((year, amount, isPV = true) => {
     setParams(prev => {
       const newOverrides = { ...(prev.atHarvestOverrides || {}) };
       if (amount === null || amount === 0) {
         delete newOverrides[year]; // Remove override if cleared
       } else {
-        newOverrides[year] = amount;
+        newOverrides[year] = { amount, isPV };
       }
       return { ...prev, atHarvestOverrides: newOverrides };
     });
@@ -247,15 +304,16 @@ export function useProjections(initialParams = {}) {
     setOptions(prev => ({ ...prev, maxIterations: max }));
   }, []);
 
-  // Save current state with optional name
+  // Save current state with optional name and scenarios
   const saveState = useCallback(
-    (name = '') => {
+    (name = '', scenarios = []) => {
       const newState = {
         id: Date.now(),
         name: name.trim() || `Saved ${new Date().toLocaleString()}`,
         createdAt: new Date().toISOString(),
         params: { ...params },
         options: { ...options },
+        scenarios: scenarios,
       };
       const updated = [...savedStates, newState];
       setSavedStates(updated);
@@ -265,14 +323,16 @@ export function useProjections(initialParams = {}) {
     [params, options, savedStates]
   );
 
-  // Load a saved state
+  // Load a saved state and return scenarios for caller to restore
   const loadState = useCallback(
     stateId => {
       const state = savedStates.find(s => s.id === stateId);
       if (state) {
         setParams({ ...DEFAULT_PARAMS, ...state.params });
         setOptions({ ...DEFAULT_OPTIONS, ...state.options });
+        return state.scenarios || [];
       }
+      return [];
     },
     [savedStates]
   );
@@ -303,6 +363,111 @@ export function useProjections(initialParams = {}) {
     setSettings({ ...DEFAULT_SETTINGS });
   }, []);
 
+  // ============================================
+  // UNDO/REDO FUNCTIONALITY
+  // ============================================
+  const UNDO_DEBOUNCE = 500; // ms
+  const MAX_HISTORY = 50;
+
+  const [history, setHistory] = useState(() => [{ params, options }]);
+  const [historyPointer, setHistoryPointer] = useState(0);
+  const debounceRef = useRef(null);
+  const lastPushedRef = useRef(JSON.stringify({ params, options }));
+  const isUndoingRef = useRef(false);
+
+  // Push state to history (debounced)
+  const pushToHistory = useCallback(
+    (newParams, newOptions) => {
+      // Skip if we're in the middle of an undo/redo operation
+      if (isUndoingRef.current) return;
+
+      // Clear any pending debounce
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+
+      debounceRef.current = setTimeout(() => {
+        const newState = { params: newParams, options: newOptions };
+        const newStateStr = JSON.stringify(newState);
+
+        // Skip if state hasn't changed
+        if (newStateStr === lastPushedRef.current) return;
+
+        lastPushedRef.current = newStateStr;
+
+        setHistory(prev => {
+          // Trim future states if we're not at the end
+          const newHistory = prev.slice(0, historyPointer + 1);
+          newHistory.push(newState);
+
+          // Limit history size
+          while (newHistory.length > MAX_HISTORY) {
+            newHistory.shift();
+          }
+
+          setHistoryPointer(newHistory.length - 1);
+          return newHistory;
+        });
+      }, UNDO_DEBOUNCE);
+    },
+    [historyPointer]
+  );
+
+  // Track params/options changes for history
+  useEffect(() => {
+    pushToHistory(params, options);
+  }, [params, options, pushToHistory]);
+
+  // Undo
+  const undo = useCallback(() => {
+    if (historyPointer <= 0) return;
+
+    isUndoingRef.current = true;
+    const newPointer = historyPointer - 1;
+    const prevState = history[newPointer];
+
+    setParams(prevState.params);
+    setOptions(prevState.options);
+    setHistoryPointer(newPointer);
+    lastPushedRef.current = JSON.stringify(prevState);
+
+    // Reset flag after a tick to allow state to settle
+    setTimeout(() => {
+      isUndoingRef.current = false;
+    }, 50);
+  }, [history, historyPointer]);
+
+  // Redo
+  const redo = useCallback(() => {
+    if (historyPointer >= history.length - 1) return;
+
+    isUndoingRef.current = true;
+    const newPointer = historyPointer + 1;
+    const nextState = history[newPointer];
+
+    setParams(nextState.params);
+    setOptions(nextState.options);
+    setHistoryPointer(newPointer);
+    lastPushedRef.current = JSON.stringify(nextState);
+
+    // Reset flag after a tick to allow state to settle
+    setTimeout(() => {
+      isUndoingRef.current = false;
+    }, 50);
+  }, [history, historyPointer]);
+
+  const canUndo = historyPointer > 0;
+  const canRedo = historyPointer < history.length - 1;
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
+
   return {
     params,
     options,
@@ -327,6 +492,17 @@ export function useProjections(initialParams = {}) {
     settings,
     updateSettings,
     resetSettings,
+    // Sample data
+    isSampleData,
+    clearSampleData,
+    resetToSampleData,
+    // Undo/Redo
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    historyLength: history.length,
+    historyPosition: historyPointer + 1,
   };
 }
 
