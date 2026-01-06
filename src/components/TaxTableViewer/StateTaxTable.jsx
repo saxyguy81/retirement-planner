@@ -2,8 +2,8 @@
  * StateTaxTable - Illinois state tax information
  */
 
-import { IL_TAX_RATE } from '../../lib/taxTables';
 import { fmt$ } from '../../lib/formatters';
+import { IL_TAX_RATE } from '../../lib/taxTables';
 
 /**
  * StateTaxTable component
@@ -79,11 +79,12 @@ export function StateTaxTable({ stateIncome }) {
       {/* Property tax credit note */}
       <div className="text-slate-500 text-xs space-y-1">
         <div>
-          <span className="text-slate-400">Property Tax Credit:</span> Illinois offers a 5% credit on property taxes paid,
-          limited by your state income tax liability.
+          <span className="text-slate-400">Property Tax Credit:</span> Illinois offers a 5% credit
+          on property taxes paid, limited by your state income tax liability.
         </div>
         <div>
-          <span className="text-slate-400">SALT Cap:</span> Federal deduction for state/local taxes capped at $10,000.
+          <span className="text-slate-400">SALT Cap:</span> Federal deduction for state/local taxes
+          capped at $10,000.
         </div>
       </div>
     </div>

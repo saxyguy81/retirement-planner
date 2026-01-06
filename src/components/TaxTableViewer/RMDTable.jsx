@@ -2,8 +2,8 @@
  * RMDTable - Required Minimum Distribution table with "you are here" indicator
  */
 
-import { RMD_TABLE, RMD_START_AGE } from '../../lib/taxTables';
 import { fmt$ } from '../../lib/formatters';
+import { RMD_TABLE, RMD_START_AGE } from '../../lib/taxTables';
 
 /**
  * RMDTable component
@@ -54,7 +54,9 @@ export function RMDTable({ age, iraBalance }) {
       {isRMDAge && iraBalance && RMD_TABLE[age] && (
         <div className="bg-slate-800 rounded p-3 text-sm">
           <div className="text-slate-400">Your RMD (Age {age}):</div>
-          <div className="text-2xl font-mono text-amber-400 mt-1">{fmt$(Math.round(iraBalance / RMD_TABLE[age]))}</div>
+          <div className="text-2xl font-mono text-amber-400 mt-1">
+            {fmt$(Math.round(iraBalance / RMD_TABLE[age]))}
+          </div>
           <div className="text-slate-500 text-xs mt-1">
             = {fmt$(iraBalance)} ÷ {RMD_TABLE[age]} factor
           </div>
@@ -82,12 +84,16 @@ export function RMDTable({ age, iraBalance }) {
                 >
                   <td className="py-2 pr-4">
                     {row.age}
-                    {isUserAge && <span className="ml-2 text-blue-400 text-xs font-medium">◄ You</span>}
+                    {isUserAge && (
+                      <span className="ml-2 text-blue-400 text-xs font-medium">◄ You</span>
+                    )}
                   </td>
                   <td className="py-2 text-right font-mono pr-4">{row.factor}</td>
                   <td className="py-2 text-right font-mono pr-4">{row.rmdPercent}%</td>
                   {iraBalance && (
-                    <td className="py-2 text-right font-mono text-amber-400">{fmt$(row.rmdAmount)}</td>
+                    <td className="py-2 text-right font-mono text-amber-400">
+                      {fmt$(row.rmdAmount)}
+                    </td>
                   )}
                 </tr>
               );

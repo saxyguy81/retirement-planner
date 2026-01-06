@@ -2,8 +2,8 @@
  * IRMAATable - IRMAA Medicare premium brackets with "you are here" indicator
  */
 
-import { IRMAA_BRACKETS_MFJ_2026, IRMAA_BRACKETS_SINGLE_2026 } from '../../lib/taxTables';
 import { fmt$ } from '../../lib/formatters';
+import { IRMAA_BRACKETS_MFJ_2026, IRMAA_BRACKETS_SINGLE_2026 } from '../../lib/taxTables';
 
 /**
  * IRMAATable component
@@ -50,7 +50,9 @@ export function IRMAATable({ magi, filingStatus = 'mfj' }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-slate-500 border-b border-slate-700">
-              <th className="py-2 pr-4">MAGI Threshold ({filingStatus === 'single' ? 'Single' : 'MFJ'})</th>
+              <th className="py-2 pr-4">
+                MAGI Threshold ({filingStatus === 'single' ? 'Single' : 'MFJ'})
+              </th>
               <th className="py-2 text-right pr-4">Part B (/mo)</th>
               <th className="py-2 text-right pr-4">Part D (/mo)</th>
               <th className="py-2 text-right">Annual Total</th>
@@ -73,7 +75,9 @@ export function IRMAATable({ magi, filingStatus = 'mfj' }) {
                       : nextThreshold
                         ? `${fmt$(bracket.threshold)} - ${fmt$(nextThreshold - 1)}`
                         : `≥ ${fmt$(bracket.threshold)}`}
-                    {isUserTier && <span className="ml-2 text-blue-400 text-xs font-medium">◄ You</span>}
+                    {isUserTier && (
+                      <span className="ml-2 text-blue-400 text-xs font-medium">◄ You</span>
+                    )}
                   </td>
                   <td className="py-2 text-right font-mono pr-4">${bracket.partB.toFixed(2)}</td>
                   <td className="py-2 text-right font-mono pr-4">${bracket.partD.toFixed(2)}</td>
@@ -97,7 +101,10 @@ export function IRMAATable({ magi, filingStatus = 'mfj' }) {
       )}
 
       <div className="text-slate-500 text-xs space-y-1">
-        <div>IRMAA is based on MAGI from 2 years prior. Your 2026 premiums are based on your 2024 tax return.</div>
+        <div>
+          IRMAA is based on MAGI from 2 years prior. Your 2026 premiums are based on your 2024 tax
+          return.
+        </div>
         <div>Part B = medical insurance, Part D = prescription drug coverage</div>
       </div>
     </div>

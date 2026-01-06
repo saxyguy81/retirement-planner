@@ -77,8 +77,16 @@ export function TaxTableViewer({ isOpen, onClose, context, initialTab }) {
 
   if (!isOpen) return null;
 
-  const { filingStatus = 'mfj', taxableIncome, magi, age, iraBalance, ssIncome, combinedIncome, stateIncome } =
-    context || {};
+  const {
+    filingStatus = 'mfj',
+    taxableIncome,
+    magi,
+    age,
+    iraBalance,
+    ssIncome,
+    combinedIncome,
+    stateIncome,
+  } = context || {};
 
   // Generate year options from 2024 to 2054
   const yearOptions = Array.from({ length: 31 }, (_, i) => 2024 + i);
@@ -151,12 +159,20 @@ export function TaxTableViewer({ isOpen, onClose, context, initialTab }) {
             />
           )}
           {activeTab === 'ltcg' && (
-            <CapitalGainsTable taxableIncome={taxableIncome} filingStatus={filingStatus} projectionYear={viewYear} />
+            <CapitalGainsTable
+              taxableIncome={taxableIncome}
+              filingStatus={filingStatus}
+              projectionYear={viewYear}
+            />
           )}
           {activeTab === 'irmaa' && <IRMAATable magi={magi} filingStatus={filingStatus} />}
           {activeTab === 'rmd' && <RMDTable age={age} iraBalance={iraBalance} />}
           {activeTab === 'ss' && (
-            <SocialSecurityTaxTable combinedIncome={combinedIncome} ssIncome={ssIncome} filingStatus={filingStatus} />
+            <SocialSecurityTaxTable
+              combinedIncome={combinedIncome}
+              ssIncome={ssIncome}
+              filingStatus={filingStatus}
+            />
           )}
           {activeTab === 'state' && <StateTaxTable stateIncome={stateIncome} />}
         </div>

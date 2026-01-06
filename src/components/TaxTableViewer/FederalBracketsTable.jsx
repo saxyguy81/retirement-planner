@@ -2,6 +2,7 @@
  * FederalBracketsTable - Federal income tax brackets with "you are here" indicator
  */
 
+import { fmt$ } from '../../lib/formatters';
 import {
   FEDERAL_BRACKETS_MFJ_2024,
   FEDERAL_BRACKETS_SINGLE_2024,
@@ -11,7 +12,6 @@ import {
   STANDARD_DEDUCTION_MFJ_2024,
   STANDARD_DEDUCTION_SINGLE_2024,
 } from '../../lib/taxTables';
-import { fmt$ } from '../../lib/formatters';
 
 /**
  * FederalBracketsTable component
@@ -21,13 +21,18 @@ import { fmt$ } from '../../lib/formatters';
  * @param {string} props.filingStatus - 'mfj' or 'single'
  * @param {number} props.projectionYear - Year to show brackets for
  */
-export function FederalBracketsTable({ taxableIncome, filingStatus = 'mfj', projectionYear = 2025 }) {
+export function FederalBracketsTable({
+  taxableIncome,
+  filingStatus = 'mfj',
+  projectionYear = 2025,
+}) {
   // Get inflated brackets for the projection year
   const baseYear = 2024;
   const yearsToInflate = projectionYear - baseYear;
   const inflationRate = 0.028; // ~2.8% bracket inflation
 
-  const baseBrackets = filingStatus === 'single' ? FEDERAL_BRACKETS_SINGLE_2024 : FEDERAL_BRACKETS_MFJ_2024;
+  const baseBrackets =
+    filingStatus === 'single' ? FEDERAL_BRACKETS_SINGLE_2024 : FEDERAL_BRACKETS_MFJ_2024;
   const brackets = inflateBrackets(baseBrackets, inflationRate, Math.max(0, yearsToInflate));
 
   // Find user's bracket
@@ -53,18 +58,26 @@ export function FederalBracketsTable({ taxableIncome, filingStatus = 'mfj', proj
   });
 
   // Calculate standard deduction
-  const baseDeduction = filingStatus === 'single' ? STANDARD_DEDUCTION_SINGLE_2024 : STANDARD_DEDUCTION_MFJ_2024;
+  const baseDeduction =
+    filingStatus === 'single' ? STANDARD_DEDUCTION_SINGLE_2024 : STANDARD_DEDUCTION_MFJ_2024;
   const seniorBonus = filingStatus === 'single' ? SENIOR_BONUS_SINGLE_2024 : SENIOR_BONUS_MFJ_2024;
-  const inflatedDeduction = Math.round(baseDeduction * Math.pow(1 + inflationRate, Math.max(0, yearsToInflate)));
-  const inflatedSeniorBonus = Math.round(seniorBonus * Math.pow(1 + inflationRate, Math.max(0, yearsToInflate)));
+  const inflatedDeduction = Math.round(
+    baseDeduction * Math.pow(1 + inflationRate, Math.max(0, yearsToInflate))
+  );
+  const inflatedSeniorBonus = Math.round(
+    seniorBonus * Math.pow(1 + inflationRate, Math.max(0, yearsToInflate))
+  );
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center flex-wrap gap-2">
         <h3 className="text-slate-200 font-medium">
-          Federal Income Tax Brackets ({projectionYear}, {filingStatus === 'single' ? 'Single' : 'MFJ'})
+          Federal Income Tax Brackets ({projectionYear},{' '}
+          {filingStatus === 'single' ? 'Single' : 'MFJ'})
         </h3>
-        <span className="text-slate-500 text-xs">Source: IRS Rev. Proc. 2024-40 + inflation adjustment</span>
+        <span className="text-slate-500 text-xs">
+          Source: IRS Rev. Proc. 2024-40 + inflation adjustment
+        </span>
       </div>
 
       {/* Visual bracket indicator */}
@@ -76,7 +89,10 @@ export function FederalBracketsTable({ taxableIncome, filingStatus = 'mfj', proj
               const nextThreshold = bracketsWithTax[i + 1]?.threshold || bracket.threshold * 1.5;
               const maxWidth = 120; // Max segment width
               const scaleFactor = 600000; // Scale for visualization
-              const width = Math.min(((nextThreshold - bracket.threshold) / scaleFactor) * 100, maxWidth);
+              const width = Math.min(
+                ((nextThreshold - bracket.threshold) / scaleFactor) * 100,
+                maxWidth
+              );
               const isUserBracket = i === userBracketIndex;
 
               return (
@@ -127,10 +143,16 @@ export function FederalBracketsTable({ taxableIncome, filingStatus = 'mfj', proj
                   <td className="py-2 pr-4">
                     {fmt$(bracket.threshold)}
                     {nextThreshold ? ` - ${fmt$(nextThreshold - 1)}` : '+'}
-                    {isUserBracket && <span className="ml-2 text-blue-400 text-xs font-medium">◄ You</span>}
+                    {isUserBracket && (
+                      <span className="ml-2 text-blue-400 text-xs font-medium">◄ You</span>
+                    )}
                   </td>
-                  <td className="py-2 text-right font-mono pr-4">{(bracket.rate * 100).toFixed(0)}%</td>
-                  <td className="py-2 text-right font-mono text-slate-400">{fmt$(bracket.taxAtBottom)}</td>
+                  <td className="py-2 text-right font-mono pr-4">
+                    {(bracket.rate * 100).toFixed(0)}%
+                  </td>
+                  <td className="py-2 text-right font-mono text-slate-400">
+                    {fmt$(bracket.taxAtBottom)}
+                  </td>
                 </tr>
               );
             })}
@@ -141,23 +163,27 @@ export function FederalBracketsTable({ taxableIncome, filingStatus = 'mfj', proj
       {/* Standard deduction note */}
       <div className="text-slate-500 text-xs space-y-1">
         <div>
-          Standard Deduction ({projectionYear} {filingStatus === 'single' ? 'Single' : 'MFJ'}): {fmt$(inflatedDeduction)}
+          Standard Deduction ({projectionYear} {filingStatus === 'single' ? 'Single' : 'MFJ'}):{' '}
+          {fmt$(inflatedDeduction)}
         </div>
         <div>Additional for 65+: {fmt$(inflatedSeniorBonus)} per spouse</div>
       </div>
 
       {/* Distance to next bracket */}
-      {taxableIncome != null && userBracketIndex >= 0 && userBracketIndex < bracketsWithTax.length - 1 && (
-        <div className="bg-slate-800 rounded p-3 text-sm">
-          <span className="text-slate-400">Distance to next bracket:</span>
-          <span className="text-amber-400 ml-2 font-mono">
-            {fmt$(bracketsWithTax[userBracketIndex + 1].threshold - taxableIncome)}
-          </span>
-          <span className="text-slate-500 ml-2">
-            more taxable income to reach {(bracketsWithTax[userBracketIndex + 1].rate * 100).toFixed(0)}%
-          </span>
-        </div>
-      )}
+      {taxableIncome != null &&
+        userBracketIndex >= 0 &&
+        userBracketIndex < bracketsWithTax.length - 1 && (
+          <div className="bg-slate-800 rounded p-3 text-sm">
+            <span className="text-slate-400">Distance to next bracket:</span>
+            <span className="text-amber-400 ml-2 font-mono">
+              {fmt$(bracketsWithTax[userBracketIndex + 1].threshold - taxableIncome)}
+            </span>
+            <span className="text-slate-500 ml-2">
+              more taxable income to reach{' '}
+              {(bracketsWithTax[userBracketIndex + 1].rate * 100).toFixed(0)}%
+            </span>
+          </div>
+        )}
     </div>
   );
 }

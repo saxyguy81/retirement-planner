@@ -2,8 +2,8 @@
  * SocialSecurityTaxTable - SS taxation thresholds with "you are here" indicator
  */
 
-import { SS_TAX_THRESHOLDS_MFJ, SS_TAX_THRESHOLDS_SINGLE } from '../../lib/taxTables';
 import { fmt$ } from '../../lib/formatters';
+import { SS_TAX_THRESHOLDS_MFJ, SS_TAX_THRESHOLDS_SINGLE } from '../../lib/taxTables';
 
 /**
  * SocialSecurityTaxTable component
@@ -60,7 +60,9 @@ export function SocialSecurityTaxTable({ combinedIncome, ssIncome, filingStatus 
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-slate-500 border-b border-slate-700">
-              <th className="py-2 pr-4">Combined Income ({filingStatus === 'single' ? 'Single' : 'MFJ'})</th>
+              <th className="py-2 pr-4">
+                Combined Income ({filingStatus === 'single' ? 'Single' : 'MFJ'})
+              </th>
               <th className="py-2 text-right">SS Taxable</th>
             </tr>
           </thead>
@@ -114,8 +116,12 @@ export function SocialSecurityTaxTable({ combinedIncome, ssIncome, filingStatus 
       )}
 
       <div className="text-slate-500 text-xs">
-        <div className="text-rose-400/80 font-medium">Warning: These thresholds are NOT indexed for inflation.</div>
-        <div className="mt-1">As income rises over time, more retirees become subject to SS taxation.</div>
+        <div className="text-rose-400/80 font-medium">
+          Warning: These thresholds are NOT indexed for inflation.
+        </div>
+        <div className="mt-1">
+          As income rises over time, more retirees become subject to SS taxation.
+        </div>
       </div>
     </div>
   );

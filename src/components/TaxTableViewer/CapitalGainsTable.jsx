@@ -2,8 +2,12 @@
  * CapitalGainsTable - Long-term capital gains tax brackets with "you are here" indicator
  */
 
-import { LTCG_BRACKETS_MFJ_2024, LTCG_BRACKETS_SINGLE_2024, inflateBrackets } from '../../lib/taxTables';
 import { fmt$ } from '../../lib/formatters';
+import {
+  LTCG_BRACKETS_MFJ_2024,
+  LTCG_BRACKETS_SINGLE_2024,
+  inflateBrackets,
+} from '../../lib/taxTables';
 
 /**
  * CapitalGainsTable component
@@ -18,7 +22,8 @@ export function CapitalGainsTable({ taxableIncome, filingStatus = 'mfj', project
   const yearsToInflate = projectionYear - baseYear;
   const inflationRate = 0.028;
 
-  const baseBrackets = filingStatus === 'single' ? LTCG_BRACKETS_SINGLE_2024 : LTCG_BRACKETS_MFJ_2024;
+  const baseBrackets =
+    filingStatus === 'single' ? LTCG_BRACKETS_SINGLE_2024 : LTCG_BRACKETS_MFJ_2024;
   const brackets = inflateBrackets(baseBrackets, inflationRate, Math.max(0, yearsToInflate));
 
   // Find user's bracket based on total taxable income
@@ -34,7 +39,8 @@ export function CapitalGainsTable({ taxableIncome, filingStatus = 'mfj', project
     <div className="space-y-4">
       <div className="flex justify-between items-center flex-wrap gap-2">
         <h3 className="text-slate-200 font-medium">
-          Long-Term Capital Gains Rates ({projectionYear}, {filingStatus === 'single' ? 'Single' : 'MFJ'})
+          Long-Term Capital Gains Rates ({projectionYear},{' '}
+          {filingStatus === 'single' ? 'Single' : 'MFJ'})
         </h3>
         <span className="text-slate-500 text-xs">Source: IRS Rev. Proc. 2024-40</span>
       </div>
@@ -46,7 +52,9 @@ export function CapitalGainsTable({ taxableIncome, filingStatus = 'mfj', project
           <span className="text-emerald-400 ml-2 text-lg font-mono">
             {(brackets[userBracketIndex]?.rate * 100).toFixed(0)}%
           </span>
-          <span className="text-slate-500 ml-2">(based on {fmt$(taxableIncome)} total taxable income)</span>
+          <span className="text-slate-500 ml-2">
+            (based on {fmt$(taxableIncome)} total taxable income)
+          </span>
         </div>
       )}
 
@@ -71,7 +79,9 @@ export function CapitalGainsTable({ taxableIncome, filingStatus = 'mfj', project
                 >
                   <td className="py-2 pr-4">
                     {fmt$(bracket.threshold)} - {nextThreshold ? fmt$(nextThreshold - 1) : '∞'}
-                    {isUserBracket && <span className="ml-2 text-blue-400 text-xs font-medium">◄ You</span>}
+                    {isUserBracket && (
+                      <span className="ml-2 text-blue-400 text-xs font-medium">◄ You</span>
+                    )}
                   </td>
                   <td className="py-2 text-right font-mono">{(bracket.rate * 100).toFixed(0)}%</td>
                 </tr>
@@ -95,8 +105,8 @@ export function CapitalGainsTable({ taxableIncome, filingStatus = 'mfj', project
       )}
 
       <div className="text-slate-500 text-xs">
-        Note: LTCG rates apply to the gain portion only. Your total taxable income determines which rate applies to your
-        capital gains. Ordinary income "fills up" the lower brackets first.
+        Note: LTCG rates apply to the gain portion only. Your total taxable income determines which
+        rate applies to your capital gains. Ordinary income "fills up" the lower brackets first.
       </div>
     </div>
   );
