@@ -16,7 +16,6 @@
 import {
   ChevronDown,
   ChevronRight,
-  Info,
   Table,
   LineChart,
   LayoutDashboard,
@@ -597,12 +596,6 @@ export function ProjectionsTable({
                               />
                               <span className="flex items-center gap-1">
                                 {row.label}
-                                {isInspectable && (
-                                  <Info
-                                    className="w-3 h-3 text-blue-400/50 cursor-help"
-                                    title="Click any value in this row to see calculation details"
-                                  />
-                                )}
                               </span>
                             </div>
                           </td>
