@@ -2224,6 +2224,19 @@ const handleClick = () => {
 - Non-interactive (pointer-events: none)
 - Use portal for rendering to avoid z-index/overflow issues
 
+### Success Criteria:
+
+#### Automated Verification:
+- [x] `npm run build` succeeds
+- [x] `npm run test:e2e` passes
+
+#### Manual Verification:
+- [x] Tooltip appears on hover with 300ms delay
+- [x] Tooltip shows calculation name and simple value
+- [x] Tooltip positioned above cell (flips to bottom if near top)
+- [x] Clicking cell hides tooltip and opens inspector
+- [x] Keyboard focus on cell shows tooltip
+
 ---
 
 ## Phase 8: Concise Term Reference
@@ -2463,6 +2476,20 @@ Usage in row labels:
   RMD Required <TermIcon term="RMD" />
 </td>
 ```
+
+### Success Criteria:
+
+#### Automated Verification:
+- [x] `npm run build` succeeds
+- [x] `npm run test:e2e` passes
+- [x] `src/lib/termReference.js` exports TERM_REFERENCE and helper functions
+- [x] `src/components/TermIcon/index.jsx` exports TermIcon and LabelWithTerm
+
+#### Manual Verification:
+- [x] Info icons appear next to rows with technical terms (RMD, IRMAA, etc.)
+- [x] Hovering/focusing info icon shows tooltip with term definition
+- [x] Tooltip includes source citation where applicable
+- [x] Row labels correctly identify terms via fieldKey mapping
 
 ---
 

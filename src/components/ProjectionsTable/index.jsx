@@ -31,7 +31,9 @@ import { VALUE_COLORS, ROW_SEMANTICS } from '../../lib/colors';
 import { fmt$, fmtPct } from '../../lib/formatters';
 import { CalculationInspector } from '../CalculationInspector';
 import { CustomViewModal } from '../CustomViewModal';
+import { LabelWithTerm } from '../TermIcon';
 import { YearSelector } from '../YearSelector';
+import { TooltipCell } from './CellTooltip';
 import { STORY_SECTIONS, LEGACY_SECTIONS } from './sectionConfig';
 
 // Section configurations imported from sectionConfig.js
@@ -597,7 +599,9 @@ export function ProjectionsTable({
                                          checked:bg-blue-600 checked:border-blue-600
                                          focus:ring-0 focus:ring-offset-0 cursor-pointer accent-blue-600"
                               />
-                              <span className="flex items-center gap-1">{row.label}</span>
+                              <span className="flex items-center gap-1">
+                              <LabelWithTerm label={row.label} fieldKey={row.key} />
+                            </span>
                             </div>
                           </td>
                           {sortedDisplayData.map(d => {
@@ -626,12 +630,17 @@ export function ProjectionsTable({
                               highlightedCell?.year === d.year;
 
                             return (
-                              <td
+                              <TooltipCell
                                 key={d.year}
                                 id={`cell-${row.key}-${d.year}`}
                                 data-cell={`${row.key}-${d.year}`}
                                 data-field={row.key}
                                 data-year={d.year}
+                                field={row.key}
+                                data={d}
+                                params={params}
+                                showPV={showPV}
+                                isInspectable={isInspectable}
                                 onClick={() => {
                                   if (!isInspectable) return;
                                   // Use external callback if provided, otherwise use navigation
@@ -646,7 +655,7 @@ export function ProjectionsTable({
                                 className={`text-right py-1 px-2 tabular-nums ${cellColorClass} ${isInspectable ? 'cursor-pointer hover:bg-blue-900/30' : ''} ${highlightClass} ${isActiveCell ? 'ring-2 ring-blue-500' : ''}`}
                               >
                                 {formatValue(displayValue, row.format)}
-                              </td>
+                              </TooltipCell>
                             );
                           })}
                         </tr>
