@@ -403,7 +403,10 @@ export function ProjectionsTable({
   }, [displayData, sortConfigs]);
 
   return (
-    <div data-testid="projections-table" className="flex-1 flex flex-col overflow-hidden text-xs">
+    <div
+      data-testid="projections-table"
+      className="flex-1 flex flex-col overflow-hidden text-xs min-h-0"
+    >
       {/* Toolbar */}
       <div className="h-10 bg-slate-900/50 border-b border-slate-800 flex items-center px-3 justify-between shrink-0">
         <div className="flex items-center gap-3">
@@ -475,7 +478,7 @@ export function ProjectionsTable({
       )}
 
       {/* Table */}
-      <div className="flex-1 overflow-auto p-2">
+      <div className="flex-1 overflow-auto p-2 min-h-0">
         <table className="w-full border-collapse">
           <thead className="sticky top-0 bg-slate-950 z-10">
             <tr className="text-slate-400">
@@ -594,9 +597,7 @@ export function ProjectionsTable({
                                          checked:bg-blue-600 checked:border-blue-600
                                          focus:ring-0 focus:ring-offset-0 cursor-pointer accent-blue-600"
                               />
-                              <span className="flex items-center gap-1">
-                                {row.label}
-                              </span>
+                              <span className="flex items-center gap-1">{row.label}</span>
                             </div>
                           </td>
                           {sortedDisplayData.map(d => {

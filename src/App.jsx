@@ -40,12 +40,12 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Chat } from './components/Chat';
 import { InputPanel } from './components/InputPanel';
 import { InspectorPanel } from './components/InspectorPanel';
-import { TaxTableViewer } from './components/TaxTableViewer';
 import { LazyErrorBoundary } from './components/LazyErrorBoundary';
 import { LazyLoadingFallback } from './components/LazyLoadingFallback';
 import { PersonalizationPanel } from './components/PersonalizationPanel';
 import { ProjectionsTable } from './components/ProjectionsTable';
 import { SplitPanel } from './components/SplitPanel';
+import { TaxTableViewer } from './components/TaxTableViewer';
 import UpdatePrompt from './components/UpdatePrompt';
 import { useChatPanelState } from './hooks/useChatPanelState';
 import { useInspectorNavigation } from './hooks/useInspectorNavigation';
@@ -469,39 +469,36 @@ export default function App() {
   );
 
   // Handle opening Tax Table Viewer from inspector
-  const handleOpenTaxTables = useCallback(
-    (field, year, data) => {
-      // Determine which tab to open based on current field
-      const fieldToTab = {
-        federalTax: 'federal',
-        ltcgTax: 'ltcg',
-        irmaaTotal: 'irmaa',
-        irmaaPartB: 'irmaa',
-        irmaaPartD: 'irmaa',
-        rmdRequired: 'rmd',
-        taxableSS: 'ss',
-        stateTax: 'state',
-      };
-      const initialTab = fieldToTab[field] || 'federal';
+  const handleOpenTaxTables = useCallback((field, year, data) => {
+    // Determine which tab to open based on current field
+    const fieldToTab = {
+      federalTax: 'federal',
+      ltcgTax: 'ltcg',
+      irmaaTotal: 'irmaa',
+      irmaaPartB: 'irmaa',
+      irmaaPartD: 'irmaa',
+      rmdRequired: 'rmd',
+      taxableSS: 'ss',
+      stateTax: 'state',
+    };
+    const initialTab = fieldToTab[field] || 'federal';
 
-      setTaxTableState({
-        isOpen: true,
-        initialTab,
-        context: {
-          year: year,
-          age: data?.age,
-          filingStatus: 'mfj', // Could be derived from params if survivor scenario
-          taxableIncome: data?.taxableOrdinary,
-          magi: data?.irmaaMAGI,
-          iraBalance: data?.iraBOY,
-          ssIncome: data?.ssAnnual,
-          combinedIncome: data?.ordinaryIncome + (data?.ssAnnual || 0) * 0.5,
-          stateIncome: data?.capitalGains,
-        },
-      });
-    },
-    []
-  );
+    setTaxTableState({
+      isOpen: true,
+      initialTab,
+      context: {
+        year: year,
+        age: data?.age,
+        filingStatus: 'mfj', // Could be derived from params if survivor scenario
+        taxableIncome: data?.taxableOrdinary,
+        magi: data?.irmaaMAGI,
+        iraBalance: data?.iraBOY,
+        ssIncome: data?.ssAnnual,
+        combinedIncome: data?.ordinaryIncome + (data?.ssAnnual || 0) * 0.5,
+        stateIncome: data?.capitalGains,
+      },
+    });
+  }, []);
 
   // Split panel view configurations - use render functions for lazy loading
   const splitPanelViews = useMemo(
@@ -905,7 +902,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Left sidebar - Inputs */}
         <div id="input-panel">
           <InputPanel
@@ -925,7 +922,7 @@ export default function App() {
         {/* Main content area */}
         <main
           id="main-content"
-          className="flex-1 flex flex-col overflow-hidden bg-slate-950"
+          className="flex-1 flex flex-col overflow-hidden bg-slate-950 min-h-0"
           role="main"
         >
           {/* Tab bar */}
@@ -995,7 +992,7 @@ export default function App() {
           {/* Content + Chat wrapper */}
           <div
             ref={chatPanel.containerRef}
-            className={`flex-1 flex overflow-hidden relative ${
+            className={`flex-1 flex overflow-hidden relative min-h-0 ${
               chatPanel.visible && chatPanel.position === 'top' ? 'flex-col' : 'flex-row'
             }`}
             style={{
@@ -1080,7 +1077,7 @@ export default function App() {
             )}
 
             {/* Main tab content area */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden min-h-0">
               {splitView ? (
                 <SplitPanel
                   views={splitPanelViews}
@@ -1090,9 +1087,9 @@ export default function App() {
               ) : (
                 <LazyErrorBoundary>
                   {activeTab === 'projections' && (
-                    <div className="flex-1 flex overflow-hidden">
+                    <div className="flex-1 flex overflow-hidden min-h-0">
                       {/* Projections Table */}
-                      <div className="flex-1 overflow-hidden">
+                      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
                         <ProjectionsTable
                           projections={projections}
                           options={options}

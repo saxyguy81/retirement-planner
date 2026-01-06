@@ -104,12 +104,12 @@ export function SplitPanel({
   return (
     <div
       ref={containerRef}
-      className="flex-1 flex overflow-hidden"
+      className="flex-1 flex overflow-hidden min-h-0"
       style={{ cursor: isDragging ? 'col-resize' : 'auto' }}
     >
       {/* Left Panel */}
       <div
-        className="flex flex-col overflow-hidden bg-slate-950"
+        className="flex flex-col overflow-hidden bg-slate-950 min-h-0"
         style={{
           width: rightCollapsed ? '100%' : `${splitPosition}%`,
           transition: isDragging ? 'none' : 'width 0.2s ease',
@@ -129,7 +129,7 @@ export function SplitPanel({
           )}
         </div>
         {/* Left panel content */}
-        <div className="flex-1 overflow-hidden">{getViewComponent(leftView)}</div>
+        <div className="flex-1 overflow-hidden min-h-0">{getViewComponent(leftView)}</div>
       </div>
 
       {/* Resize handle */}
@@ -147,7 +147,7 @@ export function SplitPanel({
       {/* Right Panel */}
       {!rightCollapsed && (
         <div
-          className="flex flex-col overflow-hidden bg-slate-950"
+          className="flex flex-col overflow-hidden bg-slate-950 min-h-0"
           style={{
             width: `${100 - splitPosition}%`,
             transition: isDragging ? 'none' : 'width 0.2s ease',
@@ -165,7 +165,7 @@ export function SplitPanel({
             </button>
           </div>
           {/* Right panel content */}
-          <div className="flex-1 overflow-hidden">{getViewComponent(rightView)}</div>
+          <div className="flex-1 overflow-hidden min-h-0">{getViewComponent(rightView)}</div>
         </div>
       )}
     </div>
