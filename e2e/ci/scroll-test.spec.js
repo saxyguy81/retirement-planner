@@ -99,4 +99,58 @@ test.describe('Scrolling Behavior', () => {
     expect(tableContainerHeight).toBeLessThan(viewportHeight);
     expect(tableContainerHeight).toBeGreaterThan(0);
   });
+
+  test('header remains visible during viewport resize', async ({ page }) => {
+    // Navigate to Projections tab
+    await page.click('button:has-text("Projections")');
+    await page.waitForTimeout(300);
+
+    // Test various viewport sizes
+    const sizes = [
+      { width: 1280, height: 800 },
+      { width: 1024, height: 600 },
+      { width: 1280, height: 500 }, // Very short
+      { width: 1920, height: 1080 }, // Large
+    ];
+
+    for (const size of sizes) {
+      await page.setViewportSize(size);
+      await page.waitForTimeout(200);
+
+      // Header should always be visible
+      const header = page.locator('header');
+      await expect(header).toBeVisible();
+
+      // Header should be at top of viewport
+      const headerTop = await header.evaluate(el => el.getBoundingClientRect().top);
+      expect(headerTop).toBe(0);
+    }
+  });
+
+  test('layout remains stable when toggling chat panel', async ({ page }) => {
+    // Get initial header position
+    const getHeaderTop = async () => {
+      return page.evaluate(() => {
+        const header = document.querySelector('header');
+        return header?.getBoundingClientRect().top;
+      });
+    };
+
+    const initialTop = await getHeaderTop();
+    expect(initialTop).toBe(0);
+
+    // Open chat panel
+    await page.click('button:has-text("AI Chat")');
+    await page.waitForTimeout(300);
+
+    // Header should still be at top
+    expect(await getHeaderTop()).toBe(0);
+
+    // Close chat panel
+    await page.click('button:has-text("AI Chat")');
+    await page.waitForTimeout(300);
+
+    // Header should still be at top
+    expect(await getHeaderTop()).toBe(0);
+  });
 });

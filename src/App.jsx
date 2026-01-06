@@ -902,7 +902,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      <div className="flex-1 flex overflow-hidden">
         {/* Left sidebar - Inputs */}
         <div id="input-panel">
           <InputPanel
@@ -992,7 +992,7 @@ export default function App() {
           {/* Content + Chat wrapper */}
           <div
             ref={chatPanel.containerRef}
-            className={`flex-1 flex overflow-hidden relative min-h-0 ${
+            className={`flex-1 flex overflow-hidden relative ${
               chatPanel.visible && chatPanel.position === 'top' ? 'flex-col' : 'flex-row'
             }`}
             style={{
