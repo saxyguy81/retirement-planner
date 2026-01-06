@@ -1044,7 +1044,7 @@ export default function App() {
                 <div
                   className="flex flex-col overflow-hidden bg-slate-950 border-b border-slate-700 shrink-0"
                   style={{
-                    height: `${chatPanel.size}px`,
+                    height: `${chatPanel.getEffectiveSize()}px`,
                     transition: chatPanel.isResizing ? 'none' : 'height 0.15s ease',
                   }}
                 >
@@ -1206,7 +1206,7 @@ export default function App() {
                 <div
                   className="flex flex-col overflow-hidden bg-slate-950 border-l border-slate-700 shrink-0"
                   style={{
-                    width: `${chatPanel.size}px`,
+                    width: `${chatPanel.getEffectiveSize()}px`,
                     transition: chatPanel.isResizing ? 'none' : 'width 0.15s ease',
                   }}
                 >

@@ -73,6 +73,17 @@ export function useChatPanelState() {
     }));
   }, []);
 
+  // Get effective size clamped to container dimensions
+  // This ensures the chat panel doesn't overflow when viewport is smaller than saved size
+  const getEffectiveSize = useCallback(() => {
+    if (!containerRef.current) return state.size;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const maxSize = (state.position === 'right' ? rect.width : rect.height) * MAX_SIZE_PERCENT;
+
+    return Math.min(state.size, Math.max(MIN_SIZE, maxSize));
+  }, [state.size, state.position]);
+
   // === Resize handlers ===
   const startResize = useCallback(e => {
     e.preventDefault();
@@ -182,6 +193,7 @@ export function useChatPanelState() {
     hide,
     setPosition,
     setSize,
+    getEffectiveSize,
 
     // Drag/resize handlers
     startDrag,
