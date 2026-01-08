@@ -904,7 +904,7 @@ export default function App() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left sidebar - Inputs */}
-        <div id="input-panel">
+        <div id="input-panel" className="h-full overflow-hidden">
           <InputPanel
             params={params}
             settings={settings}

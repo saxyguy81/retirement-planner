@@ -176,6 +176,77 @@ test.describe('Scrolling Behavior', () => {
     expect(overflowStyle.overflowY).toBe('auto');
   });
 
+  test('InputPanel scrolls vertically and last section is reachable', async ({ page }) => {
+    // This is a critical regression test - verifies ACTUAL scrolling works,
+    // not just that the CSS property is set correctly.
+    // Root cause: Without min-h-0 on parent, flexbox doesn't constrain height.
+
+    // Use a smaller viewport to ensure content overflows even with collapsed sections
+    await page.setViewportSize({ width: 1280, height: 600 });
+    await page.waitForTimeout(200);
+
+    const scrollableArea = page.locator('aside .overflow-auto').first();
+    await expect(scrollableArea).toBeVisible();
+
+    // Get scroll dimensions
+    const scrollInfo = await scrollableArea.evaluate(el => ({
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+      isScrollable: el.scrollHeight > el.clientHeight
+    }));
+
+    // CRITICAL: The container must be constrained (clientHeight < scrollHeight)
+    // If clientHeight equals scrollHeight, the flex layout is broken (missing min-h-0)
+    expect(scrollInfo.isScrollable).toBe(true);
+    expect(scrollInfo.clientHeight).toBeLessThan(scrollInfo.scrollHeight);
+
+    // Verify actual scrolling works by scrolling to near-bottom
+    await scrollableArea.evaluate(el => {
+      el.scrollTop = el.scrollHeight - el.clientHeight;
+    });
+    const newScrollTop = await scrollableArea.evaluate(el => el.scrollTop);
+    expect(newScrollTop).toBeGreaterThan(0);
+
+    // The last section "Your Legacy" should be visible after scrolling to bottom
+    // This is the ultimate test - can user reach all content?
+    const lastSection = page.locator('aside button:has-text("Your Legacy")');
+    await expect(lastSection).toBeInViewport();
+
+    // Scroll back to top and verify first section
+    await scrollableArea.evaluate(el => {
+      el.scrollTop = 0;
+    });
+    const firstSection = page.locator('aside button:has-text("About You")');
+    await expect(firstSection).toBeInViewport();
+  });
+
+  test('InputPanel wrapper has proper height constraints', async ({ page }) => {
+    // Verify the InputPanel wrapper constrains height properly
+    // This was the root cause of the scrolling bug
+    const wrapperStyle = await page.evaluate(() => {
+      const wrapper = document.getElementById('input-panel');
+      if (!wrapper) return null;
+
+      const style = window.getComputedStyle(wrapper);
+      const parent = wrapper.parentElement;
+      const parentHeight = parent ? parent.clientHeight : 0;
+
+      return {
+        height: style.height,
+        overflow: style.overflow,
+        clientHeight: wrapper.clientHeight,
+        parentHeight: parentHeight
+      };
+    });
+
+    // Wrapper must have height constraint and overflow hidden
+    expect(wrapperStyle).not.toBeNull();
+    expect(wrapperStyle.overflow).toBe('hidden');
+    // Wrapper should fill parent height (100%)
+    expect(wrapperStyle.clientHeight).toBeLessThanOrEqual(wrapperStyle.parentHeight);
+    expect(wrapperStyle.clientHeight).toBeGreaterThan(0);
+  });
+
   test('InspectorPanel has bidirectional scrolling when open', async ({ page }) => {
     // Navigate to Projections tab
     await page.click('button:has-text("Projections")');

@@ -62,3 +62,58 @@ If e2e tests fail due to renamed sections/elements, update the test expectations
 2. Display Preferences
 3. AI Assistant
 4. Tax Tables (Advanced) - with Federal Income, Capital Gains, IRMAA tabs
+
+## Flexbox Scrolling Invariants
+
+When working with scrollable flex layouts in this codebase:
+
+### Height Chain Rule
+Every element from `h-screen` root to `overflow-auto` container must have explicit height constraints:
+- `h-full` - Fill parent height
+- `flex-1` - Take remaining flex space
+- `h-screen` - Viewport height (root only)
+
+**The chain cannot be broken.** A plain `<div>` wrapper with no classes breaks the chain.
+
+### Wrapper Div Rule
+NEVER add a plain wrapper div inside a flex container. Always add constraints:
+
+```jsx
+// DANGEROUS - breaks scrolling silently
+<div className="flex-1 flex">
+  <div id="for-accessibility">  {/* NO CLASSES = BUG */}
+    <ScrollableComponent />
+  </div>
+</div>
+
+// SAFE - chain maintained
+<div className="flex-1 flex">
+  <div id="for-accessibility" className="h-full overflow-hidden">
+    <ScrollableComponent />
+  </div>
+</div>
+```
+
+### Scroll Test Rule
+Tests for scrolling must verify actual behavior, not just CSS properties:
+
+```javascript
+// BAD - passes even when scrolling is broken
+expect(overflowStyle.overflowY).toBe('auto');
+
+// GOOD - fails if flex chain is broken
+expect(scrollHeight).toBeGreaterThan(clientHeight);
+await scrollContainer.scrollTo({ top: scrollHeight });
+expect(targetElement).toBeInViewport();
+```
+
+### Current Layout Structure
+```
+App (h-screen flex-col overflow-hidden)
+  └── Body (flex-1 flex overflow-hidden)
+        ├── #input-panel (h-full overflow-hidden)
+        │     └── aside (w-72 h-full flex-col overflow-hidden)
+        │           └── content (flex-1 overflow-auto) ← SCROLLS HERE
+        ├── main (flex-1 flex-col overflow-hidden min-h-0)
+        └── chat-panel (when visible)
+```

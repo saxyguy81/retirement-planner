@@ -282,7 +282,7 @@ export function InputPanel({
   };
 
   return (
-    <aside className="w-72 bg-slate-900 border-r border-slate-700 flex flex-col shrink-0 overflow-hidden">
+    <aside className="w-72 h-full bg-slate-900 border-r border-slate-700 flex flex-col shrink-0 overflow-hidden">
       <div className="p-2 border-b border-slate-700 text-xs font-medium text-slate-300">
         Model Inputs
       </div>
