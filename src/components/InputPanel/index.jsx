@@ -287,7 +287,7 @@ export function InputPanel({
         Model Inputs
       </div>
       <ProfileProgress params={params} settings={settings} />
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-auto">
         {/* About You Section - combines Timeline and Profile */}
         <InputSection
           title="About You"

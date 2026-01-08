@@ -1166,7 +1166,7 @@ export function Chat({
       <div className="flex-1 flex overflow-hidden">
         {/* Messages Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-4 space-y-4" data-testid="chat-messages">
+          <div className="flex-1 overflow-auto p-4 space-y-4" data-testid="chat-messages">
             {messages.length === 0 && (
               <div
                 className="flex flex-col items-center justify-center h-full text-slate-400 px-4"
