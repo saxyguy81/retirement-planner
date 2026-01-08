@@ -153,4 +153,109 @@ test.describe('Scrolling Behavior', () => {
     // Header should still be at top
     expect(await getHeaderTop()).toBe(0);
   });
+
+  test('InputPanel has bidirectional scrolling (not just vertical)', async ({ page }) => {
+    // The InputPanel is always visible on the left
+    // Find the scrollable content area within InputPanel
+    const scrollableArea = page.locator('aside .overflow-auto').first();
+    await expect(scrollableArea).toBeVisible();
+
+    // Verify the computed overflow style allows both directions
+    const overflowStyle = await scrollableArea.evaluate(el => {
+      const style = window.getComputedStyle(el);
+      return {
+        overflow: style.overflow,
+        overflowX: style.overflowX,
+        overflowY: style.overflowY
+      };
+    });
+
+    // CRITICAL: Must be 'auto' for both directions, not 'hidden' for X
+    // This prevents content from being clipped horizontally
+    expect(overflowStyle.overflowX).toBe('auto');
+    expect(overflowStyle.overflowY).toBe('auto');
+  });
+
+  test('InspectorPanel has bidirectional scrolling when open', async ({ page }) => {
+    // Navigate to Projections tab
+    await page.click('button:has-text("Projections")');
+    await page.waitForTimeout(500);
+
+    // Wait for projections table to load
+    await page.waitForSelector('[data-testid="projections-table"]', { timeout: 10000 });
+
+    // Click on a cell with a data-field attribute to open the inspector
+    // Use 'expenses' which should always be present
+    const expensesCell = page.locator('td[data-field="expenses"]').first();
+    await expensesCell.waitFor({ state: 'visible', timeout: 5000 });
+    await expensesCell.click();
+
+    // Wait for inspector to appear
+    await page.waitForSelector('[data-testid="calculation-inspector"]', { timeout: 5000 });
+
+    // Inspector panel should be visible
+    const inspector = page.locator('[data-testid="calculation-inspector"]');
+    await expect(inspector).toBeVisible();
+
+    // Find the scrollable content area
+    const scrollableArea = inspector.locator('.overflow-auto').first();
+    await expect(scrollableArea).toBeVisible();
+
+    // Verify bidirectional scrolling
+    const overflowStyle = await scrollableArea.evaluate(el => {
+      const style = window.getComputedStyle(el);
+      return {
+        overflowX: style.overflowX,
+        overflowY: style.overflowY
+      };
+    });
+
+    expect(overflowStyle.overflowX).toBe('auto');
+    expect(overflowStyle.overflowY).toBe('auto');
+  });
+
+  test('Chat panel has bidirectional scrolling when open', async ({ page }) => {
+    // Open chat panel
+    await page.click('button:has-text("AI Chat")');
+    await page.waitForTimeout(300);
+
+    // Find the chat messages area
+    const chatMessages = page.locator('[data-testid="chat-messages"]');
+    await expect(chatMessages).toBeVisible();
+
+    // Verify bidirectional scrolling
+    const overflowStyle = await chatMessages.evaluate(el => {
+      const style = window.getComputedStyle(el);
+      return {
+        overflowX: style.overflowX,
+        overflowY: style.overflowY
+      };
+    });
+
+    // CRITICAL: Chat may have wide code blocks that need horizontal scroll
+    expect(overflowStyle.overflowX).toBe('auto');
+    expect(overflowStyle.overflowY).toBe('auto');
+  });
+
+  test('Dashboard has bidirectional scrolling', async ({ page }) => {
+    // Navigate to Dashboard tab
+    await page.click('button:has-text("Dashboard")');
+    await page.waitForTimeout(500);
+
+    // Find the dashboard charts area
+    const dashboardCharts = page.locator('[data-testid="dashboard-charts"]');
+    await expect(dashboardCharts).toBeVisible();
+
+    // Verify bidirectional scrolling
+    const overflowStyle = await dashboardCharts.evaluate(el => {
+      const style = window.getComputedStyle(el);
+      return {
+        overflowX: style.overflowX,
+        overflowY: style.overflowY
+      };
+    });
+
+    expect(overflowStyle.overflowX).toBe('auto');
+    expect(overflowStyle.overflowY).toBe('auto');
+  });
 });
